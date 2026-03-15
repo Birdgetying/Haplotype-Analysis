@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Results and logs (large files)
+results/
+logs/
+*.log
+
+# Job output files
+*.out
+*.err
+
+# Data files (too large)
+*.vcf
+*.vcf.gz
+*.fasta
+*.gff3
+
+# OS
+.DS_Store
+Thumbs.db
