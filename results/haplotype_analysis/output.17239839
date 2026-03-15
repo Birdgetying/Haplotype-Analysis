@@ -1,0 +1,265 @@
+=========================================
+  Haplotype-Phenotype Association Analysis
+=========================================
+Start time: Fri Mar 13 11:13:07 CST 2026
+Job ID: 
+GPU Node: gnode198
+
+[Step 1] Loading Python environment...
+[Installing required packages...]
+  ✓ statsmodels already installed
+[Checking installation...]
+statsmodels version: 0.14.1
+
+[GPU Diagnostics]
+CUDA_VISIBLE_DEVICES: 0
+Fri Mar 13 11:15:24 2026       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 535.54.03              Driver Version: 535.54.03    CUDA Version: 12.2     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA A800-SXM4-80GB          On  | 00000000:10:00.0 Off |                    0 |
+| N/A   37C    P0              69W / 400W |  71828MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   1  NVIDIA A800-SXM4-80GB          On  | 00000000:16:00.0 Off |                    0 |
+| N/A   32C    P0              69W / 400W |  64816MiB / 81920MiB |     33%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   2  NVIDIA A800-SXM4-80GB          On  | 00000000:49:00.0 Off |                    0 |
+| N/A   30C    P0              60W / 400W |     30MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   3  NVIDIA A800-SXM4-80GB          On  | 00000000:4D:00.0 Off |                    0 |
+| N/A   30C    P0              67W / 400W |   2193MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   4  NVIDIA A800-SXM4-80GB          On  | 00000000:8A:00.0 Off |                   20 |
+| N/A   31C    P0             ERR! / 400W |     30MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   5  NVIDIA A800-SXM4-80GB          On  | 00000000:8F:00.0 Off |                    0 |
+| N/A   31C    P0              67W / 400W |   2251MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   6  NVIDIA A800-SXM4-80GB          On  | 00000000:C6:00.0 Off |                    0 |
+| N/A   30C    P0              68W / 400W |   2255MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   7  NVIDIA A800-SXM4-80GB          On  | 00000000:CA:00.0 Off |                    0 |
+| N/A   31C    P0              62W / 400W |     30MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|    0   N/A  N/A      5616      G   /usr/libexec/Xorg                            77MiB |
+|    0   N/A  N/A      5686      G   gnome-shell                                  38MiB |
+|    0   N/A  N/A      5853      G   /usr/libexec/gnome-initial-setup              6MiB |
+|    0   N/A  N/A   2549977      C   python                                    71682MiB |
+|    1   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
+|    1   N/A  N/A   2074766      C   ...05/conda_envs/zcb_torch2/bin/python     2448MiB |
+|    1   N/A  N/A   2074768      C   ...05/conda_envs/zcb_torch2/bin/python     2812MiB |
+|    1   N/A  N/A   2074769      C   ...05/conda_envs/zcb_torch2/bin/python     2958MiB |
+|    1   N/A  N/A   2074772      C   ...05/conda_envs/zcb_torch2/bin/python     2328MiB |
+|    1   N/A  N/A   2074773      C   ...05/conda_envs/zcb_torch2/bin/python     2858MiB |
+|    1   N/A  N/A   2074775      C   ...05/conda_envs/zcb_torch2/bin/python     2406MiB |
+|    1   N/A  N/A   2075549      C   ...05/conda_envs/zcb_torch2/bin/python     2570MiB |
+|    1   N/A  N/A   2075550      C   ...05/conda_envs/zcb_torch2/bin/python     2854MiB |
+|    1   N/A  N/A   2075552      C   ...05/conda_envs/zcb_torch2/bin/python     3002MiB |
+|    1   N/A  N/A   2075555      C   ...05/conda_envs/zcb_torch2/bin/python     2502MiB |
+|    1   N/A  N/A   2075557      C   ...05/conda_envs/zcb_torch2/bin/python     3028MiB |
+|    1   N/A  N/A   2075558      C   ...05/conda_envs/zcb_torch2/bin/python     2588MiB |
+|    1   N/A  N/A   2076136      C   ...05/conda_envs/zcb_torch2/bin/python     2460MiB |
+|    1   N/A  N/A   2076138      C   ...05/conda_envs/zcb_torch2/bin/python     2842MiB |
+|    1   N/A  N/A   2076140      C   ...05/conda_envs/zcb_torch2/bin/python     3058MiB |
+|    1   N/A  N/A   2076141      C   ...05/conda_envs/zcb_torch2/bin/python     2484MiB |
+|    1   N/A  N/A   2076143      C   ...05/conda_envs/zcb_torch2/bin/python     2972MiB |
+|    1   N/A  N/A   2076145      C   ...05/conda_envs/zcb_torch2/bin/python     2522MiB |
+|    1   N/A  N/A   2117006      C   ...05/conda_envs/zcb_torch2/bin/python     2658MiB |
+|    1   N/A  N/A   2117008      C   ...05/conda_envs/zcb_torch2/bin/python     2426MiB |
+|    1   N/A  N/A   2117010      C   ...05/conda_envs/zcb_torch2/bin/python     2610MiB |
+|    1   N/A  N/A   2117012      C   ...05/conda_envs/zcb_torch2/bin/python     2652MiB |
+|    1   N/A  N/A   2117013      C   ...05/conda_envs/zcb_torch2/bin/python     2976MiB |
+|    1   N/A  N/A   2117015      C   ...05/conda_envs/zcb_torch2/bin/python     2662MiB |
+|    1   N/A  N/A   2614308      C   /usr/local/bin/cudaCheck                     22MiB |
+|    2   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
+|    3   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
+|    3   N/A  N/A   2598223      C   python                                     2156MiB |
+|    4   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
+|    5   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
+|    5   N/A  N/A   2598265      C   python                                     2214MiB |
+|    6   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
+|    6   N/A  N/A   2598352      C   python                                     2218MiB |
+|    7   N/A  N/A      5616      G   /usr/libexec/Xorg                            23MiB |
++---------------------------------------------------------------------------------------+
+
+Python: Python 3.10.12
+PyTorch: 2.9.1+cu128
+CUDA available: True
+CUDA version: 12.8
+GPU: NVIDIA A800-SXM4-80GB
+
+[Step 2] Setting up working directory...
+Working directory: /storage/public/home/2024110093/project1
+Output directories created
+
+[Step 3] Checking data files...
+  ✓ SV.new.vcf.gz found
+  ✓ Phe.txt found
+  ✓ VCFID.txt found
+  ✓ haplotype_phenotype_analysis.py found
+
+=========================================
+  Running Haplotype-Phenotype Association Analysis
+=========================================
+Start: 2026-03-13 11:32:25
+
+Analysis Features:
+  - AMOVA: Analysis of Molecular Variance
+  - Haplotype Effect Analysis
+  - Multiple Testing Correction (Bonferroni/FDR)
+  - P-value Annotation
+
+============================================================
+Haplotype-Phenotype Association Analysis
+============================================================
+Working Directory: /storage/public/home/2024110093/project1
+Script Path: /storage/public/home/2024110093/project1/haplotype_phenotype_analysis.py
+Python Version: 3.10.12 | packaged by conda-forge | (main, Jun 23 2023, 22:40:32) [GCC 12.3.0]
+============================================================
+
+[CONFIG] VCF: /storage/public/home/2024110093/data/Variation/CSIAAS//SV.new.vcf.gz
+[CONFIG] Phenotype: /storage/public/home/2024110093/data/Variation/CSIAAS//Phe.txt
+[CONFIG] Region: Chr6B:482468544-482472579
+[CONFIG] Gene ID: None
+[CONFIG] Output Dir: ./results/haplotype_analysis
+[INFO] 成功加载表型数据: 819 样本, 2 列
+[DEBUG] 输出目录: /storage/public/home/2024110093/project1/./results/haplotype_analysis
+[DEBUG] 日志目录: /storage/public/home/2024110093/project1/./logs
+[DEBUG] 日志文件: /storage/public/home/2024110093/project1/./logs/haplotype_analysis_1773373039.log
+[INFO] ============================================================
+[INFO] Haplotype-Phenotype Association Analysis Platform
+[INFO] ============================================================
+[INFO] 日志文件: /storage/public/home/2024110093/project1/./logs/haplotype_analysis_1773373039.log
+[INFO] Unix时间戳: 1773373039
+[INFO] 启动时间: 2026-03-13 11:37:19
+[INFO] Python版本: 3.10.12 | packaged by conda-forge | (main, Jun 23 2023, 22:40:32) [GCC 12.3.0]
+[INFO] ============================================================
+[INFO] ============================================================
+[INFO] 分析基因区间: Chr6B:482468544-482472579
+[INFO] ============================================================
+[INFO] [Step 1] 提取单倍型...
+[INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS//SV.new.vcf.gz
+[INFO] 样本数: 813
+[INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[INFO] 检测到VCF索引，使用快速区间查询
+[INFO] 快速查询区间: Chr6B:482468544-482472579
+[INFO] 区间内变异位点数: 0
+[INFO] [Step 2] 表型关联分析...
+[INFO] 合并后样本数: 813
+[INFO] [Step 2.1] AMOVA 分析...
+[INFO]   - 分析 1 个表型
+[INFO] [Step 3] 计算变异解释率 (PVE)...
+[INFO]   分析表型: TFW_DSI
+[WARNING]     关联分析失败: 单倍型分组不足
+[INFO] 箱线图已保存: /storage/public/home/2024110093/project1/./results/haplotype_analysis/boxplot_TFW_DSI.pdf
+[INFO] 开始单倍型效应分析: TFW_DSI
+[INFO] [Step 4] GWAS 整合分析...
+[INFO] [Step 5] 启动子变异注释...
+[INFO]   - 启动子区域: 482466544-482468543
+[INFO]   - 启动子内变异数: 0
+[INFO]   - 顺式元件数: 0
+[INFO] 启动子结构图已保存: ./results/haplotype_analysis/promoter_structure.pdf
+[INFO] [Step 6] 生成分析报告...
+[INFO] 分析报告已生成: /storage/public/home/2024110093/project1/./results/haplotype_analysis/analysis_report.html
+[INFO] ============================================================
+[INFO] 分析完成！结果保存在: ./results/haplotype_analysis
+[INFO] ============================================================
+
+============================================================
+分析结果摘要
+============================================================
+
+TFW_DSI: 单倍型分组不足
+
+============================================================
+输出文件位置
+============================================================
+结果目录: /storage/public/home/2024110093/project1/results/haplotype_analysis
+
+生成的文件:
+  - analysis_report.html (1907 bytes)
+  - boxplot_TFW_DSI.pdf (24684 bytes)
+  - error.17238552 (300 bytes)
+  - error.17239839 (300 bytes)
+  - haplotypes.csv (52 bytes)
+  - output.17238552 (16750 bytes)
+  - output.17239839 (11750 bytes)
+  - promoter_structure.pdf (10773 bytes)
+  - sample_haplotypes.csv (11679 bytes)
+
+============================================================
+分析完成!
+============================================================
+
+✓ Analysis completed successfully!
+
+=========================================
+  Haplotype Analysis Results Summary
+=========================================
+
+Output files:
+total 80K
+-rw-r--r-- 1 2024110093 jhdomainusers 1.9K Mar 13 11:37 analysis_report.html
+-rw-r--r-- 1 2024110093 jhdomainusers  25K Mar 13 11:37 boxplot_TFW_DSI.pdf
+-rw-r--r-- 1 2024110093 jhdomainusers  300 Mar 13 10:57 error.17238552
+-rw-r--r-- 1 2024110093 jhdomainusers  300 Mar 13 11:29 error.17239839
+-rw-r--r-- 1 2024110093 jhdomainusers   52 Mar 13 11:37 haplotypes.csv
+-rw-r--r-- 1 2024110093 jhdomainusers  17K Mar 13 11:05 output.17238552
+-rw-r--r-- 1 2024110093 jhdomainusers  13K Mar 13 11:38 output.17239839
+-rw-r--r-- 1 2024110093 jhdomainusers  11K Mar 13 11:37 promoter_structure.pdf
+-rw-r--r-- 1 2024110093 jhdomainusers  12K Mar 13 11:37 sample_haplotypes.csv
+
+=========================================
+  Job Complete
+=========================================
+End time: 2026-03-13 11:38:13
+Job ID: 
+
+Next steps:
+  1. Check results: ls -la results/haplotype_analysis/
+  2. View logs: logs/haplotype_analysis_1773372745.log
+
+Sender: Unischeduler System <2024110093@lnode251>
+Subject: Job 17239839: </storage/public/home/2024110093/.jhjobs/1773371569.17239839.1.shell> Done
+
+Job </storage/public/home/2024110093/.jhjobs/1773371569.17239839.1.shell> was submitted from host <lnode251> by user <2024110093>.
+Job was executed on host(s) <4*gnode198>, in queue <gpu>, as user <2024110093>.
+</storage/public/home/2024110093> was used as the home directory.
+</storage/public/home/2024110093/project1> was used as the working directory.
+Started at 2026-03-13 11:12:50
+Results reported at 2026-03-13 11:38:13
+
+Your job looked like:
+
+------------------------------------------------------------
+# User input
+/storage/public/home/2024110093/.jhjobs/1773371569.17239839.1.shell
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+		CPU time:       61.17 sec.
+		Max Memory:     476 MB
+		Max Processes:  4
+
+

@@ -1,0 +1,27 @@
+
+Sender: Unischeduler System <2024110093@lnode251>
+Subject: Job 17271865: </storage/public/home/2024110093/.jhjobs/1773537165.17271865.1.shell> Exited
+
+Job </storage/public/home/2024110093/.jhjobs/1773537165.17271865.1.shell> was submitted from host <lnode251> by user <2024110093>.
+Job was executed on host(s) <8*cnode193>, in queue <normal>, as user <2024110093>.
+</storage/public/home/2024110093> was used as the home directory.
+</storage/public/home/2024110093/project1> was used as the working directory.
+Started at 2026-03-15 09:12:45
+Results reported at 2026-03-15 09:14:23
+
+Your job looked like:
+
+------------------------------------------------------------
+# User input
+/storage/public/home/2024110093/.jhjobs/1773537165.17271865.1.shell
+------------------------------------------------------------
+
+Exited with exit code 1.
+
+Resource usage summary:
+
+		CPU time:       2.31 sec.
+		Max Memory:     51 MB
+		Max Processes:  4
+
+

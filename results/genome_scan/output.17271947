@@ -1,0 +1,90 @@
+=========================================
+  Genome-Wide Haplotype Database Builder
+=========================================
+Start time: Sun Mar 15 09:32:57 CST 2026
+Job ID: 
+Node: cnode170
+
+[Step 1] Loading Python environment...
+Python: Python 3.11.10
+
+[Step 2] Setting up working directory...
+Working directory: /storage/public/home/2024110093/project1
+Output directories created
+
+[Step 3] Checking data files...
+  ✓ VCF: Core819Samples_ALL.vcf.gz
+  ✓ Phenotype: Phe.txt
+  ✓ GFF3: CS-IAAS_v1.1_HC.gff3
+  ✓ FASTA: CS-IAAS_v1.1.fasta
+  ✓ genome_wide_haplotype_scan.py found
+
+=========================================
+  Running Genome-Wide Haplotype Scan
+=========================================
+Start: 2026-03-15 09:33:00
+
+Database Output:
+  - haplotype_database.csv (all haplotypes)
+  - gene_summary.csv (gene-level summary)
+
+[WARNING] pysam not available, some features may be limited
+[WARNING] pysam 不可用，单倍型提取功能受限
+Traceback (most recent call last):
+  File "/storage/public/home/2024110093/project1/genome_wide_haplotype_scan.py", line 522, in <module>
+    main()
+  File "/storage/public/home/2024110093/project1/genome_wide_haplotype_scan.py", line 508, in main
+    run_genome_scan(
+  File "/storage/public/home/2024110093/project1/genome_wide_haplotype_scan.py", line 330, in run_genome_scan
+    perf.start()
+  File "/storage/public/home/2024110093/project1/haplotype_phenotype_analysis.py", line 121, in start
+    self._record_memory("start")
+  File "/storage/public/home/2024110093/project1/haplotype_phenotype_analysis.py", line 154, in _record_memory
+    elif hasattr(psutil, 'virtual_memory'):
+                 ^^^^^^
+NameError: name 'psutil' is not defined
+
+✗ Genome scan failed with exit code: 1
+Check log: logs/genome_scan_.log
+[WARNING] pysam not available, some features may be limited
+[WARNING] pysam 不可用，单倍型提取功能受限
+Traceback (most recent call last):
+  File "/storage/public/home/2024110093/project1/genome_wide_haplotype_scan.py", line 522, in <module>
+    main()
+  File "/storage/public/home/2024110093/project1/genome_wide_haplotype_scan.py", line 508, in main
+    run_genome_scan(
+  File "/storage/public/home/2024110093/project1/genome_wide_haplotype_scan.py", line 330, in run_genome_scan
+    perf.start()
+  File "/storage/public/home/2024110093/project1/haplotype_phenotype_analysis.py", line 121, in start
+    self._record_memory("start")
+  File "/storage/public/home/2024110093/project1/haplotype_phenotype_analysis.py", line 154, in _record_memory
+    elif hasattr(psutil, 'virtual_memory'):
+                 ^^^^^^
+NameError: name 'psutil' is not defined
+
+Sender: Unischeduler System <2024110093@lnode251>
+Subject: Job 17271947: </storage/public/home/2024110093/.jhjobs/1773538374.17271947.1.shell> Exited
+
+Job </storage/public/home/2024110093/.jhjobs/1773538374.17271947.1.shell> was submitted from host <lnode251> by user <2024110093>.
+Job was executed on host(s) <8*cnode170>, in queue <normal>, as user <2024110093>.
+</storage/public/home/2024110093> was used as the home directory.
+</storage/public/home/2024110093/project1> was used as the working directory.
+Started at 2026-03-15 09:32:54
+Results reported at 2026-03-15 09:37:45
+
+Your job looked like:
+
+------------------------------------------------------------
+# User input
+/storage/public/home/2024110093/.jhjobs/1773538374.17271947.1.shell
+------------------------------------------------------------
+
+Exited with exit code 1.
+
+Resource usage summary:
+
+		CPU time:       5.41 sec.
+		Max Memory:     157 MB
+		Max Processes:  4
+
+

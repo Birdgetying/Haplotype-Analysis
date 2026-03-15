@@ -1,0 +1,1255 @@
+[2026-03-15 11:40:24] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:28] [INFO] 样本数: 813
+[2026-03-15 11:40:28] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:28] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:28] [INFO] 快速查询区间: Chr1A:54835-55800
+[2026-03-15 11:40:28] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:31] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:31] [INFO] 样本数: 813
+[2026-03-15 11:40:31] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:31] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:32] [INFO] 快速查询区间: Chr1A:79081-79398
+[2026-03-15 11:40:32] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:32] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:32] [INFO] 样本数: 813
+[2026-03-15 11:40:32] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:32] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:33] [INFO] 快速查询区间: Chr1A:157104-162173
+[2026-03-15 11:40:33] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:33] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:33] [INFO] 样本数: 813
+[2026-03-15 11:40:33] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:33] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:33] [INFO] 快速查询区间: Chr1A:176649-177026
+[2026-03-15 11:40:33] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:33] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:34] [INFO] 样本数: 813
+[2026-03-15 11:40:34] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:34] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:34] [INFO] 快速查询区间: Chr1A:186895-187272
+[2026-03-15 11:40:34] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:40:34] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:35] [INFO] 样本数: 813
+[2026-03-15 11:40:35] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:35] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:35] [INFO] 快速查询区间: Chr1A:248091-248408
+[2026-03-15 11:40:35] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:35] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:35] [INFO] 样本数: 813
+[2026-03-15 11:40:35] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:35] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:36] [INFO] 快速查询区间: Chr1A:263626-264003
+[2026-03-15 11:40:36] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:36] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:36] [INFO] 样本数: 813
+[2026-03-15 11:40:36] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:36] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:37] [INFO] 快速查询区间: Chr1A:275080-275397
+[2026-03-15 11:40:37] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:37] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:37] [INFO] 样本数: 813
+[2026-03-15 11:40:37] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:37] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:37] [INFO] 快速查询区间: Chr1A:275676-276398
+[2026-03-15 11:40:37] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:37] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:38] [INFO] 样本数: 813
+[2026-03-15 11:40:38] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:38] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:38] [INFO] 快速查询区间: Chr1A:300685-301071
+[2026-03-15 11:40:38] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:38] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:38] [INFO] 样本数: 813
+[2026-03-15 11:40:39] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:39] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:39] [INFO] 快速查询区间: Chr1A:318119-318538
+[2026-03-15 11:40:39] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:39] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:39] [INFO] 样本数: 813
+[2026-03-15 11:40:39] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:39] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:40] [INFO] 快速查询区间: Chr1A:327616-328035
+[2026-03-15 11:40:40] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:40] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:40] [INFO] 样本数: 813
+[2026-03-15 11:40:40] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:40] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:40] [INFO] 快速查询区间: Chr1A:364636-375078
+[2026-03-15 11:40:40] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:40:40] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:41] [INFO] 样本数: 813
+[2026-03-15 11:40:41] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:41] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:41] [INFO] 快速查询区间: Chr1A:409387-409704
+[2026-03-15 11:40:41] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:41] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:42] [INFO] 样本数: 813
+[2026-03-15 11:40:42] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:42] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:42] [INFO] 快速查询区间: Chr1A:1138007-1140095
+[2026-03-15 11:40:42] [INFO] 区间内变异位点数: 33
+[2026-03-15 11:40:42] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:43] [INFO] 样本数: 813
+[2026-03-15 11:40:43] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:43] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:43] [INFO] 快速查询区间: Chr1A:1150809-1152542
+[2026-03-15 11:40:43] [INFO] 区间内变异位点数: 40
+[2026-03-15 11:40:43] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:44] [INFO] 样本数: 813
+[2026-03-15 11:40:44] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:44] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:44] [INFO] 快速查询区间: Chr1A:1152618-1156987
+[2026-03-15 11:40:44] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:44] [INFO] 区间内变异位点数: 122
+[2026-03-15 11:40:44] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:45] [INFO] 样本数: 813
+[2026-03-15 11:40:45] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:45] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:45] [INFO] 快速查询区间: Chr1A:1157073-1161871
+[2026-03-15 11:40:45] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:45] [INFO] 区间内变异位点数: 162
+[2026-03-15 11:40:45] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:46] [INFO] 样本数: 813
+[2026-03-15 11:40:46] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:46] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:46] [INFO] 快速查询区间: Chr1A:1163774-1170805
+[2026-03-15 11:40:46] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:46] [INFO] 区间内变异位点数: 131
+[2026-03-15 11:40:46] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:46] [INFO] 样本数: 813
+[2026-03-15 11:40:46] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:46] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:47] [INFO] 快速查询区间: Chr1A:1181761-1184481
+[2026-03-15 11:40:47] [INFO] 区间内变异位点数: 76
+[2026-03-15 11:40:47] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:47] [INFO] 样本数: 813
+[2026-03-15 11:40:47] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:47] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:48] [INFO] 快速查询区间: Chr1A:1186752-1187687
+[2026-03-15 11:40:48] [INFO] 区间内变异位点数: 38
+[2026-03-15 11:40:48] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:48] [INFO] 样本数: 813
+[2026-03-15 11:40:48] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:48] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:49] [INFO] 快速查询区间: Chr1A:1192897-1195057
+[2026-03-15 11:40:49] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:40:49] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:49] [INFO] 样本数: 813
+[2026-03-15 11:40:49] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:49] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:49] [INFO] 快速查询区间: Chr1A:1197824-1201665
+[2026-03-15 11:40:49] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:49] [INFO] 区间内变异位点数: 102
+[2026-03-15 11:40:49] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:50] [INFO] 样本数: 813
+[2026-03-15 11:40:50] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:50] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:50] [INFO] 快速查询区间: Chr1A:1202215-1205412
+[2026-03-15 11:40:50] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:50] [INFO] 区间内变异位点数: 119
+[2026-03-15 11:40:50] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:51] [INFO] 样本数: 813
+[2026-03-15 11:40:51] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:51] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:51] [INFO] 快速查询区间: Chr1A:1220760-1221185
+[2026-03-15 11:40:51] [INFO] 区间内变异位点数: 3
+[2026-03-15 11:40:51] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:51] [INFO] 样本数: 813
+[2026-03-15 11:40:51] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:51] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:52] [INFO] 快速查询区间: Chr1A:1224059-1230721
+[2026-03-15 11:40:52] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:52] [INFO] 区间内变异位点数: 165
+[2026-03-15 11:40:52] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:52] [INFO] 样本数: 813
+[2026-03-15 11:40:52] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:53] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:53] [INFO] 快速查询区间: Chr1A:1295844-1304963
+[2026-03-15 11:40:53] [INFO] 区间内变异位点数: 75
+[2026-03-15 11:40:53] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:53] [INFO] 样本数: 813
+[2026-03-15 11:40:53] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:53] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:54] [INFO] 快速查询区间: Chr1A:1328079-1339496
+[2026-03-15 11:40:54] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:40:54] [DEBUG] 已处理 200 条记录...
+[2026-03-15 11:40:54] [INFO] 区间内变异位点数: 208
+[2026-03-15 11:40:54] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:54] [INFO] 样本数: 813
+[2026-03-15 11:40:54] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:54] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:55] [INFO] 快速查询区间: Chr1A:1420449-1421755
+[2026-03-15 11:40:55] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:40:55] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:55] [INFO] 样本数: 813
+[2026-03-15 11:40:55] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:55] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:56] [INFO] 快速查询区间: Chr1A:1469067-1470238
+[2026-03-15 11:40:56] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:40:56] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:56] [INFO] 样本数: 813
+[2026-03-15 11:40:56] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:56] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:56] [INFO] 快速查询区间: Chr1A:1533771-1535030
+[2026-03-15 11:40:56] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:40:56] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:57] [INFO] 样本数: 813
+[2026-03-15 11:40:57] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:57] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:57] [INFO] 快速查询区间: Chr1A:1548388-1550161
+[2026-03-15 11:40:57] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:57] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:58] [INFO] 样本数: 813
+[2026-03-15 11:40:58] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:58] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:58] [INFO] 快速查询区间: Chr1A:1552989-1554664
+[2026-03-15 11:40:58] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:58] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:58] [INFO] 样本数: 813
+[2026-03-15 11:40:58] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:58] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:40:59] [INFO] 快速查询区间: Chr1A:1561476-1562733
+[2026-03-15 11:40:59] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:40:59] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:40:59] [INFO] 样本数: 813
+[2026-03-15 11:40:59] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:40:59] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:00] [INFO] 快速查询区间: Chr1A:1599134-1600809
+[2026-03-15 11:41:00] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:41:00] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:00] [INFO] 样本数: 813
+[2026-03-15 11:41:00] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:00] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:01] [INFO] 快速查询区间: Chr1A:1616935-1618327
+[2026-03-15 11:41:01] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:41:01] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:01] [INFO] 样本数: 813
+[2026-03-15 11:41:01] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:01] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:01] [INFO] 快速查询区间: Chr1A:1625914-1626943
+[2026-03-15 11:41:01] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:01] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:02] [INFO] 样本数: 813
+[2026-03-15 11:41:02] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:02] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:02] [INFO] 快速查询区间: Chr1A:1628334-1630108
+[2026-03-15 11:41:02] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:02] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:03] [INFO] 样本数: 813
+[2026-03-15 11:41:03] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:03] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:03] [INFO] 快速查询区间: Chr1A:1642397-1642714
+[2026-03-15 11:41:03] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:03] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:03] [INFO] 样本数: 813
+[2026-03-15 11:41:03] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:03] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:04] [INFO] 快速查询区间: Chr1A:1650926-1652319
+[2026-03-15 11:41:04] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:04] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:04] [INFO] 样本数: 813
+[2026-03-15 11:41:04] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:04] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:04] [INFO] 快速查询区间: Chr1A:1659907-1661219
+[2026-03-15 11:41:04] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:04] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:05] [INFO] 样本数: 813
+[2026-03-15 11:41:05] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:05] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:05] [INFO] 快速查询区间: Chr1A:1662327-1664101
+[2026-03-15 11:41:05] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:05] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:06] [INFO] 样本数: 813
+[2026-03-15 11:41:06] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:06] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:06] [INFO] 快速查询区间: Chr1A:1676384-1676701
+[2026-03-15 11:41:06] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:06] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:06] [INFO] 样本数: 813
+[2026-03-15 11:41:06] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:06] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:07] [INFO] 快速查询区间: Chr1A:1684913-1686304
+[2026-03-15 11:41:07] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:07] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:07] [INFO] 样本数: 813
+[2026-03-15 11:41:07] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:07] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:08] [INFO] 快速查询区间: Chr1A:1705339-1706693
+[2026-03-15 11:41:08] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:41:08] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:08] [INFO] 样本数: 813
+[2026-03-15 11:41:08] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:08] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:08] [INFO] 快速查询区间: Chr1A:1710952-1711365
+[2026-03-15 11:41:08] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:08] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:09] [INFO] 样本数: 813
+[2026-03-15 11:41:09] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:09] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:09] [INFO] 快速查询区间: Chr1A:1712835-1714169
+[2026-03-15 11:41:09] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:09] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:09] [INFO] 样本数: 813
+[2026-03-15 11:41:09] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:09] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:10] [INFO] 快速查询区间: Chr1A:1738435-1738848
+[2026-03-15 11:41:10] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:10] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:10] [INFO] 样本数: 813
+[2026-03-15 11:41:10] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:10] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:11] [INFO] 快速查询区间: Chr1A:1745346-1747873
+[2026-03-15 11:41:11] [INFO] 区间内变异位点数: 10
+[2026-03-15 11:41:11] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:11] [INFO] 样本数: 813
+[2026-03-15 11:41:11] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:11] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:11] [INFO] 快速查询区间: Chr1A:1851399-1855486
+[2026-03-15 11:41:12] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:41:12] [INFO] 区间内变异位点数: 124
+[2026-03-15 11:41:12] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:12] [INFO] 样本数: 813
+[2026-03-15 11:41:12] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:12] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:13] [INFO] 快速查询区间: Chr1A:1924754-1927930
+[2026-03-15 11:41:13] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:41:13] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:13] [INFO] 样本数: 813
+[2026-03-15 11:41:13] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:13] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:13] [INFO] 快速查询区间: Chr1A:1932384-1934307
+[2026-03-15 11:41:14] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:41:14] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:14] [INFO] 样本数: 813
+[2026-03-15 11:41:14] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:14] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:14] [INFO] 快速查询区间: Chr1A:1950292-1951845
+[2026-03-15 11:41:14] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:14] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:15] [INFO] 样本数: 813
+[2026-03-15 11:41:15] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:15] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:15] [INFO] 快速查询区间: Chr1A:2037310-2040720
+[2026-03-15 11:41:15] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:15] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:16] [INFO] 样本数: 813
+[2026-03-15 11:41:16] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:16] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:16] [INFO] 快速查询区间: Chr1A:2151090-2153357
+[2026-03-15 11:41:16] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:16] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:16] [INFO] 样本数: 813
+[2026-03-15 11:41:16] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:16] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:17] [INFO] 快速查询区间: Chr1A:2165122-2166275
+[2026-03-15 11:41:17] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:17] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:17] [INFO] 样本数: 813
+[2026-03-15 11:41:17] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:17] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:18] [INFO] 快速查询区间: Chr1A:2175329-2176859
+[2026-03-15 11:41:18] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:18] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:18] [INFO] 样本数: 813
+[2026-03-15 11:41:18] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:18] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:19] [INFO] 快速查询区间: Chr1A:2178918-2179562
+[2026-03-15 11:41:19] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:19] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:19] [INFO] 样本数: 813
+[2026-03-15 11:41:19] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:19] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:19] [INFO] 快速查询区间: Chr1A:2179798-2184065
+[2026-03-15 11:41:19] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:19] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:20] [INFO] 样本数: 813
+[2026-03-15 11:41:20] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:20] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:20] [INFO] 快速查询区间: Chr1A:2188992-2189427
+[2026-03-15 11:41:20] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:20] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:21] [INFO] 样本数: 813
+[2026-03-15 11:41:21] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:21] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:21] [INFO] 快速查询区间: Chr1A:2190468-2191014
+[2026-03-15 11:41:21] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:21] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:22] [INFO] 样本数: 813
+[2026-03-15 11:41:22] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:22] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:22] [INFO] 快速查询区间: Chr1A:2227475-2227783
+[2026-03-15 11:41:22] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:22] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:22] [INFO] 样本数: 813
+[2026-03-15 11:41:22] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:22] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:23] [INFO] 快速查询区间: Chr1A:2228951-2229497
+[2026-03-15 11:41:23] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:23] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:23] [INFO] 样本数: 813
+[2026-03-15 11:41:23] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:23] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:24] [INFO] 快速查询区间: Chr1A:2231596-2232254
+[2026-03-15 11:41:24] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:24] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:24] [INFO] 样本数: 813
+[2026-03-15 11:41:24] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:24] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:25] [INFO] 快速查询区间: Chr1A:2265963-2266271
+[2026-03-15 11:41:25] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:25] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:25] [INFO] 样本数: 813
+[2026-03-15 11:41:25] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:25] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:26] [INFO] 快速查询区间: Chr1A:2266949-2267985
+[2026-03-15 11:41:26] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:26] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:26] [INFO] 样本数: 813
+[2026-03-15 11:41:26] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:26] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:26] [INFO] 快速查询区间: Chr1A:2270084-2270742
+[2026-03-15 11:41:26] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:27] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:27] [INFO] 样本数: 813
+[2026-03-15 11:41:27] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:27] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:27] [INFO] 快速查询区间: Chr1A:2470199-2472667
+[2026-03-15 11:41:27] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:27] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:28] [INFO] 样本数: 813
+[2026-03-15 11:41:28] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:28] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:28] [INFO] 快速查询区间: Chr1A:2472707-2473516
+[2026-03-15 11:41:28] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:28] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:29] [INFO] 样本数: 813
+[2026-03-15 11:41:29] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:29] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:29] [INFO] 快速查询区间: Chr1A:2485820-2495628
+[2026-03-15 11:41:29] [INFO] 区间内变异位点数: 15
+[2026-03-15 11:41:29] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:29] [INFO] 样本数: 813
+[2026-03-15 11:41:29] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:29] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:30] [INFO] 快速查询区间: Chr1A:2497654-2499063
+[2026-03-15 11:41:30] [INFO] 区间内变异位点数: 11
+[2026-03-15 11:41:30] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:30] [INFO] 样本数: 813
+[2026-03-15 11:41:30] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:30] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:31] [INFO] 快速查询区间: Chr1A:2503694-2527308
+[2026-03-15 11:41:31] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:41:31] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:31] [INFO] 样本数: 813
+[2026-03-15 11:41:31] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:31] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:32] [INFO] 快速查询区间: Chr1A:2550196-2566989
+[2026-03-15 11:41:32] [INFO] 区间内变异位点数: 11
+[2026-03-15 11:41:32] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:32] [INFO] 样本数: 813
+[2026-03-15 11:41:32] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:32] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:32] [INFO] 快速查询区间: Chr1A:2620717-2643628
+[2026-03-15 11:41:32] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:41:33] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:33] [INFO] 样本数: 813
+[2026-03-15 11:41:33] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:33] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:33] [INFO] 快速查询区间: Chr1A:2899568-2900337
+[2026-03-15 11:41:33] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:41:34] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:34] [INFO] 样本数: 813
+[2026-03-15 11:41:34] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:34] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:34] [INFO] 快速查询区间: Chr1A:3008142-3008871
+[2026-03-15 11:41:34] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:34] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:35] [INFO] 样本数: 813
+[2026-03-15 11:41:35] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:35] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:35] [INFO] 快速查询区间: Chr1A:3024372-3027224
+[2026-03-15 11:41:35] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:41:35] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:36] [INFO] 样本数: 813
+[2026-03-15 11:41:36] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:36] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:36] [INFO] 快速查询区间: Chr1A:3052251-3060203
+[2026-03-15 11:41:36] [INFO] 区间内变异位点数: 29
+[2026-03-15 11:41:36] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:37] [INFO] 样本数: 813
+[2026-03-15 11:41:37] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:37] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:37] [INFO] 快速查询区间: Chr1A:3106282-3106791
+[2026-03-15 11:41:37] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:41:37] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:37] [INFO] 样本数: 813
+[2026-03-15 11:41:37] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:37] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:38] [INFO] 快速查询区间: Chr1A:3115160-3116281
+[2026-03-15 11:41:38] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:41:38] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:38] [INFO] 样本数: 813
+[2026-03-15 11:41:38] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:38] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:39] [INFO] 快速查询区间: Chr1A:3199838-3201693
+[2026-03-15 11:41:39] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:39] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:39] [INFO] 样本数: 813
+[2026-03-15 11:41:39] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:39] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:40] [INFO] 快速查询区间: Chr1A:3210587-3212555
+[2026-03-15 11:41:40] [INFO] 区间内变异位点数: 21
+[2026-03-15 11:41:40] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:40] [INFO] 样本数: 813
+[2026-03-15 11:41:40] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:40] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:40] [INFO] 快速查询区间: Chr1A:3213662-3215659
+[2026-03-15 11:41:41] [INFO] 区间内变异位点数: 24
+[2026-03-15 11:41:41] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:41] [INFO] 样本数: 813
+[2026-03-15 11:41:41] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:41] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:41] [INFO] 快速查询区间: Chr1A:3259130-3263219
+[2026-03-15 11:41:41] [INFO] 区间内变异位点数: 14
+[2026-03-15 11:41:41] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:42] [INFO] 样本数: 813
+[2026-03-15 11:41:42] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:42] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:42] [INFO] 快速查询区间: Chr1A:3296994-3302394
+[2026-03-15 11:41:42] [INFO] 区间内变异位点数: 14
+[2026-03-15 11:41:42] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:43] [INFO] 样本数: 813
+[2026-03-15 11:41:43] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:43] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:43] [INFO] 快速查询区间: Chr1A:3360639-3365797
+[2026-03-15 11:41:43] [INFO] 区间内变异位点数: 66
+[2026-03-15 11:41:43] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:44] [INFO] 样本数: 813
+[2026-03-15 11:41:44] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:44] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:44] [INFO] 快速查询区间: Chr1A:3371606-3390110
+[2026-03-15 11:41:44] [INFO] 区间内变异位点数: 9
+[2026-03-15 11:41:44] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:45] [INFO] 样本数: 813
+[2026-03-15 11:41:45] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:45] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:45] [INFO] 快速查询区间: Chr1A:3451960-3454457
+[2026-03-15 11:41:45] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:45] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:45] [INFO] 样本数: 813
+[2026-03-15 11:41:45] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:45] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:46] [INFO] 快速查询区间: Chr1A:3461966-3467696
+[2026-03-15 11:41:46] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:46] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:46] [INFO] 样本数: 813
+[2026-03-15 11:41:46] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:46] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:47] [INFO] 快速查询区间: Chr1A:3481608-3486979
+[2026-03-15 11:41:47] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:47] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:47] [INFO] 样本数: 813
+[2026-03-15 11:41:47] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:47] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:48] [INFO] 快速查询区间: Chr1A:3502007-3502682
+[2026-03-15 11:41:48] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:48] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:48] [INFO] 样本数: 813
+[2026-03-15 11:41:48] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:48] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:48] [INFO] 快速查询区间: Chr1A:3654379-3661139
+[2026-03-15 11:41:48] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:49] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:49] [INFO] 样本数: 813
+[2026-03-15 11:41:49] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:49] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:49] [INFO] 快速查询区间: Chr1A:3665187-3668236
+[2026-03-15 11:41:49] [INFO] 区间内变异位点数: 21
+[2026-03-15 11:41:49] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:50] [INFO] 样本数: 813
+[2026-03-15 11:41:50] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:50] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:50] [INFO] 快速查询区间: Chr1A:3731807-3732247
+[2026-03-15 11:41:50] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:50] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:51] [INFO] 样本数: 813
+[2026-03-15 11:41:51] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:51] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:51] [INFO] 快速查询区间: Chr1A:3751436-3755458
+[2026-03-15 11:41:51] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:51] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:52] [INFO] 样本数: 813
+[2026-03-15 11:41:52] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:52] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:52] [INFO] 快速查询区间: Chr1A:3760325-3761503
+[2026-03-15 11:41:52] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:52] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:53] [INFO] 样本数: 813
+[2026-03-15 11:41:53] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:53] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:53] [INFO] 快速查询区间: Chr1A:3778103-3778543
+[2026-03-15 11:41:53] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:53] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:54] [INFO] 样本数: 813
+[2026-03-15 11:41:54] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:54] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:54] [INFO] 快速查询区间: Chr1A:3797370-3801787
+[2026-03-15 11:41:54] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:54] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:54] [INFO] 样本数: 813
+[2026-03-15 11:41:54] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:54] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:55] [INFO] 快速查询区间: Chr1A:3805097-3808080
+[2026-03-15 11:41:55] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:55] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:55] [INFO] 样本数: 813
+[2026-03-15 11:41:55] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:55] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:56] [INFO] 快速查询区间: Chr1A:3825932-3826372
+[2026-03-15 11:41:56] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:56] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:56] [INFO] 样本数: 813
+[2026-03-15 11:41:56] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:56] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:56] [INFO] 快速查询区间: Chr1A:3844649-3849603
+[2026-03-15 11:41:56] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:41:56] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:57] [INFO] 样本数: 813
+[2026-03-15 11:41:57] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:57] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:57] [INFO] 快速查询区间: Chr1A:3852940-3855924
+[2026-03-15 11:41:57] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:41:57] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:58] [INFO] 样本数: 813
+[2026-03-15 11:41:58] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:58] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:58] [INFO] 快速查询区间: Chr1A:3888005-3889350
+[2026-03-15 11:41:58] [INFO] 区间内变异位点数: 27
+[2026-03-15 11:41:58] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:58] [INFO] 样本数: 813
+[2026-03-15 11:41:58] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:58] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:41:59] [INFO] 快速查询区间: Chr1A:3924677-3926277
+[2026-03-15 11:41:59] [INFO] 区间内变异位点数: 9
+[2026-03-15 11:41:59] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:41:59] [INFO] 样本数: 813
+[2026-03-15 11:41:59] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:41:59] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:00] [INFO] 快速查询区间: Chr1A:4028007-4029462
+[2026-03-15 11:42:00] [INFO] 区间内变异位点数: 68
+[2026-03-15 11:42:00] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:00] [INFO] 样本数: 813
+[2026-03-15 11:42:00] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:00] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:00] [INFO] 快速查询区间: Chr1A:4029831-4033320
+[2026-03-15 11:42:01] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:01] [INFO] 区间内变异位点数: 116
+[2026-03-15 11:42:01] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:01] [INFO] 样本数: 813
+[2026-03-15 11:42:01] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:01] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:01] [INFO] 快速查询区间: Chr1A:4127609-4129835
+[2026-03-15 11:42:01] [INFO] 区间内变异位点数: 41
+[2026-03-15 11:42:01] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:02] [INFO] 样本数: 813
+[2026-03-15 11:42:02] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:02] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:02] [INFO] 快速查询区间: Chr1A:4165484-4172433
+[2026-03-15 11:42:02] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:03] [INFO] 区间内变异位点数: 162
+[2026-03-15 11:42:03] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:03] [INFO] 样本数: 813
+[2026-03-15 11:42:03] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:03] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:03] [INFO] 快速查询区间: Chr1A:4286074-4292816
+[2026-03-15 11:42:03] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:03] [INFO] 区间内变异位点数: 178
+[2026-03-15 11:42:04] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:04] [INFO] 样本数: 813
+[2026-03-15 11:42:04] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:04] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:04] [INFO] 快速查询区间: Chr1A:4294967-4302482
+[2026-03-15 11:42:04] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:04] [DEBUG] 已处理 200 条记录...
+[2026-03-15 11:42:04] [INFO] 区间内变异位点数: 254
+[2026-03-15 11:42:05] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:05] [INFO] 样本数: 813
+[2026-03-15 11:42:05] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:05] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:05] [INFO] 快速查询区间: Chr1A:4353977-4365888
+[2026-03-15 11:42:05] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:05] [INFO] 区间内变异位点数: 118
+[2026-03-15 11:42:05] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:06] [INFO] 样本数: 813
+[2026-03-15 11:42:06] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:06] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:06] [INFO] 快速查询区间: Chr1A:4359092-4362031
+[2026-03-15 11:42:06] [INFO] 区间内变异位点数: 28
+[2026-03-15 11:42:06] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:07] [INFO] 样本数: 813
+[2026-03-15 11:42:07] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:07] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:07] [INFO] 快速查询区间: Chr1A:4369792-4372819
+[2026-03-15 11:42:07] [INFO] 区间内变异位点数: 26
+[2026-03-15 11:42:07] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:07] [INFO] 样本数: 813
+[2026-03-15 11:42:07] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:07] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:08] [INFO] 快速查询区间: Chr1A:4395459-4398918
+[2026-03-15 11:42:08] [INFO] 区间内变异位点数: 8
+[2026-03-15 11:42:08] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:08] [INFO] 样本数: 813
+[2026-03-15 11:42:08] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:08] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:09] [INFO] 快速查询区间: Chr1A:4407241-4411033
+[2026-03-15 11:42:09] [INFO] 区间内变异位点数: 22
+[2026-03-15 11:42:09] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:09] [INFO] 样本数: 813
+[2026-03-15 11:42:09] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:09] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:09] [INFO] 快速查询区间: Chr1A:4438396-4439853
+[2026-03-15 11:42:09] [INFO] 区间内变异位点数: 15
+[2026-03-15 11:42:10] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:10] [INFO] 样本数: 813
+[2026-03-15 11:42:10] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:10] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:10] [INFO] 快速查询区间: Chr1A:4484453-4488354
+[2026-03-15 11:42:10] [INFO] 区间内变异位点数: 84
+[2026-03-15 11:42:10] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:11] [INFO] 样本数: 813
+[2026-03-15 11:42:11] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:11] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:11] [INFO] 快速查询区间: Chr1A:4518116-4519015
+[2026-03-15 11:42:11] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:42:11] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:12] [INFO] 样本数: 813
+[2026-03-15 11:42:12] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:12] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:12] [INFO] 快速查询区间: Chr1A:4519406-4523885
+[2026-03-15 11:42:12] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:42:12] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:12] [INFO] 样本数: 813
+[2026-03-15 11:42:12] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:12] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:13] [INFO] 快速查询区间: Chr1A:4548967-4550509
+[2026-03-15 11:42:13] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:42:13] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:13] [INFO] 样本数: 813
+[2026-03-15 11:42:13] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:13] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:14] [INFO] 快速查询区间: Chr1A:4558265-4576885
+[2026-03-15 11:42:14] [INFO] 区间内变异位点数: 75
+[2026-03-15 11:42:14] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:14] [INFO] 样本数: 813
+[2026-03-15 11:42:14] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:14] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:14] [INFO] 快速查询区间: Chr1A:4602428-4605387
+[2026-03-15 11:42:14] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:14] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:15] [INFO] 样本数: 813
+[2026-03-15 11:42:15] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:15] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:15] [INFO] 快速查询区间: Chr1A:4658888-4663227
+[2026-03-15 11:42:15] [INFO] 区间内变异位点数: 34
+[2026-03-15 11:42:15] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:16] [INFO] 样本数: 813
+[2026-03-15 11:42:16] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:16] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:16] [INFO] 快速查询区间: Chr1A:4679073-4680215
+[2026-03-15 11:42:16] [INFO] 区间内变异位点数: 39
+[2026-03-15 11:42:16] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:16] [INFO] 样本数: 813
+[2026-03-15 11:42:16] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:16] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:17] [INFO] 快速查询区间: Chr1A:4748104-4749123
+[2026-03-15 11:42:17] [INFO] 区间内变异位点数: 11
+[2026-03-15 11:42:17] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:17] [INFO] 样本数: 813
+[2026-03-15 11:42:17] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:17] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:18] [INFO] 快速查询区间: Chr1A:4932218-4940796
+[2026-03-15 11:42:18] [INFO] 区间内变异位点数: 42
+[2026-03-15 11:42:18] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:18] [INFO] 样本数: 813
+[2026-03-15 11:42:18] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:18] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:18] [INFO] 快速查询区间: Chr1A:4944277-4947509
+[2026-03-15 11:42:19] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:19] [INFO] 区间内变异位点数: 121
+[2026-03-15 11:42:19] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:19] [INFO] 样本数: 813
+[2026-03-15 11:42:19] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:19] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:19] [INFO] 快速查询区间: Chr1A:4951836-4952438
+[2026-03-15 11:42:19] [INFO] 区间内变异位点数: 18
+[2026-03-15 11:42:19] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:20] [INFO] 样本数: 813
+[2026-03-15 11:42:20] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:20] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:20] [INFO] 快速查询区间: Chr1A:4993652-4994101
+[2026-03-15 11:42:20] [INFO] 区间内变异位点数: 22
+[2026-03-15 11:42:20] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:21] [INFO] 样本数: 813
+[2026-03-15 11:42:21] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:21] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:21] [INFO] 快速查询区间: Chr1A:4995356-5001345
+[2026-03-15 11:42:21] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:21] [INFO] 区间内变异位点数: 168
+[2026-03-15 11:42:22] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:22] [INFO] 样本数: 813
+[2026-03-15 11:42:22] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:22] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:22] [INFO] 快速查询区间: Chr1A:5097980-5100721
+[2026-03-15 11:42:22] [INFO] 区间内变异位点数: 14
+[2026-03-15 11:42:22] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:23] [INFO] 样本数: 813
+[2026-03-15 11:42:23] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:23] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:23] [INFO] 快速查询区间: Chr1A:5351488-5353827
+[2026-03-15 11:42:23] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:42:24] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:25] [INFO] 样本数: 813
+[2026-03-15 11:42:25] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:25] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:25] [INFO] 快速查询区间: Chr1A:5362396-5366126
+[2026-03-15 11:42:25] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:42:26] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:27] [INFO] 样本数: 813
+[2026-03-15 11:42:27] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:27] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:27] [INFO] 快速查询区间: Chr1A:5458989-5467560
+[2026-03-15 11:42:27] [INFO] 区间内变异位点数: 49
+[2026-03-15 11:42:28] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:28] [INFO] 样本数: 813
+[2026-03-15 11:42:28] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:28] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:29] [INFO] 快速查询区间: Chr1A:5507962-5518801
+[2026-03-15 11:42:29] [INFO] 区间内变异位点数: 39
+[2026-03-15 11:42:30] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:30] [INFO] 样本数: 813
+[2026-03-15 11:42:30] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:30] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:30] [INFO] 快速查询区间: Chr1A:5614051-5614359
+[2026-03-15 11:42:30] [INFO] 区间内变异位点数: 3
+[2026-03-15 11:42:31] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:32] [INFO] 样本数: 813
+[2026-03-15 11:42:32] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:32] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:32] [INFO] 快速查询区间: Chr1A:5620888-5623191
+[2026-03-15 11:42:32] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:42:33] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:34] [INFO] 样本数: 813
+[2026-03-15 11:42:34] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:34] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:34] [INFO] 快速查询区间: Chr1A:5761288-5762884
+[2026-03-15 11:42:34] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:42:34] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:35] [INFO] 样本数: 813
+[2026-03-15 11:42:35] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:35] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:35] [INFO] 快速查询区间: Chr1A:5768469-5770404
+[2026-03-15 11:42:35] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:42:35] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:36] [INFO] 样本数: 813
+[2026-03-15 11:42:36] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:36] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:36] [INFO] 快速查询区间: Chr1A:5980135-5987151
+[2026-03-15 11:42:36] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:36] [INFO] 区间内变异位点数: 174
+[2026-03-15 11:42:36] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:37] [INFO] 样本数: 813
+[2026-03-15 11:42:37] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:37] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:37] [INFO] 快速查询区间: Chr1A:6578136-6584815
+[2026-03-15 11:42:37] [INFO] 区间内变异位点数: 89
+[2026-03-15 11:42:37] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:38] [INFO] 样本数: 813
+[2026-03-15 11:42:38] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:38] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:38] [INFO] 快速查询区间: Chr1A:6605568-6609932
+[2026-03-15 11:42:38] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:38] [INFO] 区间内变异位点数: 146
+[2026-03-15 11:42:38] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:38] [INFO] 样本数: 813
+[2026-03-15 11:42:38] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:38] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:39] [INFO] 快速查询区间: Chr1A:6611123-6618838
+[2026-03-15 11:42:39] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:42:39] [INFO] 区间内变异位点数: 126
+[2026-03-15 11:42:39] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:39] [INFO] 样本数: 813
+[2026-03-15 11:42:39] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:39] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:40] [INFO] 快速查询区间: Chr1A:6613767-6614315
+[2026-03-15 11:42:40] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:40] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:40] [INFO] 样本数: 813
+[2026-03-15 11:42:40] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:40] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:40] [INFO] 快速查询区间: Chr1A:6622279-6622827
+[2026-03-15 11:42:40] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:42:41] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:41] [INFO] 样本数: 813
+[2026-03-15 11:42:41] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:41] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:41] [INFO] 快速查询区间: Chr1A:6626535-6627083
+[2026-03-15 11:42:41] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:42:41] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:42] [INFO] 样本数: 813
+[2026-03-15 11:42:42] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:42] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:42] [INFO] 快速查询区间: Chr1A:6630791-6631339
+[2026-03-15 11:42:42] [INFO] 区间内变异位点数: 4
+[2026-03-15 11:42:42] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:43] [INFO] 样本数: 813
+[2026-03-15 11:42:43] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:43] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:43] [INFO] 快速查询区间: Chr1A:6631676-6637946
+[2026-03-15 11:42:43] [INFO] 区间内变异位点数: 51
+[2026-03-15 11:42:43] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:43] [INFO] 样本数: 813
+[2026-03-15 11:42:43] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:43] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:44] [INFO] 快速查询区间: Chr1A:6654193-6656670
+[2026-03-15 11:42:44] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:44] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:44] [INFO] 样本数: 813
+[2026-03-15 11:42:44] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:44] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:45] [INFO] 快速查询区间: Chr1A:6779902-6790364
+[2026-03-15 11:42:45] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:45] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:45] [INFO] 样本数: 813
+[2026-03-15 11:42:45] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:45] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:45] [INFO] 快速查询区间: Chr1A:7004883-7008547
+[2026-03-15 11:42:45] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:45] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:46] [INFO] 样本数: 813
+[2026-03-15 11:42:46] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:46] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:46] [INFO] 快速查询区间: Chr1A:7141255-7144862
+[2026-03-15 11:42:46] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:46] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:46] [INFO] 样本数: 813
+[2026-03-15 11:42:46] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:46] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:47] [INFO] 快速查询区间: Chr1A:7144877-7145491
+[2026-03-15 11:42:47] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:47] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:47] [INFO] 样本数: 813
+[2026-03-15 11:42:47] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:47] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:48] [INFO] 快速查询区间: Chr1A:7174270-7175067
+[2026-03-15 11:42:48] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:48] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:48] [INFO] 样本数: 813
+[2026-03-15 11:42:48] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:48] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:48] [INFO] 快速查询区间: Chr1A:7284103-7288794
+[2026-03-15 11:42:48] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:48] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:49] [INFO] 样本数: 813
+[2026-03-15 11:42:49] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:49] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:49] [INFO] 快速查询区间: Chr1A:7425367-7426284
+[2026-03-15 11:42:49] [INFO] 区间内变异位点数: 6
+[2026-03-15 11:42:49] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:49] [INFO] 样本数: 813
+[2026-03-15 11:42:49] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:49] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:50] [INFO] 快速查询区间: Chr1A:7447431-7447886
+[2026-03-15 11:42:50] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:50] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:50] [INFO] 样本数: 813
+[2026-03-15 11:42:50] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:50] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:51] [INFO] 快速查询区间: Chr1A:7449053-7455429
+[2026-03-15 11:42:51] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:51] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:51] [INFO] 样本数: 813
+[2026-03-15 11:42:51] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:51] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:51] [INFO] 快速查询区间: Chr1A:7463012-7467166
+[2026-03-15 11:42:51] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:51] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:52] [INFO] 样本数: 813
+[2026-03-15 11:42:52] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:52] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:52] [INFO] 快速查询区间: Chr1A:7467298-7477047
+[2026-03-15 11:42:52] [INFO] 区间内变异位点数: 74
+[2026-03-15 11:42:52] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:53] [INFO] 样本数: 813
+[2026-03-15 11:42:53] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:53] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:53] [INFO] 快速查询区间: Chr1A:7551467-7553844
+[2026-03-15 11:42:53] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:53] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:53] [INFO] 样本数: 813
+[2026-03-15 11:42:53] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:53] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:54] [INFO] 快速查询区间: Chr1A:7566374-7567789
+[2026-03-15 11:42:54] [INFO] 区间内变异位点数: 1
+[2026-03-15 11:42:54] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:54] [INFO] 样本数: 813
+[2026-03-15 11:42:54] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:54] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:54] [INFO] 快速查询区间: Chr1A:7596683-7602720
+[2026-03-15 11:42:54] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:54] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:55] [INFO] 样本数: 813
+[2026-03-15 11:42:55] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:55] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:55] [INFO] 快速查询区间: Chr1A:7622854-7623153
+[2026-03-15 11:42:55] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:55] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:56] [INFO] 样本数: 813
+[2026-03-15 11:42:56] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:56] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:56] [INFO] 快速查询区间: Chr1A:7624792-7627009
+[2026-03-15 11:42:56] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:56] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:56] [INFO] 样本数: 813
+[2026-03-15 11:42:56] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:56] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:57] [INFO] 快速查询区间: Chr1A:7638450-7639454
+[2026-03-15 11:42:57] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:42:57] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:57] [INFO] 样本数: 813
+[2026-03-15 11:42:57] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:57] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:57] [INFO] 快速查询区间: Chr1A:7645094-7646011
+[2026-03-15 11:42:57] [INFO] 区间内变异位点数: 15
+[2026-03-15 11:42:57] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:58] [INFO] 样本数: 813
+[2026-03-15 11:42:58] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:58] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:58] [INFO] 快速查询区间: Chr1A:7837326-7837769
+[2026-03-15 11:42:58] [INFO] 区间内变异位点数: 17
+[2026-03-15 11:42:58] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:59] [INFO] 样本数: 813
+[2026-03-15 11:42:59] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:59] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:42:59] [INFO] 快速查询区间: Chr1A:7840692-7843095
+[2026-03-15 11:42:59] [INFO] 区间内变异位点数: 32
+[2026-03-15 11:42:59] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:42:59] [INFO] 样本数: 813
+[2026-03-15 11:42:59] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:42:59] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:00] [INFO] 快速查询区间: Chr1A:7844340-7851240
+[2026-03-15 11:43:00] [INFO] 区间内变异位点数: 23
+[2026-03-15 11:43:00] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:00] [INFO] 样本数: 813
+[2026-03-15 11:43:00] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:00] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:01] [INFO] 快速查询区间: Chr1A:7926717-7928431
+[2026-03-15 11:43:01] [INFO] 区间内变异位点数: 58
+[2026-03-15 11:43:01] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:01] [INFO] 样本数: 813
+[2026-03-15 11:43:01] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:01] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:01] [INFO] 快速查询区间: Chr1A:8032212-8035454
+[2026-03-15 11:43:02] [INFO] 区间内变异位点数: 78
+[2026-03-15 11:43:02] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:02] [INFO] 样本数: 813
+[2026-03-15 11:43:02] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:02] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:02] [INFO] 快速查询区间: Chr1A:8036511-8038065
+[2026-03-15 11:43:02] [INFO] 区间内变异位点数: 13
+[2026-03-15 11:43:02] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:03] [INFO] 样本数: 813
+[2026-03-15 11:43:03] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:03] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:03] [INFO] 快速查询区间: Chr1A:8044582-8045557
+[2026-03-15 11:43:03] [INFO] 区间内变异位点数: 11
+[2026-03-15 11:43:03] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:03] [INFO] 样本数: 813
+[2026-03-15 11:43:03] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:03] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:04] [INFO] 快速查询区间: Chr1A:8059319-8064254
+[2026-03-15 11:43:04] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:43:04] [INFO] 区间内变异位点数: 132
+[2026-03-15 11:43:04] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:04] [INFO] 样本数: 813
+[2026-03-15 11:43:04] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:04] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:05] [INFO] 快速查询区间: Chr1A:8185794-8189683
+[2026-03-15 11:43:05] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:43:05] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:05] [INFO] 样本数: 813
+[2026-03-15 11:43:05] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:05] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:06] [INFO] 快速查询区间: Chr1A:8201323-8206046
+[2026-03-15 11:43:06] [INFO] 区间内变异位点数: 76
+[2026-03-15 11:43:06] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:06] [INFO] 样本数: 813
+[2026-03-15 11:43:06] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:06] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:06] [INFO] 快速查询区间: Chr1A:8215933-8217878
+[2026-03-15 11:43:07] [INFO] 区间内变异位点数: 36
+[2026-03-15 11:43:07] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:07] [INFO] 样本数: 813
+[2026-03-15 11:43:07] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:07] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:07] [INFO] 快速查询区间: Chr1A:8336920-8348532
+[2026-03-15 11:43:07] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:43:07] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:08] [INFO] 样本数: 813
+[2026-03-15 11:43:08] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:08] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:08] [INFO] 快速查询区间: Chr1A:8372301-8373008
+[2026-03-15 11:43:08] [INFO] 区间内变异位点数: 2
+[2026-03-15 11:43:08] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:09] [INFO] 样本数: 813
+[2026-03-15 11:43:09] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:09] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:09] [INFO] 快速查询区间: Chr1A:8395258-8399226
+[2026-03-15 11:43:09] [INFO] 区间内变异位点数: 45
+[2026-03-15 11:43:09] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:09] [INFO] 样本数: 813
+[2026-03-15 11:43:09] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:09] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:10] [INFO] 快速查询区间: Chr1A:8403523-8403953
+[2026-03-15 11:43:10] [INFO] 区间内变异位点数: 0
+[2026-03-15 11:43:10] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:10] [INFO] 样本数: 813
+[2026-03-15 11:43:10] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:10] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:10] [INFO] 快速查询区间: Chr1A:8404783-8410158
+[2026-03-15 11:43:10] [INFO] 区间内变异位点数: 20
+[2026-03-15 11:43:11] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:11] [INFO] 样本数: 813
+[2026-03-15 11:43:11] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:11] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:11] [INFO] 快速查询区间: Chr1A:8472847-8479623
+[2026-03-15 11:43:11] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:43:11] [INFO] 区间内变异位点数: 189
+[2026-03-15 11:43:11] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:12] [INFO] 样本数: 813
+[2026-03-15 11:43:12] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:12] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:12] [INFO] 快速查询区间: Chr1A:8480070-8481470
+[2026-03-15 11:43:12] [INFO] 区间内变异位点数: 49
+[2026-03-15 11:43:12] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:13] [INFO] 样本数: 813
+[2026-03-15 11:43:13] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:13] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:13] [INFO] 快速查询区间: Chr1A:8483326-8485866
+[2026-03-15 11:43:13] [INFO] 区间内变异位点数: 56
+[2026-03-15 11:43:13] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:13] [INFO] 样本数: 813
+[2026-03-15 11:43:13] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:13] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:14] [INFO] 快速查询区间: Chr1A:8522452-8523699
+[2026-03-15 11:43:14] [INFO] 区间内变异位点数: 16
+[2026-03-15 11:43:14] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:14] [INFO] 样本数: 813
+[2026-03-15 11:43:14] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:14] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:15] [INFO] 快速查询区间: Chr1A:8563156-8564174
+[2026-03-15 11:43:15] [INFO] 区间内变异位点数: 10
+[2026-03-15 11:43:15] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:15] [INFO] 样本数: 813
+[2026-03-15 11:43:15] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:15] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:15] [INFO] 快速查询区间: Chr1A:8564851-8569310
+[2026-03-15 11:43:16] [INFO] 区间内变异位点数: 68
+[2026-03-15 11:43:16] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:16] [INFO] 样本数: 813
+[2026-03-15 11:43:16] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:16] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:16] [INFO] 快速查询区间: Chr1A:8570191-8582761
+[2026-03-15 11:43:17] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:43:17] [DEBUG] 已处理 200 条记录...
+[2026-03-15 11:43:17] [INFO] 区间内变异位点数: 240
+[2026-03-15 11:43:17] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:17] [INFO] 样本数: 813
+[2026-03-15 11:43:17] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:17] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:18] [INFO] 快速查询区间: Chr1A:8599636-8600211
+[2026-03-15 11:43:18] [INFO] 区间内变异位点数: 9
+[2026-03-15 11:43:18] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:18] [INFO] 样本数: 813
+[2026-03-15 11:43:18] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:18] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:18] [INFO] 快速查询区间: Chr1A:8603043-8613733
+[2026-03-15 11:43:18] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:43:19] [DEBUG] 已处理 200 条记录...
+[2026-03-15 11:43:19] [INFO] 区间内变异位点数: 272
+[2026-03-15 11:43:19] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:19] [INFO] 样本数: 813
+[2026-03-15 11:43:19] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:19] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:19] [INFO] 快速查询区间: Chr1A:8619924-8623728
+[2026-03-15 11:43:19] [INFO] 区间内变异位点数: 78
+[2026-03-15 11:43:20] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:20] [INFO] 样本数: 813
+[2026-03-15 11:43:20] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:20] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:20] [INFO] 快速查询区间: Chr1A:8927682-8929308
+[2026-03-15 11:43:20] [INFO] 区间内变异位点数: 30
+[2026-03-15 11:43:20] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:21] [INFO] 样本数: 813
+[2026-03-15 11:43:21] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:21] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:21] [INFO] 快速查询区间: Chr1A:8930026-8932769
+[2026-03-15 11:43:21] [INFO] 区间内变异位点数: 48
+[2026-03-15 11:43:21] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:22] [INFO] 样本数: 813
+[2026-03-15 11:43:22] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:22] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:22] [INFO] 快速查询区间: Chr1A:8935763-8948344
+[2026-03-15 11:43:22] [DEBUG] 已处理 100 条记录...
+[2026-03-15 11:43:22] [DEBUG] 已处理 200 条记录...
+[2026-03-15 11:43:22] [DEBUG] 已处理 300 条记录...
+[2026-03-15 11:43:22] [DEBUG] 已处理 400 条记录...
+[2026-03-15 11:43:22] [INFO] 区间内变异位点数: 489
+[2026-03-15 11:43:22] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:23] [INFO] 样本数: 813
+[2026-03-15 11:43:23] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:23] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:23] [INFO] 快速查询区间: Chr1A:8954077-8955708
+[2026-03-15 11:43:23] [INFO] 区间内变异位点数: 52
+[2026-03-15 11:43:23] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:24] [INFO] 样本数: 813
+[2026-03-15 11:43:24] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:24] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:24] [INFO] 快速查询区间: Chr1A:8963397-8963984
+[2026-03-15 11:43:24] [INFO] 区间内变异位点数: 14
+[2026-03-15 11:43:24] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:25] [INFO] 样本数: 813
+[2026-03-15 11:43:25] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:25] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:25] [INFO] 快速查询区间: Chr1A:8975300-8975632
+[2026-03-15 11:43:25] [INFO] 区间内变异位点数: 11
+[2026-03-15 11:43:25] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:26] [INFO] 样本数: 813
+[2026-03-15 11:43:26] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:26] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:26] [INFO] 快速查询区间: Chr1A:9054567-9056151
+[2026-03-15 11:43:26] [INFO] 区间内变异位点数: 26
+[2026-03-15 11:43:26] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:27] [INFO] 样本数: 813
+[2026-03-15 11:43:27] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:27] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:27] [INFO] 快速查询区间: Chr1A:9070875-9073517
+[2026-03-15 11:43:27] [INFO] 区间内变异位点数: 18
+[2026-03-15 11:43:27] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:28] [INFO] 样本数: 813
+[2026-03-15 11:43:28] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:28] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:28] [INFO] 快速查询区间: Chr1A:9087750-9090644
+[2026-03-15 11:43:28] [INFO] 区间内变异位点数: 70
+[2026-03-15 11:43:28] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:29] [INFO] 样本数: 813
+[2026-03-15 11:43:29] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:29] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:29] [INFO] 快速查询区间: Chr1A:9107507-9108175
+[2026-03-15 11:43:29] [INFO] 区间内变异位点数: 14
+[2026-03-15 11:43:29] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz
+[2026-03-15 11:43:30] [INFO] 样本数: 813
+[2026-03-15 11:43:30] [INFO] VCF中的染色体: ['Chr1A', 'Chr1B', 'Chr1D', 'Chr2A', 'Chr2B', 'Chr2D', 'Chr3A', 'Chr3B', 'Chr3D', 'Chr4A']...
+[2026-03-15 11:43:30] [INFO] 检测到VCF索引，使用快速区间查询
+[2026-03-15 11:43:30] [INFO] 快速查询区间: Chr1A:9111921-9114452
+[2026-03-15 11:43:30] [INFO] 区间内变异位点数: 49
+[2026-03-15 11:43:30] [INFO] 打开VCF文件: /storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz

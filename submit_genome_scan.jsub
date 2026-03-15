@@ -1,0 +1,208 @@
+#!/bin/bash
+
+#JSUB -J genome_haplotype_scan
+
+#JSUB -q normal
+
+#JSUB -n 8
+
+#JSUB -o results/genome_scan/output.%J
+
+#JSUB -e results/genome_scan/error.%J
+
+
+# ============================================================================
+# 全基因组单倍型扫描 - 生成单倍型数据库
+# ============================================================================
+
+echo "========================================="
+echo "  Genome-Wide Haplotype Database Builder"
+echo "========================================="
+echo "Start time: $(date)"
+echo "Job ID: $JSUB_JOBID"
+echo "Node: $HOSTNAME"
+
+# ============================================================================
+# 环境配置
+# ============================================================================
+
+echo ""
+echo "[Step 1] Loading Python environment..."
+
+# 尝试加载包含 pysam 的 conda 环境
+module load anaconda3 2>/dev/null || module load miniconda3 2>/dev/null || true
+
+# 检查是否有包含 pysam 的环境
+if python -c "import pysam" 2>/dev/null; then
+    echo "  ✓ pysam available in current environment"
+else
+    # 尝试安装 pysam
+    echo "  Installing pysam..."
+    pip install pysam --user --quiet 2>&1 | tail -5
+    
+    # 再次检查
+    if python -c "import pysam" 2>/dev/null; then
+        echo "  ✓ pysam installed successfully"
+    else
+        echo "  ✗ Failed to install pysam"
+        echo "  Trying conda install..."
+        conda install -c bioconda pysam -y 2>&1 | tail -10 || true
+    fi
+fi
+
+echo "Python: $(python --version)"
+python -c "import pysam; print(f'pysam: {pysam.__version__}')" 2>/dev/null || echo "pysam: not available"
+
+# ============================================================================
+# 工作目录
+# ============================================================================
+
+echo ""
+echo "[Step 2] Setting up working directory..."
+
+cd ~/project1 2>/dev/null || \
+cd /storage/public/home/2024110093/project1 2>/dev/null || {
+    echo "ERROR: Cannot find project directory"
+    exit 1
+}
+
+echo "Working directory: $(pwd)"
+
+
+# ============================================================================
+# 创建输出目录
+# ============================================================================
+
+mkdir -p results/genome_scan
+mkdir -p logs
+
+echo "Output directories created"
+
+
+# ============================================================================
+# 数据检查 (CS-IAAS T2T v1.1)
+# ============================================================================
+
+echo ""
+echo "[Step 3] Checking data files..."
+
+# CS-IAAS 数据路径
+VCF_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz"
+PHENO_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
+GFF_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_HC.gff3"
+FASTA_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
+
+if [ -f "${VCF_FILE}" ]; then
+    echo "  ✓ VCF: Core819Samples_ALL.vcf.gz"
+else
+    echo "  ✗ VCF NOT FOUND: ${VCF_FILE}"
+    exit 1
+fi
+
+if [ -f "${PHENO_FILE}" ]; then
+    echo "  ✓ Phenotype: Phe.txt"
+else
+    echo "  ✗ Phenotype NOT FOUND: ${PHENO_FILE}"
+    exit 1
+fi
+
+if [ -f "${GFF_FILE}" ]; then
+    echo "  ✓ GFF3: CS-IAAS_v1.1_HC.gff3"
+else
+    echo "  ✗ GFF3 NOT FOUND: ${GFF_FILE}"
+    exit 1
+fi
+
+if [ -f "${FASTA_FILE}" ]; then
+    echo "  ✓ FASTA: CS-IAAS_v1.1.fasta"
+else
+    echo "  ✗ FASTA NOT FOUND: ${FASTA_FILE}"
+    exit 1
+fi
+
+# 检查分析脚本
+if [ -f "genome_wide_haplotype_scan.py" ]; then
+    echo "  ✓ genome_wide_haplotype_scan.py found"
+else
+    echo "  ✗ genome_wide_haplotype_scan.py - NOT FOUND"
+    exit 1
+fi
+
+
+# ============================================================================
+# 运行全基因组扫描
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Running Genome-Wide Haplotype Scan"
+echo "========================================="
+echo "Start: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+echo "Database Output:"
+echo "  - haplotype_database.csv (all haplotypes)"
+echo "  - gene_summary.csv (gene-level summary)"
+echo ""
+
+LOG_FILE="logs/genome_scan_${JSUB_JOBID}.log"
+
+# 运行扫描（串行模式更稳定）
+python genome_wide_haplotype_scan.py \
+    --vcf ${VCF_FILE} \
+    --gff ${GFF_FILE} \
+    --phenotype ${PHENO_FILE} \
+    --output-dir results/genome_scan \
+    --workers 1 \
+    --batch-size 100 \
+    --min-samples 5 \
+    2>&1 | tee "${LOG_FILE}"
+
+EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "✓ Genome scan completed successfully!"
+else
+    echo ""
+    echo "✗ Genome scan failed with exit code: $EXIT_CODE"
+    echo "Check log: $LOG_FILE"
+    tail -100 "$LOG_FILE"
+    exit $EXIT_CODE
+fi
+
+
+# ============================================================================
+# 结果汇总
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Genome Scan Results Summary"
+echo "========================================="
+
+echo ""
+echo "Output files:"
+ls -lh results/genome_scan/ 2>/dev/null || echo "No output files found"
+
+# 统计基因数
+if [ -f "results/genome_scan/gene_summary.csv" ]; then
+    N_GENES=$(tail -n +2 results/genome_scan/gene_summary.csv | wc -l)
+    echo ""
+    echo "Total genes scanned: ${N_GENES}"
+fi
+
+# ============================================================================
+# 完成
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Job Complete"
+echo "========================================="
+echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Job ID: $JSUB_JOBID"
+echo ""
+echo "Next steps:"
+echo "  1. Check results: ls -la results/genome_scan/"
+echo "  2. View database: head results/genome_scan/haplotype_database.csv"
+echo "  3. View summary: cat results/genome_scan/gene_summary.csv"

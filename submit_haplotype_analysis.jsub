@@ -1,0 +1,312 @@
+#!/bin/bash
+
+#JSUB -J haplotype_analysis
+
+#JSUB -q gpu
+
+#JSUB -n 4
+
+#JSUB -gpgpu 1
+
+#JSUB -o results/haplotype_analysis/output.%J
+
+#JSUB -e results/haplotype_analysis/error.%J
+
+
+# ============================================================================
+# 单倍型-表型关联分析平台
+# 基于haplotype_phenotype_analysis.py
+# ============================================================================
+
+echo "========================================="
+echo "  Haplotype-Phenotype Association Analysis"
+echo "========================================="
+echo "Start time: $(date)"
+echo "Job ID: $JSUB_JOBID"
+echo "GPU Node: $HOSTNAME"
+
+# ============================================================================
+# 环境配置
+# ============================================================================
+
+echo ""
+echo "[Step 1] Loading Python environment..."
+module load pytorch-2.3.0_py311
+
+# 安装缺失的依赖（使用内网Conda私有镜像源）
+echo "[Installing required packages...]"
+
+# 先检查是否已安装
+if python -c "import statsmodels" 2>/dev/null; then
+    echo "  ✓ statsmodels already installed"
+else
+    echo "  Installing statsmodels via conda private mirror..."
+    
+    # 加载conda基础环境
+    module load conda_base_py310
+    
+    # 拷贝conda私有镜像源配置（如尚未配置）
+    if [ ! -f ~/.condarc ]; then
+        cp /storage/public/share/conda-mirror/.condarc ~/ 2>/dev/null || true
+    fi
+    
+    # 使用mamba从conda-forge安装statsmodels
+    mamba install -y statsmodels -c conda-forge 2>/dev/null && echo "  ✓ statsmodels installed via conda" || {
+        
+        echo "  Conda install failed, trying pip with private mirror..."
+        # 备选：使用私有PyPI镜像源
+        pip install statsmodels --user \
+            -i http://10.105.32.248/pypi/simple/ \
+            --trusted-host 10.105.32.248 \
+            --timeout 60 && echo "  ✓ statsmodels installed via private PyPI" || {
+            
+            echo "  ✗ Failed to install statsmodels"
+            echo "  请检查内网镜像源可访问性"
+            exit 1
+        }
+    }
+fi
+
+echo "[Checking installation...]"
+python -c "import statsmodels; print(f'statsmodels version: {statsmodels.__version__}')"
+
+# 关键: 设置CUDA环境变量
+export CUDA_VISIBLE_DEVICES=0
+export CUDA_LAUNCH_BLOCKING=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128
+
+# GPU诊断
+echo ""
+echo "[GPU Diagnostics]"
+echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
+nvidia-smi 2>/dev/null && echo "" || echo "nvidia-smi not available on login node"
+
+echo "Python: $(python --version)"
+echo "PyTorch: $(python -c 'import torch; print(torch.__version__)')"
+
+# 详细CUDA检查
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else "N/A"}')"
+
+
+# ============================================================================
+# 工作目录
+# ============================================================================
+
+echo ""
+echo "[Step 2] Setting up working directory..."
+
+cd ~/project1 2>/dev/null || \
+cd /storage/public/home/2024110093/project1 2>/dev/null || {
+    echo "ERROR: Cannot find project directory"
+    exit 1
+}
+
+echo "Working directory: $(pwd)"
+
+
+# ============================================================================
+# 创建输出目录
+# ============================================================================
+
+mkdir -p results/haplotype_analysis
+mkdir -p logs
+
+echo "Output directories created"
+
+
+# ============================================================================
+# 函数：从 GFF3 查找基因坐标
+# ============================================================================
+
+get_gene_coords() {
+    local GENE_ID=$1
+    local GFF=$2
+    
+    # GFF3格式：匹配 ID=基因ID 或 Parent=基因ID
+    # 先尝试匹配 gene 行
+    local GENE_ROW=$(grep -E "ID=${GENE_ID}[;\t]" "${GFF}" | awk '$3=="gene"' | head -1)
+    
+    if [ -n "${GENE_ROW}" ]; then
+        echo "${GENE_ROW}" | awk '{print $1"\t"$4"\t"$5"\t"$7}'
+        return
+    fi
+    
+    # 如果没有 gene 行，从 mRNA/exon/CDS 计算边界
+    local GREP_RESULT=$(grep -E "(ID|Parent)=${GENE_ID}" "${GFF}" | head -5)
+    
+    if [ -z "${GREP_RESULT}" ]; then
+        echo "[ERROR] No match for ${GENE_ID}" >&2
+        return
+    fi
+    
+    grep -E "(ID|Parent)=${GENE_ID}" "${GFF}" | awk '
+        BEGIN { chr=""; strand=""; min_start=999999999; max_end=0 }
+        {
+            if (chr=="") { chr=$1; strand=$7 }
+            if ($4 < min_start) min_start=$4
+            if ($5 > max_end) max_end=$5
+        }
+        END { if (chr!="") print chr"\t"min_start"\t"max_end"\t"strand }
+    '
+}
+
+
+# ============================================================================
+# 数据检查 (CS-IAAS T2T v1.1)
+# ============================================================================
+
+echo ""
+echo "[Step 3] Checking data files..."
+
+# CS-IAAS 数据路径
+VCF_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz"
+PHENO_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
+GFF_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_HC.gff3"
+FASTA_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
+
+if [ -f "${VCF_FILE}" ]; then
+    echo "  ✓ VCF: Core819Samples_ALL.vcf.gz"
+else
+    echo "  ✗ VCF NOT FOUND: ${VCF_FILE}"
+    exit 1
+fi
+
+if [ -f "${PHENO_FILE}" ]; then
+    echo "  ✓ Phenotype: Phe.txt"
+else
+    echo "  ✗ Phenotype NOT FOUND: ${PHENO_FILE}"
+    exit 1
+fi
+
+if [ -f "${GFF_FILE}" ]; then
+    echo "  ✓ GFF3: CS-IAAS_v1.1_HC.gff3"
+else
+    echo "  ✗ GFF3 NOT FOUND: ${GFF_FILE}"
+    exit 1
+fi
+
+if [ -f "${FASTA_FILE}" ]; then
+    echo "  ✓ FASTA: CS-IAAS_v1.1.fasta"
+else
+    echo "  ✗ FASTA NOT FOUND: ${FASTA_FILE}"
+    exit 1
+fi
+
+# 检查分析脚本
+if [ -f "haplotype_phenotype_analysis.py" ]; then
+    echo "  ✓ haplotype_phenotype_analysis.py found"
+else
+    echo "  ✗ haplotype_phenotype_analysis.py - NOT FOUND"
+    exit 1
+fi
+
+
+# ============================================================================
+# 运行单倍型-表型关联分析
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Running Haplotype-Phenotype Association Analysis"
+echo "========================================="
+echo "Start: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+echo "Analysis Features:"
+echo "  - AMOVA: Analysis of Molecular Variance"
+echo "  - Haplotype Effect Analysis"
+echo "  - Multiple Testing Correction (Bonferroni/FDR)"
+echo "  - P-value Annotation"
+echo "  - Gene Structure Visualization (Exon/CDS)"
+echo "  - Promoter Annotation"
+echo "  - Performance Monitoring"
+echo ""
+
+# 测试基因列表
+declare -a GENES=("CSIAAS1BG1157200HC" "CSIAAS4BG0701800HC")
+
+for GENE_ID in "${GENES[@]}"; do
+    echo ""
+    echo "-----------------------------------------"
+    echo "  Gene: ${GENE_ID}"
+    echo "-----------------------------------------"
+    
+    # 从 GFF3 获取坐标
+    COORDS=$(get_gene_coords "${GENE_ID}" "${GFF_FILE}")
+    
+    if [ -z "${COORDS}" ]; then
+        echo "  ERROR: Cannot find ${GENE_ID} in GFF3, skipping..."
+        continue
+    fi
+
+    CHROM=$(echo "${COORDS}" | cut -f1)
+    START=$(echo "${COORDS}" | cut -f2)
+    END=$(echo "${COORDS}" | cut -f3)
+    STRAND=$(echo "${COORDS}" | cut -f4)
+
+    echo "  Coordinates: ${CHROM}:${START}-${END} (${STRAND})"
+
+    # 输出目录按基因分开
+    OUT_DIR="./results/${GENE_ID}"
+    mkdir -p "${OUT_DIR}"
+
+    LOG_FILE="logs/${GENE_ID}_${JSUB_JOBID}.log"
+
+    echo "  Output: ${OUT_DIR}"
+    echo "  Log: ${LOG_FILE}"
+    echo "  Running..."
+
+    python haplotype_phenotype_analysis.py \
+        --vcf ${VCF_FILE} \
+        --phenotype ${PHENO_FILE} \
+        --gtf ${GFF_FILE} \
+        --fasta ${FASTA_FILE} \
+        --chrom ${CHROM} \
+        --start ${START} \
+        --end ${END} \
+        --gene-id ${GENE_ID} \
+        --strand ${STRAND} \
+        --output-dir ${OUT_DIR} \
+        2>&1 | tee "${LOG_FILE}"
+
+    EXIT_CODE=${PIPESTATUS[0]}
+
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo "  ✓ ${GENE_ID} completed successfully!"
+    else
+        echo "  ✗ ${GENE_ID} failed (exit code: $EXIT_CODE)"
+    fi
+done
+
+
+# ============================================================================
+# 结果汇总
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Haplotype Analysis Results Summary"
+echo "========================================="
+
+echo ""
+echo "Output files:"
+for GENE_ID in "${GENES[@]}"; do
+    echo "  ${GENE_ID}:"
+    ls -lh results/${GENE_ID}/ 2>/dev/null || echo "    No output files found"
+done
+
+# ============================================================================
+# 完成
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Job Complete"
+echo "========================================="
+echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Job ID: $JSUB_JOBID"
+echo ""
+echo ""
+echo "Next steps:"
+echo "  1. Check results: ls -la results/CSIAAS1BG1157200HC/ results/CSIAAS4BG0701800HC/"
+echo "  2. View logs: ls -la logs/"
+echo "  3. Run genome-wide scan: bash run_genome_scan.sh"

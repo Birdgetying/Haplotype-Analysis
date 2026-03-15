@@ -1,0 +1,222 @@
+#!/bin/bash
+
+#JSUB -J sv_pro
+
+#JSUB -q gpu
+
+#JSUB -n 4
+
+#JSUB -gpgpu 1
+
+#JSUB -o results/sv_pro/output.%J
+
+#JSUB -e results/sv_pro/error.%J
+
+
+# ============================================================================
+# Advanced SV Genomic Prediction with Multi-Head CNN, Transformer, and Curriculum Learning
+# 高级SV基因组预测 + 多头CNN + Transformer + 课程学习
+# ============================================================================
+
+echo "========================================="
+echo "  Advanced SV Genomic Prediction + Multi-Head CNN + Transformer + Curriculum Learning"
+echo "========================================="
+echo "Start time: $(date)"
+echo "Job ID: $JSUB_JOBID"
+echo "GPU Node: $HOSTNAME"
+
+# ============================================================================
+# 环境配置
+# ============================================================================
+
+echo ""
+echo "[Step 1] Loading PyTorch environment..."
+module load pytorch-2.3.0_py311
+
+# 关键: 设置CUDA环境变量
+export CUDA_VISIBLE_DEVICES=0
+export CUDA_LAUNCH_BLOCKING=0
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128
+
+# GPU诊断
+echo ""
+echo "[GPU Diagnostics]"
+echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
+nvidia-smi 2>/dev/null && echo "" || echo "nvidia-smi not available on login node"
+
+echo "Python: $(python --version)"
+echo "PyTorch: $(python -c 'import torch; print(torch.__version__)')"
+
+# 详细CUDA检查
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}')"
+
+
+# ============================================================================
+# 工作目录
+# ============================================================================
+
+echo ""
+echo "[Step 2] Setting up working directory..."
+
+cd ~/genomic_prediction 2>/dev/null || \
+cd /storage/public/home/2024110093/genomic_prediction 2>/dev/null || {
+    echo "ERROR: Cannot find project directory"
+    exit 1
+}
+
+echo "Working directory: $(pwd)"
+
+
+# ============================================================================
+# 创建输出目录
+# ============================================================================
+
+mkdir -p results/sv_pro
+mkdir -p logs
+
+echo "Output directories created"
+
+
+# ============================================================================
+# 数据检查
+# ============================================================================
+
+echo ""
+echo "[Step 3] Checking SV VCF data files..."
+
+# 检查SV相关文件是否存在
+VCF_DATA_PATH="/storage/public/home/2024110093/data/Variation/CSIAAS/"
+if [ -f "${VCF_DATA_PATH}/Core819Samples_SV.genotypes.whole.final.id_gt.splitbial.miss0.6.813m.DSI_TFW.1e4_assoc.txt" ]; then
+    echo "  ✓ Core819Samples_SV.genotypes.whole.final.id_gt.splitbial.miss0.6.813m.DSI_TFW.1e4_assoc.txt found"
+else
+    echo "  ⚠ SV association file NOT FOUND"
+fi
+
+if [ -f "${VCF_DATA_PATH}/Phe.txt" ]; then
+    echo "  ✓ Phe.txt found"
+else
+    echo "  ⚠ Phe.txt NOT FOUND"
+fi
+
+if [ -f "${VCF_DATA_PATH}/VCFID.txt" ]; then
+    echo "  ✓ VCFID.txt found"
+else
+    echo "  ⚠ VCFID.txt NOT FOUND"
+fi
+
+# 检查训练脚本
+if [ -f "train_sv_pro.py" ]; then
+    echo "  ✓ train_sv_pro.py found"
+else
+    echo "  ✗ train_sv_pro.py - NOT FOUND"
+    exit 1
+fi
+
+
+# ============================================================================
+# 运行高级SV模型 + 多头CNN + Transformer + 课程学习
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Running Advanced SV Pro Model + Multi-Head CNN + Transformer + Curriculum Learning"
+echo "========================================="
+echo "Start: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+echo "Model Configuration:"
+echo "  - Data: SV association file"
+echo "  - Architecture: Multi-Branch CNN + Relative Position Encoding + Enhanced Transformer"
+echo "  - Feature Selection: Attention-Based + Ensemble Methods"
+echo "  - Training Strategy: Curriculum Learning + Self-Supervised Pretraining"
+echo "  - Models: RRBLUP, XGBoost, WheatGP, Enhanced"
+echo ""
+echo "Advanced Features:"
+echo "  - Multi-branch CNN for local feature extraction"
+echo "  - Relative position encoding for sequence modeling"
+echo "  - Attention-based feature selection"
+echo "  - Ensemble feature selection (RRBLUP, XGBoost, ElasticNet, Mutual Info)"
+echo "  - Curriculum learning from easy to hard samples"
+echo "  - Self-supervised pretraining with contrastive loss"
+echo "  - Advanced regularization (DropPath, SpatialDropout1D, LayerScale)"
+echo ""
+
+LOG_FILE="logs/sv_pro_$(date +%s).log"
+
+python train_sv_pro.py 2>&1 | tee "$LOG_FILE"
+EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "✓ Training completed successfully!"
+else
+    echo ""
+    echo "✗ Training failed with exit code: $EXIT_CODE"
+    echo "Check log: $LOG_FILE"
+    tail -100 "$LOG_FILE"
+    exit $EXIT_CODE
+fi
+
+
+# ============================================================================
+# 结果汇总
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  SV Pro Results Summary"
+echo "========================================="
+
+if [ -f "results/sv_pro/final_results_sv_pro.json" ]; then
+    echo "✓ Results saved"
+    echo ""
+    python -c "
+import json
+with open('results/sv_pro/final_results_sv_pro.json', 'r') as f:
+    r = json.load(f)
+    
+print('Model: SV Pro with Advanced Architecture')
+print('Data type: SV association data')
+print()
+print('Architecture:')
+print('  - Multi-branch CNN for local feature extraction')
+print('  - Relative position encoding for sequence modeling')
+print('  - Enhanced transformer blocks with relative PE')
+print('  - Attention-based feature selection')
+print('  - Ensemble feature selection methods')
+print('  - Curriculum learning strategy')
+print('  - Self-supervised pretraining component')
+print()
+print('SV Pro:')
+print(f'  Samples: {len(r['SV']['sampling_results'][0.1]['X'])}')
+print(f'  Original markers: {r['SV']['sampling_results'][1.0]['n_markers']}')
+print(f'  Optimized markers: {r['SV']['optimal_n_markers']}')
+print(f'  Marker reduction: {(1 - r['SV']['optimal_n_markers']/r['SV']['sampling_results'][1.0]['n_markers'])*100:.1f}%')
+print(f'  Optimization performance: {r['SV']['optimal_performance']:.4f}')
+print(f'  RRBLUP R²: {r['SV']['RRBLUP']['overall_r2']:.4f}')
+print(f'  XGBoost R²: {r['SV']['XGBoost']['overall_r2']:.4f}')
+print(f'  WheatGP R²: {r['SV']['WheatGP']['overall_r2']:.4f}')
+print(f'  Enhanced R²: {r['SV']['Enhanced']['overall_r2']:.4f}')
+print()
+"
+fi
+
+echo ""
+echo "Output files:"
+ls -lh results/sv_pro/
+
+# ============================================================================
+# 完成
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Job Complete"
+echo "========================================="
+echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Job ID: $JSUB_JOBID"
+echo ""
+echo "Next steps:"
+echo "  1. Check results: cat results/sv_pro/final_results_sv_pro.json"
+echo "  2. View visualization: results/sv_pro/sv_marker_sampling_optimization.png"
+echo "  3. View model comparison: results/sv_pro/sv_model_comparison_optimized_markers.png"
+echo "  4. Check logs: $LOG_FILE"
