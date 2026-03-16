@@ -653,6 +653,11 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
         
         # 保存关联分析结果
         assoc_df = pd.DataFrame(analysis_results)
+        
+        # 确保 significant 列存在（如果analysis_results为空或缺少该列）
+        if 'significant' not in assoc_df.columns:
+            assoc_df['significant'] = False
+        
         assoc_file = os.path.join(output_dir, "association_analysis.csv")
         assoc_df.to_csv(assoc_file, index=False)
         print(f"[INFO] 关联分析结果已保存: {assoc_file}")
@@ -819,9 +824,9 @@ def generate_genome_scan_html_report(haplo_db_df: pd.DataFrame, assoc_df: pd.Dat
     
     # 关联分析统计
     if assoc_df is not None and len(assoc_df) > 0:
-        analyzed = len(assoc_df[assoc_df['status'] == 'success'])
-        sig_count = len(assoc_df[assoc_df['significant'] == True])
-        total_tests = len(assoc_df[assoc_df['p_value'].notna()])
+        analyzed = len(assoc_df[assoc_df['status'] == 'success']) if 'status' in assoc_df.columns else 0
+        sig_count = len(assoc_df[assoc_df['significant'] == True]) if 'significant' in assoc_df.columns else 0
+        total_tests = len(assoc_df[assoc_df['p_value'].notna()]) if 'p_value' in assoc_df.columns else 0
     else:
         analyzed = 0
         sig_count = 0
@@ -879,7 +884,7 @@ def generate_genome_scan_html_report(haplo_db_df: pd.DataFrame, assoc_df: pd.Dat
     # 生成显著基因表格（包含综合HTML图链接）
     sig_table_html = ""
     sig_genes_with_html = []
-    if assoc_df is not None and len(assoc_df[assoc_df['significant'] == True]) > 0:
+    if assoc_df is not None and 'significant' in assoc_df.columns and len(assoc_df[assoc_df['significant'] == True]) > 0:
         sig_genes = assoc_df[assoc_df['significant'] == True].sort_values('p_value').head(50)
         for _, row in sig_genes.iterrows():
             # 检查是否有综合HTML图
