@@ -44,7 +44,7 @@ except ImportError:
 try:
     from haplotype_phenotype_analysis import (
         HaplotypeExtractor, DataConfig, setup_logging, PerformanceMonitor,
-        HaplotypePhenotypeAnalyzer, HaplotypeReporter
+        HaplotypePhenotypeAnalyzer
     )
     HAPLOTYPE_MODULE_AVAILABLE = True
 except ImportError as e:
@@ -56,8 +56,6 @@ except ImportError as e:
         def __init__(self, vcf_file):
             raise NotImplementedError("haplotype_phenotype_analysis 模块不可用")
     class HaplotypePhenotypeAnalyzer:
-        pass
-    class HaplotypeReporter:
         pass
     class DataConfig:
         pass
