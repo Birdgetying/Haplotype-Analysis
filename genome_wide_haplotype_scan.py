@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
-全基因组单倍型扫描脚本
-========================
-扫描所有基因，提取单倍型统计信息，生成数据库总表，
-并进行单倍型-表型关联分析，生成HTML可视化报告
+单倍型数据集构建脚本
+====================
+针对指定基因构建单倍型数据集，每个基因一个独立文件夹
 
-输出表格包含：
-- gene_id: 基因ID
-- chrom: 染色体
-- start, end: 基因区间
-- strand: 链方向
-- n_variants: 变异位点数
-- n_haplotypes: 单倍型数量
-- haplotype_name: 单倍型名称
-- haplotype_freq: 单倍型频率
-- haplotype_count: 单倍型样本数
-- phenotype_mean: 表型均值
-- phenotype_sd: 表型标准差
-- p_value: 关联分析P值（可选）
-- significance: 是否显著（可选）
+数据集结构:
+    haplotype_dataset/
+    ├── gene_{gene_id}_{chrom}_{start}_{end}/
+    │   ├── gene_info.json              # 基因基本信息
+    │   ├── haplotype_data.csv          # 单倍型数据
+    │   ├── haplotype_samples.csv       # 样本-单倍型对应
+    │   ├── haplotype_stats.csv         # 单倍型统计
+    │   ├── phenotype_data.csv          # 表型数据
+    │   └── association_result.csv      # 关联分析结果
+    └── summary.csv                      # 所有基因汇总
+
+默认处理基因:
+- CSIAAS1BG1157200HC (di19)
+- CSIAAS4BG0701800HC (hox)
 """
 
 import os
@@ -89,10 +88,16 @@ class ScanConfig:
     FASTA_FILE = "/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
     
     # 输出路径
-    OUTPUT_DIR = "./results/genome_scan"
+    OUTPUT_DIR = "./haplotype_dataset"
+    
+    # 指定要分析的基因列表（只处理这两个基因）
+    TARGET_GENES = [
+        "CSIAAS1BG1157200HC",  # di19基因
+        "CSIAAS4BG0701800HC"   # hox基因
+    ]
     
     # 并行参数
-    N_WORKERS = 8  # 并行进程数
+    N_WORKERS = 1  # 串行处理（基因数少，不需要并行）
     BATCH_SIZE = 100  # 每批处理的基因数
     
     # 过滤参数
@@ -174,12 +179,14 @@ def parse_gff3_genes(gff_file: str) -> pd.DataFrame:
 # ============================================================================
 
 def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame, 
-                        min_samples: int = 5) -> list:
+                        output_dir: str, min_samples: int = 5) -> dict:
     """
-    处理单个基因，返回单倍型统计信息
+    处理单个基因，提取单倍型并保存到专属文件夹
+    
+    文件夹结构: gene_{gene_id}_{chrom}_{start}_{end}/
     
     Returns:
-        list of dict: 每个单倍型一行
+        dict: 基因处理结果摘要
     """
     gene_id = gene_info['gene_id']
     chrom = gene_info['chrom']
@@ -187,7 +194,23 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
     end = gene_info['end']
     strand = gene_info['strand']
     
-    results = []
+    # 创建基因专属文件夹
+    gene_folder_name = f"gene_{gene_id}_{chrom}_{start}_{end}"
+    gene_dir = os.path.join(output_dir, gene_folder_name)
+    os.makedirs(gene_dir, exist_ok=True)
+    
+    result_summary = {
+        'gene_id': gene_id,
+        'chrom': chrom,
+        'start': start,
+        'end': end,
+        'strand': strand,
+        'n_variants': 0,
+        'n_haplotypes': 0,
+        'n_samples': 0,
+        'folder': gene_folder_name,
+        'status': 'pending'
+    }
     
     try:
         # 创建单倍型提取器
@@ -198,68 +221,51 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             chrom, start, end, min_samples=min_samples
         )
         
+        # 保存基因基本信息
+        gene_info_dict = {
+            'gene_id': gene_id,
+            'chrom': chrom,
+            'start': start,
+            'end': end,
+            'strand': strand,
+            'length': end - start + 1,
+            'vcf_file': vcf_file,
+            'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        with open(os.path.join(gene_dir, 'gene_info.json'), 'w') as f:
+            json.dump(gene_info_dict, f, indent=2)
+        
         if hap_df is None or len(hap_df) == 0:
-            # 没有变异或单倍型
-            return [{
-                'gene_id': gene_id,
-                'chrom': chrom,
-                'start': start,
-                'end': end,
-                'strand': strand,
-                'n_variants': 0,
-                'n_haplotypes': 0,
-                'haplotype_name': None,
-                'haplotype_freq': None,
-                'haplotype_count': None,
-                'phenotype_mean': None,
-                'phenotype_sd': None,
-                'status': 'no_variants'
-            }]
+            result_summary['status'] = 'no_variants'
+            return result_summary
         
         n_variants = len(positions) if positions else 0
+        result_summary['n_variants'] = n_variants
+        
+        # 保存单倍型数据
+        hap_df.to_csv(os.path.join(gene_dir, 'haplotype_data.csv'), index=False)
         
         # 合并表型数据
         if 'SampleID' not in hap_sample_df.columns:
-            return [{
-                'gene_id': gene_id,
-                'chrom': chrom,
-                'start': start,
-                'end': end,
-                'strand': strand,
-                'n_variants': n_variants,
-                'n_haplotypes': 0,
-                'haplotype_name': None,
-                'haplotype_freq': None,
-                'haplotype_count': None,
-                'phenotype_mean': None,
-                'phenotype_sd': None,
-                'status': 'no_sample_id'
-            }]
+            result_summary['status'] = 'no_sample_id'
+            return result_summary
+        
+        # 保存样本-单倍型对应表
+        hap_sample_df.to_csv(os.path.join(gene_dir, 'haplotype_samples.csv'), index=False)
         
         merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
         
         if len(merged) == 0:
-            return [{
-                'gene_id': gene_id,
-                'chrom': chrom,
-                'start': start,
-                'end': end,
-                'strand': strand,
-                'n_variants': n_variants,
-                'n_haplotypes': len(hap_df),
-                'haplotype_name': None,
-                'haplotype_freq': None,
-                'haplotype_count': None,
-                'phenotype_mean': None,
-                'phenotype_sd': None,
-                'status': 'no_phenotype_match'
-            }]
+            result_summary['status'] = 'no_phenotype_match'
+            return result_summary
         
-        # 获取表型列（假设第一个数值列是表型）
+        # 保存合并后的表型数据
+        merged.to_csv(os.path.join(gene_dir, 'phenotype_data.csv'), index=False)
+        
+        # 获取表型列
         pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
         if not pheno_cols:
             pheno_cols = [c for c in pheno_df.columns if c != 'SampleID']
-        
         pheno_col = pheno_cols[0] if pheno_cols else None
         
         # 统计每个单倍型
@@ -272,6 +278,11 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         total_samples = len(merged)
         n_haplotypes = len(hap_stats)
         
+        result_summary['n_haplotypes'] = n_haplotypes
+        result_summary['n_samples'] = total_samples
+        
+        # 保存单倍型统计
+        hap_stats_list = []
         for _, row in hap_stats.iterrows():
             hap_name = row[hap_col]
             hap_count = row['count']
@@ -286,42 +297,25 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 pheno_mean = None
                 pheno_sd = None
             
-            results.append({
-                'gene_id': gene_id,
-                'chrom': chrom,
-                'start': start,
-                'end': end,
-                'strand': strand,
-                'n_variants': n_variants,
-                'n_haplotypes': n_haplotypes,
+            hap_stats_list.append({
                 'haplotype_name': hap_name,
-                'haplotype_freq': round(hap_freq, 4) if hap_freq else None,
                 'haplotype_count': hap_count,
+                'haplotype_freq': round(hap_freq, 4),
                 'phenotype_mean': round(pheno_mean, 4) if pheno_mean is not None else None,
-                'phenotype_sd': round(pheno_sd, 4) if pheno_sd is not None else None,
-                'status': 'success'
+                'phenotype_sd': round(pheno_sd, 4) if pheno_sd is not None else None
             })
         
-        return results
+        hap_stats_df = pd.DataFrame(hap_stats_list)
+        hap_stats_df.to_csv(os.path.join(gene_dir, 'haplotype_stats.csv'), index=False)
+        
+        result_summary['status'] = 'success'
+        return result_summary
         
     except Exception as e:
         import traceback
         error_msg = str(e) + " | " + traceback.format_exc().replace('\n', ' ')
-        return [{
-            'gene_id': gene_id,
-            'chrom': chrom,
-            'start': start,
-            'end': end,
-            'strand': strand,
-            'n_variants': None,
-            'n_haplotypes': None,
-            'haplotype_name': None,
-            'haplotype_freq': None,
-            'haplotype_count': None,
-            'phenotype_mean': None,
-            'phenotype_sd': None,
-            'status': f'error: {error_msg[:200]}'
-        }]
+        result_summary['status'] = f'error: {error_msg[:200]}'
+        return result_summary
 
 
 def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
@@ -484,13 +478,24 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
 # ============================================================================
 
 def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
-                    output_dir: str, n_workers: int = 4,
+                    output_dir: str, n_workers: int = 1,
                     chrom_filter: str = None, gene_filter: list = None,
                     batch_size: int = 100, min_samples: int = 5,
                     run_analysis: bool = True, pvalue_threshold: float = 0.05,
                     generate_html: bool = True) -> pd.DataFrame:
     """
-    运行全基因组扫描
+    运行指定基因的单倍型数据集构建
+    
+    数据集结构:
+        haplotype_dataset/
+        ├── gene_{gene_id}_{chrom}_{start}_{end}/
+        │   ├── haplotype_data.csv          # 单倍型数据
+        │   ├── haplotype_samples.csv       # 样本-单倍型对应
+        │   ├── phenotype_data.csv          # 表型数据
+        │   ├── association_result.csv      # 关联分析结果
+        │   └── gene_info.json              # 基因基本信息
+        ├── summary.csv                      # 所有基因汇总
+        └── dataset_report.html              # 数据集报告
     
     Args:
         vcf_file: VCF 文件路径
@@ -499,7 +504,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
         output_dir: 输出目录
         n_workers: 并行进程数
         chrom_filter: 染色体过滤（如 'chr1A'）
-        gene_filter: 基因ID过滤列表
+        gene_filter: 基因ID过滤列表（默认使用TARGET_GENES）
         batch_size: 批处理大小
         min_samples: 最小样本数
         run_analysis: 是否进行关联分析
@@ -509,6 +514,10 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     Returns:
         DataFrame: 扫描结果总表
     """
+    # 如果未指定基因过滤，使用默认的目标基因
+    if gene_filter is None:
+        gene_filter = ScanConfig.TARGET_GENES
+    
     os.makedirs(output_dir, exist_ok=True)
     
     # 性能监控
@@ -568,156 +577,136 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     gene_list = genes_df.to_dict('records')
     
     # 使用进度条
-    print(f"\n[INFO] 开始扫描...")
+    print(f"\n[INFO] 开始处理 {total_genes} 个基因...")
+    print(f"[INFO] 数据集输出目录: {output_dir}")
     
-    # 串行处理（更稳定）或并行处理
-    if n_workers == 1:
-        # 串行处理
-        for i, gene_info in enumerate(gene_list):
-            results = process_single_gene(gene_info, vcf_file, pheno_df, min_samples)
-            all_results.extend(results)
-            processed += 1
-            
-            if processed % 100 == 0:
-                print(f"  进度: {processed}/{total_genes} ({processed*100/total_genes:.1f}%)")
-            
-            if results[0].get('status', '').startswith('error'):
-                errors += 1
-    else:
-        # 并行处理（批量）
-        for batch_start in range(0, total_genes, batch_size):
-            batch_end = min(batch_start + batch_size, total_genes)
-            batch = gene_list[batch_start:batch_end]
-            
-            with ProcessPoolExecutor(max_workers=n_workers) as executor:
-                futures = {
-                    executor.submit(process_single_gene, gene, vcf_file, pheno_df, min_samples): gene
-                    for gene in batch
-                }
-                
-                for future in as_completed(futures):
-                    try:
-                        results = future.result()
-                        all_results.extend(results)
-                        processed += 1
-                        
-                        if results[0].get('status', '').startswith('error'):
-                            errors += 1
-                    except Exception as e:
-                        errors += 1
-                        print(f"  [ERROR] 处理失败: {e}")
-            
-            print(f"  进度: {processed}/{total_genes} ({processed*100/total_genes:.1f}%)")
+    # 串行处理（更稳定）
+    for i, gene_info in enumerate(gene_list):
+        result = process_single_gene(gene_info, vcf_file, pheno_df, output_dir, min_samples)
+        all_results.append(result)
+        processed += 1
+        
+        print(f"  [{processed}/{total_genes}] {result['gene_id']}: {result['status']}")
+        
+        if result['status'].startswith('error'):
+            errors += 1
     
     perf.step_end("scan_genes")
     
-    # 4. 生成结果表（在关联分析前创建）
+    # 4. 生成结果表
     results_df = pd.DataFrame(all_results)
     
-    # 5. 关联分析（可选）
-    analysis_results = []
+    # 5. 为每个基因进行关联分析并保存到对应文件夹
     if run_analysis:
         print("\n[INFO] 开始关联分析...")
         perf.step_start("association_analysis")
         
-        # 对每个基因进行关联分析
-        analysis_genes = results_df[results_df['status'] == 'success']['gene_id'].unique()
-        
-        if n_workers == 1:
-            # 串行分析
-            for i, gene_id in enumerate(analysis_genes):
-                gene_info = genes_df[genes_df['gene_id'] == gene_id].iloc[0].to_dict()
-                assoc_result = analyze_gene_association(
-                    gene_info, vcf_file, pheno_df, min_samples, pvalue_threshold, gff_file
-                )
-                analysis_results.append(assoc_result)
+        # 对每个成功处理的基因进行关联分析
+        for result in all_results:
+            if result['status'] != 'success':
+                continue
+            
+            gene_id = result['gene_id']
+            gene_dir = os.path.join(output_dir, result['folder'])
+            
+            try:
+                # 读取该基因的数据
+                hap_sample_df = pd.read_csv(os.path.join(gene_dir, 'haplotype_samples.csv'))
+                pheno_data = pd.read_csv(os.path.join(gene_dir, 'phenotype_data.csv'))
                 
-                if (i + 1) % 100 == 0:
-                    print(f"  分析进度: {i+1}/{len(analysis_genes)}")
-        else:
-            # 并行分析
-            analysis_genes_list = genes_df[genes_df['gene_id'].isin(analysis_genes)].to_dict('records')
-            with ProcessPoolExecutor(max_workers=n_workers) as executor:
-                futures = {
-                    executor.submit(analyze_gene_association, g, vcf_file, pheno_df, min_samples, pvalue_threshold, gff_file): g
-                    for g in analysis_genes_list
+                # 获取表型列
+                pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
+                if not pheno_cols:
+                    pheno_cols = [c for c in pheno_df.columns if c != 'SampleID']
+                pheno_col = pheno_cols[0] if pheno_cols else None
+                
+                if pheno_col is None:
+                    continue
+                
+                # 进行ANOVA分析
+                from scipy import stats
+                hap_col = 'Hap_Name' if 'Hap_Name' in pheno_data.columns else 'Haplotype'
+                
+                # 过滤掉Other单倍型
+                analysis_df = pheno_data[pheno_data[hap_col] != 'Other'].copy()
+                
+                if len(analysis_df) < min_samples:
+                    continue
+                
+                hap_means = analysis_df.groupby(hap_col)[pheno_col].mean()
+                groups = [analysis_df[analysis_df[hap_col] == h][pheno_col].dropna().values 
+                          for h in hap_means.index if len(analysis_df[analysis_df[hap_col] == h]) >= 2]
+                
+                if len(groups) < 2:
+                    continue
+                
+                f_stat, p_value = stats.f_oneway(*groups)
+                
+                # 计算PVE
+                grand_mean = analysis_df[pheno_col].mean()
+                ss_between = sum(len(analysis_df[analysis_df[hap_col] == h]) * 
+                                (analysis_df[analysis_df[hap_col] == h][pheno_col].mean() - grand_mean)**2 
+                                for h in hap_means.index)
+                ss_total = ((analysis_df[pheno_col] - grand_mean)**2).sum()
+                pve = (ss_between / ss_total) * 100 if ss_total > 0 else 0
+                
+                # 保存关联分析结果
+                assoc_result = {
+                    'gene_id': gene_id,
+                    'chrom': result['chrom'],
+                    'start': result['start'],
+                    'end': result['end'],
+                    'f_statistic': f_stat,
+                    'p_value': p_value,
+                    'significant': p_value < pvalue_threshold,
+                    'pve_percent': pve,
+                    'n_haplotypes': result['n_haplotypes'],
+                    'n_samples': result['n_samples']
                 }
-                for future in as_completed(futures):
-                    try:
-                        result = future.result()
-                        analysis_results.append(result)
-                    except Exception as e:
-                        print(f"  [ERROR] 分析失败: {e}")
-        
-        # 保存关联分析结果
-        assoc_df = pd.DataFrame(analysis_results)
-        
-        # 确保 significant 列存在（如果analysis_results为空或缺少该列）
-        if 'significant' not in assoc_df.columns:
-            assoc_df['significant'] = False
-        
-        assoc_file = os.path.join(output_dir, "association_analysis.csv")
-        assoc_df.to_csv(assoc_file, index=False)
-        print(f"[INFO] 关联分析结果已保存: {assoc_file}")
-        
-        # 显著基因
-        sig_genes = assoc_df[assoc_df['significant'] == True]
-        print(f"[INFO] 显著关联基因数 (P < {pvalue_threshold}): {len(sig_genes)}")
-        
-        # 保存显著基因列表
-        if len(sig_genes) > 0:
-            sig_file = os.path.join(output_dir, "significant_genes.csv")
-            sig_genes.to_csv(sig_file, index=False)
-            print(f"[INFO] 显著基因列表已保存: {sig_file}")
+                
+                assoc_df = pd.DataFrame([assoc_result])
+                assoc_df.to_csv(os.path.join(gene_dir, 'association_result.csv'), index=False)
+                print(f"  [关联分析] {gene_id}: P={p_value:.4f}, PVE={pve:.2f}%")
+                
+            except Exception as e:
+                print(f"  [WARNING] {gene_id} 关联分析失败: {e}")
         
         perf.step_end("association_analysis")
     
-    # 6. 生成HTML报告
-    if generate_html and run_analysis and len(analysis_results) > 0:
-        print("\n[INFO] 生成HTML报告...")
-        perf.step_start("generate_html")
-        generate_genome_scan_html_report(results_df, assoc_df, output_dir, pheno_file)
-        perf.step_end("generate_html")
-    
-    # 7. 保存结果表
+    # 6. 生成数据集汇总
     perf.step_start("save_results")
     
-    # 保存完整结果
-    output_file = os.path.join(output_dir, "haplotype_database.csv")
-    results_df.to_csv(output_file, index=False)
-    print(f"\n[INFO] 完整结果已保存: {output_file}")
+    # 保存汇总表
+    summary_file = os.path.join(output_dir, "summary.csv")
+    results_df.to_csv(summary_file, index=False)
+    print(f"\n[INFO] 数据集汇总已保存: {summary_file}")
     
-    # 生成基因级汇总
-    gene_summary = results_df.groupby('gene_id').agg({
-        'chrom': 'first',
-        'start': 'first',
-        'end': 'first',
-        'strand': 'first',
-        'n_variants': 'first',
-        'n_haplotypes': 'first',
-        'status': 'first'
-    }).reset_index()
-    
-    summary_file = os.path.join(output_dir, "gene_summary.csv")
-    gene_summary.to_csv(summary_file, index=False)
-    print(f"[INFO] 基因汇总已保存: {summary_file}")
+    # 打印数据集结构
+    print("\n" + "=" * 60)
+    print("单倍型数据集结构")
+    print("=" * 60)
+    for result in all_results:
+        gene_dir = os.path.join(output_dir, result['folder'])
+        print(f"\n{result['folder']}/")
+        if os.path.exists(gene_dir):
+            for f in sorted(os.listdir(gene_dir)):
+                print(f"  ├── {f}")
     
     perf.step_end("save_results")
     
-    # 5. 打印统计
+    # 7. 打印统计
     print("\n" + "=" * 60)
-    print("扫描完成统计")
+    print("数据集构建完成统计")
     print("=" * 60)
     print(f"总基因数: {total_genes}")
     print(f"成功处理: {processed - errors}")
     print(f"处理失败: {errors}")
-    print(f"结果行数: {len(results_df)}")
+    print(f"输出目录: {output_dir}")
     
     # 状态统计
     if 'status' in results_df.columns:
-        status_counts = results_df.groupby('gene_id')['status'].first().value_counts()
         print(f"\n状态分布:")
-        for status, count in status_counts.items():
+        for status, count in results_df['status'].value_counts().items():
             print(f"  {status}: {count}")
     
     # 性能报告
@@ -732,7 +721,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="全基因组单倍型扫描 - 生成单倍型数据库",
+        description="构建单倍型数据集 - 针对指定基因",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
@@ -744,22 +733,14 @@ def main():
                         help="表型文件路径")
     parser.add_argument("--output-dir", default=ScanConfig.OUTPUT_DIR,
                         help="输出目录")
-    parser.add_argument("--workers", type=int, default=1,
-                        help="并行进程数 (1=串行)")
-    parser.add_argument("--batch-size", type=int, default=100,
-                        help="批处理大小")
-    parser.add_argument("--chrom", default=None,
-                        help="只扫描指定染色体")
     parser.add_argument("--genes", nargs="+", default=None,
-                        help="只扫描指定基因列表")
+                        help=f"指定基因列表（默认: {ScanConfig.TARGET_GENES})")
     parser.add_argument("--min-samples", type=int, default=5,
                         help="最小样本数阈值")
     parser.add_argument("--no-analysis", action="store_true",
-                        help="跳过关联分析（只生成单倍型数据库）")
+                        help="跳过关联分析")
     parser.add_argument("--pvalue-threshold", type=float, default=0.05,
                         help="P值显著性阈值")
-    parser.add_argument("--no-html", action="store_true",
-                        help="不生成HTML报告")
     
     args = parser.parse_args()
     
@@ -769,14 +750,10 @@ def main():
         gff_file=args.gff,
         pheno_file=args.phenotype,
         output_dir=args.output_dir,
-        n_workers=args.workers,
-        chrom_filter=args.chrom,
         gene_filter=args.genes,
-        batch_size=args.batch_size,
         min_samples=args.min_samples,
         run_analysis=not args.no_analysis,
-        pvalue_threshold=args.pvalue_threshold,
-        generate_html=not args.no_html
+        pvalue_threshold=args.pvalue_threshold
     )
 
 
