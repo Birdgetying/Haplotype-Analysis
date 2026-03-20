@@ -22,9 +22,8 @@ PHENO_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
 # 输出目录
 OUTPUT_DIR="./results/genome_scan"
 
-# 并行参数（串行更稳定）
-WORKERS=1
-BATCH_SIZE=100
+# 指定基因列表（可选，不指定则使用脚本默认值）
+# GENES="CSIAAS1BG1157200HC CSIAAS4BG0701800HC"
 
 # ============================================================================
 # 环境检查
@@ -105,8 +104,6 @@ python genome_wide_haplotype_scan.py \
     --gff ${GFF_FILE} \
     --phenotype ${PHENO_FILE} \
     --output-dir ${OUTPUT_DIR} \
-    --workers ${WORKERS} \
-    --batch-size ${BATCH_SIZE} \
     --min-samples 5 \
     2>&1 | tee "${LOG_FILE}"
 
