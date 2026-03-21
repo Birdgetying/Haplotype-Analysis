@@ -8,6 +8,7 @@ __pycache__/
 # Results and logs (large files)
 results/
 logs/
+database/
 *.log
 
 # Job output files

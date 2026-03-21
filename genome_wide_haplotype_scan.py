@@ -2,11 +2,11 @@
 """
 单倍型数据集构建脚本
 ====================
-针对指定基因构建单倍型数据集，每个基因一个独立文件夹
+针对指定基因构建单倍型数据集
 
-数据集结构:
-    haplotype_dataset/
-    ├── gene_{gene_id}_{chrom}_{start}_{end}/
+目录结构:
+    database/                           # 数据库文件夹
+    ├── {gene_id}/
     │   ├── gene_info.json              # 基因基本信息
     │   ├── haplotype_data.csv          # 单倍型数据
     │   ├── haplotype_samples.csv       # 样本-单倍型对应
@@ -14,6 +14,10 @@
     │   ├── phenotype_data.csv          # 表型数据
     │   └── association_result.csv      # 关联分析结果
     └── summary.csv                      # 所有基因汇总
+
+    results/                            # 结果文件夹
+    └── {gene_id}/
+        └── integrated_analysis.html    # 综合分析HTML图
 
 默认处理基因:
 - CSIAAS1BG1157200HC (di19)
@@ -46,33 +50,151 @@ try:
         HaplotypePhenotypeAnalyzer
     )
     HAPLOTYPE_MODULE_AVAILABLE = True
+    print("[INFO] haplotype_phenotype_analysis 模块导入成功")
 except ImportError as e:
-    print(f"[WARNING] 无法完全导入 haplotype_phenotype_analysis 模块: {e}")
-    print("[WARNING] 将使用基础功能运行")
+    import traceback
+    print(f"[WARNING] 无法导入 haplotype_phenotype_analysis 模块")
+    print(f"[WARNING] 错误详情: {e}")
+    traceback.print_exc()
+    print("[WARNING] 将使用内置基础功能运行")
     HAPLOTYPE_MODULE_AVAILABLE = False
-    # 定义占位符类
-    class HaplotypeExtractor:
-        def __init__(self, vcf_file):
-            raise NotImplementedError("haplotype_phenotype_analysis 模块不可用")
-    class HaplotypePhenotypeAnalyzer:
-        pass
+    
+    # 定义基础的 DataConfig
     class DataConfig:
         pass
+    
     def setup_logging(*args, **kwargs):
         pass
+    
     class PerformanceMonitor:
         def start(self): pass
         def step_start(self, name): pass
         def step_end(self, name): return 0
         def report_performance(self): pass
+    
+    class HaplotypePhenotypeAnalyzer:
+        pass
 
 # 尝试导入 pysam
 try:
     import pysam
     PYSAM_AVAILABLE = True
+    print("[INFO] pysam 导入成功")
 except ImportError:
     PYSAM_AVAILABLE = False
     print("[WARNING] pysam 不可用，单倍型提取功能受限")
+
+
+# ============================================================================
+# 内置单倍型提取器（当主模块不可用时使用）
+# ============================================================================
+
+class BuiltinHaplotypeExtractor:
+    """内置的单倍型提取器，用于当 haplotype_phenotype_analysis 模块不可用时"""
+    
+    def __init__(self, vcf_file: str):
+        if not PYSAM_AVAILABLE:
+            raise ImportError("pysam 不可用，无法提取单倍型")
+        self.vcf_file = vcf_file
+        self.vcf = pysam.VariantFile(vcf_file)
+        self.samples = list(self.vcf.header.samples)
+        print(f"[INFO] 内置提取器初始化成功，样本数: {len(self.samples)}")
+    
+    def extract_region(self, chrom: str, start: int, end: int, 
+                       min_samples: int = 5) -> tuple:
+        """
+        提取指定区域的单倍型
+        
+        Returns:
+            tuple: (positions, hap_df, hap_sample_df)
+        """
+        positions = []
+        genotypes_by_sample = {s: [] for s in self.samples}
+        
+        try:
+            for record in self.vcf.fetch(chrom, start, end):
+                pos = record.pos
+                positions.append(pos)
+                ref = record.ref
+                alts = record.alts if record.alts else []
+                
+                for sample in self.samples:
+                    gt = record.samples[sample]['GT']
+                    if gt is None or None in gt:
+                        allele = 'N'
+                    else:
+                        # 简化：取第一个等位基因
+                        allele_idx = gt[0]
+                        if allele_idx == 0:
+                            allele = ref
+                        elif allele_idx <= len(alts):
+                            allele = alts[allele_idx - 1]
+                        else:
+                            allele = 'N'
+                    genotypes_by_sample[sample].append(allele)
+        except Exception as e:
+            print(f"[WARNING] 提取区域 {chrom}:{start}-{end} 失败: {e}")
+            return None, None, None
+        
+        if len(positions) == 0:
+            print(f"[INFO] 区域 {chrom}:{start}-{end} 无变异")
+            return positions, None, None
+        
+        # 构建单倍型序列
+        hap_seqs = {}
+        sample_haps = []
+        
+        for sample in self.samples:
+            alleles = genotypes_by_sample[sample]
+            hap_seq = '|'.join(alleles)
+            hap_seqs[sample] = hap_seq
+            sample_haps.append({'SampleID': sample, 'Haplotype_Seq': hap_seq})
+        
+        # 统计单倍型频率并命名
+        from collections import Counter
+        seq_counts = Counter(hap_seqs.values())
+        
+        # 给频率排名前 N 的单倍型命名
+        sorted_seqs = seq_counts.most_common()
+        seq_to_name = {}
+        for i, (seq, count) in enumerate(sorted_seqs):
+            if count >= min_samples:
+                seq_to_name[seq] = f"Hap{i+1}"
+            else:
+                seq_to_name[seq] = "Other"
+        
+        # 添加单倍型名称
+        for item in sample_haps:
+            item['Hap_Name'] = seq_to_name.get(item['Haplotype_Seq'], 'Other')
+        
+        hap_sample_df = pd.DataFrame(sample_haps)
+        
+        # 构建单倍型汇总表
+        hap_list = []
+        for seq, name in seq_to_name.items():
+            if name != 'Other':
+                alleles = seq.split('|')
+                hap_list.append({
+                    'Hap_Name': name,
+                    'Haplotype_Seq': seq,
+                    'Count': seq_counts[seq],
+                    'Alleles': alleles
+                })
+        
+        hap_df = pd.DataFrame(hap_list) if hap_list else None
+        
+        print(f"[INFO] 提取完成: {len(positions)} 个变异, {len(hap_list)} 个单倍型")
+        return positions, hap_df, hap_sample_df
+
+
+# 根据模块可用性选择提取器
+if HAPLOTYPE_MODULE_AVAILABLE:
+    # 使用完整模块
+    pass
+else:
+    # 使用内置提取器
+    HaplotypeExtractor = BuiltinHaplotypeExtractor
+    print("[INFO] 使用内置 HaplotypeExtractor")
 
 
 # ============================================================================
@@ -88,7 +210,8 @@ class ScanConfig:
     FASTA_FILE = "/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
     
     # 输出路径
-    OUTPUT_DIR = "./haplotype_dataset"
+    DATABASE_DIR = "./database"           # 数据库文件夹（存放提取的数据）
+    RESULTS_DIR = "./results"             # 结果文件夹（存放HTML图）
     
     # 指定要分析的基因列表（只处理这两个基因）
     TARGET_GENES = [
@@ -96,17 +219,15 @@ class ScanConfig:
         "CSIAAS4BG0701800HC"   # hox基因
     ]
     
-    # 并行参数
-    N_WORKERS = 1  # 串行处理（基因数少，不需要并行）
-    BATCH_SIZE = 100  # 每批处理的基因数
-    
     # 过滤参数
     MIN_VARIANTS = 1  # 最小变异数
     MIN_SAMPLES = 5   # 最小样本数
     
     # 分析参数
     PVALUE_THRESHOLD = 0.05  # P值显著性阈值
-    CORRECTION_METHOD = 'bonferroni'  # 多重检验校正方法
+    
+    # 测试模式：限制区间长度（设为0表示不限制，使用完整基因区间）
+    TEST_REGION_LENGTH = 0  # 0=使用完整基因区间
 
 
 # ============================================================================
@@ -179,11 +300,17 @@ def parse_gff3_genes(gff_file: str) -> pd.DataFrame:
 # ============================================================================
 
 def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame, 
-                        output_dir: str, min_samples: int = 5) -> dict:
+                        database_dir: str, results_dir: str = None,
+                        min_samples: int = 5, test_region_length: int = 0) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
-    文件夹结构: gene_{gene_id}_{chrom}_{start}_{end}/
+    文件夹结构: 
+        database/{gene_id}/     # 数据文件
+        results/{gene_id}/      # HTML图表
+    
+    Args:
+        test_region_length: 测试模式下的区间长度，0表示使用完整区间
     
     Returns:
         dict: 基因处理结果摘要
@@ -194,10 +321,22 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
     end = gene_info['end']
     strand = gene_info['strand']
     
-    # 创建基因专属文件夹
-    gene_folder_name = f"gene_{gene_id}_{chrom}_{start}_{end}"
-    gene_dir = os.path.join(output_dir, gene_folder_name)
-    os.makedirs(gene_dir, exist_ok=True)
+    # 测试模式：限制区间长度
+    original_end = end
+    if test_region_length > 0:
+        end = min(start + test_region_length, original_end)
+        print(f"[TEST] 测试模式: 区间限制为 {start}-{end} ({test_region_length}bp)")
+    
+    # 创建基因专属文件夹（数据库目录）
+    gene_folder_name = gene_id  # 简化文件夹名，只用gene_id
+    gene_data_dir = os.path.join(database_dir, gene_folder_name)
+    os.makedirs(gene_data_dir, exist_ok=True)
+    
+    # 如果指定了results_dir，也创建对应目录
+    gene_results_dir = None
+    if results_dir:
+        gene_results_dir = os.path.join(results_dir, gene_folder_name)
+        os.makedirs(gene_results_dir, exist_ok=True)
     
     result_summary = {
         'gene_id': gene_id,
@@ -208,7 +347,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         'n_variants': 0,
         'n_haplotypes': 0,
         'n_samples': 0,
-        'folder': gene_folder_name,
+        'data_folder': gene_folder_name,
+        'results_folder': gene_folder_name if results_dir else None,
         'status': 'pending'
     }
     
@@ -232,7 +372,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'vcf_file': vcf_file,
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
-        with open(os.path.join(gene_dir, 'gene_info.json'), 'w') as f:
+        with open(os.path.join(gene_data_dir, 'gene_info.json'), 'w') as f:
             json.dump(gene_info_dict, f, indent=2)
         
         if hap_df is None or len(hap_df) == 0:
@@ -243,7 +383,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         result_summary['n_variants'] = n_variants
         
         # 保存单倍型数据
-        hap_df.to_csv(os.path.join(gene_dir, 'haplotype_data.csv'), index=False)
+        hap_df.to_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'), index=False)
         
         # 合并表型数据
         if 'SampleID' not in hap_sample_df.columns:
@@ -251,7 +391,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             return result_summary
         
         # 保存样本-单倍型对应表
-        hap_sample_df.to_csv(os.path.join(gene_dir, 'haplotype_samples.csv'), index=False)
+        hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
         
         merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
         
@@ -260,7 +400,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             return result_summary
         
         # 保存合并后的表型数据
-        merged.to_csv(os.path.join(gene_dir, 'phenotype_data.csv'), index=False)
+        merged.to_csv(os.path.join(gene_data_dir, 'phenotype_data.csv'), index=False)
         
         # 获取表型列
         pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
@@ -306,7 +446,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             })
         
         hap_stats_df = pd.DataFrame(hap_stats_list)
-        hap_stats_df.to_csv(os.path.join(gene_dir, 'haplotype_stats.csv'), index=False)
+        hap_stats_df.to_csv(os.path.join(gene_data_dir, 'haplotype_stats.csv'), index=False)
         
         result_summary['status'] = 'success'
         return result_summary
@@ -320,9 +460,12 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
 
 def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                             min_samples: int = 5, pvalue_threshold: float = 0.05,
-                            gff_file: str = None) -> dict:
+                            gff_file: str = None, results_dir: str = None) -> dict:
     """
-    对单个基因进行单倍型-表型关联分析，并生成综合HTML图
+    对单个基因进行单倍型-表型关联分析，并生成综HTML图
+    
+    Args:
+        results_dir: HTML图表输出目录
     
     Returns:
         dict: 包含关联分析结果和HTML路径的字典
@@ -424,11 +567,11 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
         if ss_total > 0:
             result['pve_percent'] = (ss_between / ss_total) * 100
         
-        # 如果显著，生成综合HTML图
-        if result['significant'] and gff_file:
+        # 如果显著，生成综HTML图
+        if result['significant'] and gff_file and results_dir:
             try:
-                # 创建输出目录
-                gene_output_dir = os.path.join("./results/genome_scan/significant_genes", gene_id)
+                # 创建输出目录（results文件夹下）
+                gene_output_dir = os.path.join(results_dir, gene_id)
                 os.makedirs(gene_output_dir, exist_ok=True)
                 
                 # 使用 HaplotypePhenotypeAnalyzer 生成完整分析
@@ -478,30 +621,37 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
 # ============================================================================
 
 def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
-                    output_dir: str, n_workers: int = 1,
-                    chrom_filter: str = None, gene_filter: list = None,
-                    batch_size: int = 100, min_samples: int = 5,
-                    run_analysis: bool = True, pvalue_threshold: float = 0.05,
-                    generate_html: bool = True) -> pd.DataFrame:
+                    database_dir: str, results_dir: str = None,
+                    n_workers: int = 1, chrom_filter: str = None, 
+                    gene_filter: list = None, batch_size: int = 100, 
+                    min_samples: int = 5, run_analysis: bool = True, 
+                    pvalue_threshold: float = 0.05,
+                    generate_html: bool = True,
+                    test_region_length: int = 0) -> pd.DataFrame:
     """
     运行指定基因的单倍型数据集构建
     
-    数据集结构:
-        haplotype_dataset/
-        ├── gene_{gene_id}_{chrom}_{start}_{end}/
+    目录结构:
+        database/                           # 数据库文件夹
+        ├── {gene_id}/
+        │   ├── gene_info.json              # 基因基本信息
         │   ├── haplotype_data.csv          # 单倍型数据
         │   ├── haplotype_samples.csv       # 样本-单倍型对应
+        │   ├── haplotype_stats.csv         # 单倍型统计
         │   ├── phenotype_data.csv          # 表型数据
-        │   ├── association_result.csv      # 关联分析结果
-        │   └── gene_info.json              # 基因基本信息
-        ├── summary.csv                      # 所有基因汇总
-        └── dataset_report.html              # 数据集报告
+        │   └── association_result.csv      # 关联分析结果
+        └── summary.csv                      # 所有基因汇总
+        
+        results/                            # 结果文件夹
+        └── {gene_id}/
+            └── integrated_analysis.html    # 综合分析HTML图
     
     Args:
         vcf_file: VCF 文件路径
         gff_file: GFF3 文件路径
         pheno_file: 表型文件路径
-        output_dir: 输出目录
+        database_dir: 数据库输出目录
+        results_dir: 结果(图表)输出目录
         n_workers: 并行进程数
         chrom_filter: 染色体过滤（如 'chr1A'）
         gene_filter: 基因ID过滤列表（默认使用TARGET_GENES）
@@ -518,20 +668,23 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     if gene_filter is None:
         gene_filter = ScanConfig.TARGET_GENES
     
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(database_dir, exist_ok=True)
+    if results_dir:
+        os.makedirs(results_dir, exist_ok=True)
     
     # 性能监控
     perf = PerformanceMonitor()
     perf.start()
     
     print("=" * 60)
-    print("全基因组单倍型扫描")
+    print("单倍型数据集构建")
     print("=" * 60)
     print(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"VCF: {vcf_file}")
     print(f"GFF: {gff_file}")
     print(f"表型: {pheno_file}")
-    print(f"输出: {output_dir}")
+    print(f"数据库目录: {database_dir}")
+    print(f"结果目录: {results_dir}")
     print(f"并行进程: {n_workers}")
     print("=" * 60)
     
@@ -578,11 +731,17 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     
     # 使用进度条
     print(f"\n[INFO] 开始处理 {total_genes} 个基因...")
-    print(f"[INFO] 数据集输出目录: {output_dir}")
+    print(f"[INFO] 数据库输出目录: {database_dir}")
+    if results_dir:
+        print(f"[INFO] 结果输出目录: {results_dir}")
+    if test_region_length > 0:
+        print(f"[TEST] 测试模式已启用，区间限制为 {test_region_length}bp")
     
     # 串行处理（更稳定）
     for i, gene_info in enumerate(gene_list):
-        result = process_single_gene(gene_info, vcf_file, pheno_df, output_dir, min_samples)
+        result = process_single_gene(gene_info, vcf_file, pheno_df, 
+                                     database_dir, results_dir, min_samples,
+                                     test_region_length=test_region_length)
         all_results.append(result)
         processed += 1
         
@@ -607,12 +766,12 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 continue
             
             gene_id = result['gene_id']
-            gene_dir = os.path.join(output_dir, result['folder'])
+            gene_data_dir = os.path.join(database_dir, result['data_folder'])
             
             try:
                 # 读取该基因的数据
-                hap_sample_df = pd.read_csv(os.path.join(gene_dir, 'haplotype_samples.csv'))
-                pheno_data = pd.read_csv(os.path.join(gene_dir, 'phenotype_data.csv'))
+                hap_sample_df = pd.read_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'))
+                pheno_data = pd.read_csv(os.path.join(gene_data_dir, 'phenotype_data.csv'))
                 
                 # 获取表型列
                 pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
@@ -665,7 +824,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 }
                 
                 assoc_df = pd.DataFrame([assoc_result])
-                assoc_df.to_csv(os.path.join(gene_dir, 'association_result.csv'), index=False)
+                assoc_df.to_csv(os.path.join(gene_data_dir, 'association_result.csv'), index=False)
                 print(f"  [关联分析] {gene_id}: P={p_value:.4f}, PVE={pve:.2f}%")
                 
             except Exception as e:
@@ -677,7 +836,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     perf.step_start("save_results")
     
     # 保存汇总表
-    summary_file = os.path.join(output_dir, "summary.csv")
+    summary_file = os.path.join(database_dir, "summary.csv")
     results_df.to_csv(summary_file, index=False)
     print(f"\n[INFO] 数据集汇总已保存: {summary_file}")
     
@@ -685,12 +844,23 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     print("\n" + "=" * 60)
     print("单倍型数据集结构")
     print("=" * 60)
+    print(f"\n数据库目录: {database_dir}/")
     for result in all_results:
-        gene_dir = os.path.join(output_dir, result['folder'])
-        print(f"\n{result['folder']}/")
-        if os.path.exists(gene_dir):
-            for f in sorted(os.listdir(gene_dir)):
-                print(f"  ├── {f}")
+        gene_data_dir = os.path.join(database_dir, result['data_folder'])
+        print(f"  {result['data_folder']}/")
+        if os.path.exists(gene_data_dir):
+            for f in sorted(os.listdir(gene_data_dir)):
+                print(f"    ├── {f}")
+    
+    if results_dir:
+        print(f"\n结果目录: {results_dir}/")
+        for result in all_results:
+            if result['results_folder']:
+                gene_results_dir = os.path.join(results_dir, result['results_folder'])
+                if os.path.exists(gene_results_dir):
+                    print(f"  {result['results_folder']}/")
+                    for f in sorted(os.listdir(gene_results_dir)):
+                        print(f"    ├── {f}")
     
     perf.step_end("save_results")
     
@@ -701,7 +871,9 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     print(f"总基因数: {total_genes}")
     print(f"成功处理: {processed - errors}")
     print(f"处理失败: {errors}")
-    print(f"输出目录: {output_dir}")
+    print(f"数据库目录: {database_dir}")
+    if results_dir:
+        print(f"结果目录: {results_dir}")
     
     # 状态统计
     if 'status' in results_df.columns:
@@ -731,8 +903,10 @@ def main():
                         help="GFF3 注释文件路径")
     parser.add_argument("--phenotype", default=ScanConfig.PHENO_FILE,
                         help="表型文件路径")
-    parser.add_argument("--output-dir", default=ScanConfig.OUTPUT_DIR,
-                        help="输出目录")
+    parser.add_argument("--database-dir", default=ScanConfig.DATABASE_DIR,
+                        help="数据库输出目录")
+    parser.add_argument("--results-dir", default=ScanConfig.RESULTS_DIR,
+                        help="结果(图表)输出目录")
     parser.add_argument("--genes", nargs="+", default=None,
                         help=f"指定基因列表（默认: {ScanConfig.TARGET_GENES})")
     parser.add_argument("--min-samples", type=int, default=5,
@@ -741,6 +915,8 @@ def main():
                         help="跳过关联分析")
     parser.add_argument("--pvalue-threshold", type=float, default=0.05,
                         help="P值显著性阈值")
+    parser.add_argument("--test-region", type=int, default=ScanConfig.TEST_REGION_LENGTH,
+                        help="测试模式：限制区间长度(bp)，0表示使用完整基因区间")
     
     args = parser.parse_args()
     
@@ -749,11 +925,13 @@ def main():
         vcf_file=args.vcf,
         gff_file=args.gff,
         pheno_file=args.phenotype,
-        output_dir=args.output_dir,
+        database_dir=args.database_dir,
+        results_dir=args.results_dir,
         gene_filter=args.genes,
         min_samples=args.min_samples,
         run_analysis=not args.no_analysis,
-        pvalue_threshold=args.pvalue_threshold
+        pvalue_threshold=args.pvalue_threshold,
+        test_region_length=args.test_region
     )
 
 

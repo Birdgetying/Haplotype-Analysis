@@ -1,11 +1,31 @@
 #!/bin/bash
 
 # ============================================================================
-# 全基因组单倍型扫描 - 生成单倍型数据库
+# 单倍型数据集构建 - 生成单倍型数据库
+# ============================================================================
+# 
+# 目录结构:
+#   database/                           # 数据库文件夹
+#   ├── {gene_id}/
+#   │   ├── gene_info.json              # 基因基本信息
+#   │   ├── haplotype_data.csv          # 单倍型数据
+#   │   ├── haplotype_samples.csv       # 样本-单倍型对应
+#   │   ├── haplotype_stats.csv         # 单倍型统计
+#   │   ├── phenotype_data.csv          # 表型数据
+#   │   └── association_result.csv      # 关联分析结果
+#   └── summary.csv                      # 所有基因汇总
+#
+#   results/                            # 结果文件夹
+#   └── {gene_id}/
+#       └── integrated_analysis.html    # 综HTML图
+#
+# 默认处理基因:
+#   - CSIAAS1BG1157200HC (di19)
+#   - CSIAAS4BG0701800HC (hox)
 # ============================================================================
 
 echo "========================================="
-echo "  Genome-Wide Haplotype Database Builder"
+echo "  Haplotype Database Builder"
 echo "========================================="
 echo "Start time: $(date)"
 echo "Host: $HOSTNAME"
@@ -20,7 +40,8 @@ GFF_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_
 PHENO_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
 
 # 输出目录
-OUTPUT_DIR="./results/genome_scan"
+DATABASE_DIR="./database"
+RESULTS_DIR="./results"
 
 # 指定基因列表（可选，不指定则使用脚本默认值）
 # GENES="CSIAAS1BG1157200HC CSIAAS4BG0701800HC"
@@ -89,22 +110,26 @@ cd ~/project1 2>/dev/null || {
     exit 1
 }
 
-mkdir -p ${OUTPUT_DIR}
+mkdir -p ${DATABASE_DIR}
+mkdir -p ${RESULTS_DIR}
 mkdir -p logs
 
 LOG_FILE="logs/genome_scan_$(date +%s).log"
 
-echo "  Output: ${OUTPUT_DIR}"
+echo "  Database: ${DATABASE_DIR}"
+echo "  Results:  ${RESULTS_DIR}"
 echo "  Log: ${LOG_FILE}"
 echo ""
 
-# 运行扫描脚本
+# 运行扫描脚本（完整基因区间）
 python genome_wide_haplotype_scan.py \
     --vcf ${VCF_FILE} \
     --gff ${GFF_FILE} \
     --phenotype ${PHENO_FILE} \
-    --output-dir ${OUTPUT_DIR} \
+    --database-dir ${DATABASE_DIR} \
+    --results-dir ${RESULTS_DIR} \
     --min-samples 5 \
+    --test-region 0 \
     2>&1 | tee "${LOG_FILE}"
 
 EXIT_CODE=${PIPESTATUS[0]}
@@ -116,11 +141,14 @@ EXIT_CODE=${PIPESTATUS[0]}
 echo ""
 echo "========================================="
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "  Scan completed successfully!"
-    echo "  Results: ${OUTPUT_DIR}/"
-    ls -lh ${OUTPUT_DIR}/ 2>/dev/null
+    echo "  Build completed successfully!"
+    echo "  Database: ${DATABASE_DIR}/"
+    ls -lh ${DATABASE_DIR}/ 2>/dev/null
+    echo ""
+    echo "  Results: ${RESULTS_DIR}/"
+    ls -lh ${RESULTS_DIR}/ 2>/dev/null
 else
-    echo "  Scan failed (exit code: $EXIT_CODE)"
+    echo "  Build failed (exit code: $EXIT_CODE)"
     echo "  Check log: ${LOG_FILE}"
 fi
 echo "========================================="
