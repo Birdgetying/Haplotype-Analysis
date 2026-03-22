@@ -3174,10 +3174,36 @@ class ReportGenerator:
             first_seq = hap_sample_df['Haplotype_Seq'].iloc[0] if len(hap_sample_df) > 0 else ''
             seq_len = len(first_seq.split('|')) if first_seq else 0
             
-            # 显示全部变异位点
-            display_positions = variant_positions if variant_positions else list(range(seq_len))
-            display_orig_indices = list(range(len(display_positions)))  # 顺序索引
-            print(f"[DEBUG] 显示全部变异位点: {len(display_positions)}个")
+            # 初始显示全部变异位点
+            all_positions = variant_positions if variant_positions else list(range(seq_len))
+            all_orig_indices = list(range(len(all_positions)))
+            
+            # **关键修复**: 基于实际显示的单倍型序列，过滤掉“无变异位点”
+            # 如果某位点在所有显示的单倍型中碱基都相同，则不显示该位点
+            top_hap_seqs = []
+            for hap in top_haps:
+                hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
+                if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
+                    seq = hap_rows['Haplotype_Seq'].iloc[0].replace('|', '')
+                    top_hap_seqs.append(seq)
+            
+            # 检查每个位点在显示的单倍型中是否有变异
+            variable_indices = []
+            for idx in range(len(all_positions)):
+                bases_at_pos = set()
+                for seq in top_hap_seqs:
+                    if idx < len(seq):
+                        bases_at_pos.add(seq[idx].upper())
+                # 只有当该位点在显示的单倍型中有多种碱基时才保留
+                if len(bases_at_pos) > 1:
+                    variable_indices.append(idx)
+            
+            # 过滤后的显示位点
+            display_positions = [all_positions[i] for i in variable_indices]
+            display_orig_indices = variable_indices
+            
+            filtered_count = len(all_positions) - len(display_positions)
+            print(f"[DEBUG] 变异位点过滤: 原始{len(all_positions)}个 -> 过滤掉无变异{filtered_count}个 -> 保留{len(display_positions)}个")
         else:
             display_positions = variant_positions if variant_positions else []
             display_orig_indices = list(range(len(display_positions)))  # 顺序索引
