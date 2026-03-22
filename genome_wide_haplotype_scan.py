@@ -590,12 +590,11 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                 
                 # 运行完整分析流程（会生成综合HTML）
                 analysis_result = analyzer.analyze_gene(
-                    gene_id=gene_id,
                     chrom=chrom,
                     start=start,
                     end=end,
-                    strand=strand,
-                    phenotypes=[pheno_col]
+                    gene_id=gene_id,
+                    phenotype_cols=[pheno_col]
                 )
                 
                 # 查找生成的HTML文件
@@ -846,12 +845,11 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                         
                         # 运行分析生成HTML
                         analyzer.analyze_gene(
-                            gene_id=gene_id,
                             chrom=result['chrom'],
                             start=result['start'],
                             end=result['end'],
-                            strand=result.get('strand', '+'),
-                            phenotypes=[pheno_col]
+                            gene_id=gene_id,
+                            phenotype_cols=[pheno_col]
                         )
                         print(f"  [HTML] {gene_id}: 综合分析图已生成")
                     except Exception as html_e:
