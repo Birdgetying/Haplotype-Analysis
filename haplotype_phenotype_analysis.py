@@ -3266,15 +3266,16 @@ class ReportGenerator:
         .base-box {{ width: 18px; height: 18px; border-radius: 3px; display: flex;
                     align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 11px; }}
         /* 表格样式 */
-        .data-table {{ border-collapse: collapse; margin-top: 0; }}
+        .data-table {{ border-collapse: collapse; margin-top: 0; table-layout: fixed; }}
         .data-table th {{ background: #34495e; color: white; padding: 0; font-size: 10px; font-weight: 500; vertical-align: top; }}
         .data-table td {{ padding: 6px 4px; text-align: center; border-bottom: 1px solid #eee; }}
         .data-table tr:hover {{ background: #f8f9fa; }}
         .data-table tr.ref-row {{ background: #fffbeb; }}
-        .hap-cell {{ text-align: left !important; padding-left: 10px !important; font-weight: 600; font-size: 12px; }}
+        .hap-cell {{ width: 90px; min-width: 90px; max-width: 90px; text-align: left !important; padding-left: 10px !important; font-weight: 600; font-size: 12px; }}
         .ref-tag {{ background: #e74c3c; color: white; font-size: 8px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }}
         .base {{ font-family: Consolas, monospace; font-weight: 700; font-size: 13px; }}
-        .effect-cell, .box-cell {{ width: 180px; position: relative; height: 35px; }}
+        .effect-cell {{ width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }}
+        .box-cell {{ width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }}
         .bar-container {{ position: relative; height: 20px; background: #f8f9fa; border-radius: 3px; overflow: hidden; }}
         .bar-center {{ position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #333; border-left: 1px dashed #333; }}
         /* 森林图样式 */
@@ -3512,10 +3513,11 @@ class ReportGenerator:
                 
         html += '</svg>\n'
         
-        # HTML表格
-        html += '''<table class="data-table">
+        # HTML表格 - 宽度与SVG精确匹配
+        table_width = svg_width  # 表格宽度与SVG一致
+        html += f'''<table class="data-table" style="width:{table_width}px;">
 <thead><tr>
-    <th style="width:90px;text-align:left;padding-left:10px;vertical-align:middle;height:60px;">Haplotype</th>
+    <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;height:60px;">Haplotype</th>
     <th class="effect-cell" style="vertical-align:middle;height:60px;">Effect (vs Grand Mean)</th>
     <th class="box-cell" style="vertical-align:middle;height:60px;">Phenotype</th>\n'''
         
@@ -3683,7 +3685,7 @@ const levelDisplay = document.getElementById('zoomLevel');
 
 function setZoom(value) {{
     currentZoom = parseInt(value);
-    content.style.transform = `scale(${{currentZoom / 100}})`;
+    content.style.transform = 'scale(' + (currentZoom / 100) + ')';
     slider.value = currentZoom;
     levelDisplay.textContent = currentZoom + '%';
 }}
