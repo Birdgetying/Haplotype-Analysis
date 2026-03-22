@@ -827,6 +827,36 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 assoc_df.to_csv(os.path.join(gene_data_dir, 'association_result.csv'), index=False)
                 print(f"  [关联分析] {gene_id}: P={p_value:.4f}, PVE={pve:.2f}%")
                 
+                # 如果显著，生成HTML图
+                if p_value < pvalue_threshold and results_dir and HAPLOTYPE_MODULE_AVAILABLE:
+                    try:
+                        gene_results_dir = os.path.join(results_dir, gene_id)
+                        os.makedirs(gene_results_dir, exist_ok=True)
+                        
+                        # 读取单倍型数据
+                        hap_df = pd.read_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'))
+                        
+                        # 创建分析器并生成HTML
+                        analyzer = HaplotypePhenotypeAnalyzer(
+                            vcf_file=vcf_file,
+                            phenotype_file=pheno_file,
+                            output_dir=gene_results_dir,
+                            gtf_file=gff_file
+                        )
+                        
+                        # 运行分析生成HTML
+                        analyzer.analyze_gene(
+                            gene_id=gene_id,
+                            chrom=result['chrom'],
+                            start=result['start'],
+                            end=result['end'],
+                            strand=result.get('strand', '+'),
+                            phenotypes=[pheno_col]
+                        )
+                        print(f"  [HTML] {gene_id}: 综合分析图已生成")
+                    except Exception as html_e:
+                        print(f"  [WARNING] {gene_id} HTML生成失败: {html_e}")
+                
             except Exception as e:
                 print(f"  [WARNING] {gene_id} 关联分析失败: {e}")
         
