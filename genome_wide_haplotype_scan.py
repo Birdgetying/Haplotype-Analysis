@@ -157,7 +157,32 @@ class BuiltinHaplotypeExtractor:
             print(f"[INFO] 过滤掉的非SNP变异数: {filtered_count}")
         
         if len(positions) == 0:
-            print(f"[INFO] 区域 {chrom}:{start}-{end} 无SNP变异")
+            print(f"[INFO] 区域 {chrom}:{start}-{end} 无变异")
+            return positions, None, None
+        
+        # 过滤无变异位点（所有样本在该位点的等位基因相同）
+        invariant_positions = []
+        for i in range(len(positions)):
+            alleles_at_pos = set()
+            for sample in self.samples:
+                if genotypes_by_sample[sample] and i < len(genotypes_by_sample[sample]):
+                    allele = genotypes_by_sample[sample][i]
+                    if allele != 'N':
+                        alleles_at_pos.add(allele)
+            if len(alleles_at_pos) <= 1:
+                invariant_positions.append(i)
+        
+        if invariant_positions:
+            print(f"[INFO] 过滤掉的无变异位点数: {len(invariant_positions)}")
+            keep_indices = [i for i in range(len(positions)) if i not in invariant_positions]
+            positions = [positions[i] for i in keep_indices]
+            for sample in self.samples:
+                if genotypes_by_sample[sample]:
+                    genotypes_by_sample[sample] = [genotypes_by_sample[sample][i] for i in keep_indices]
+            print(f"[INFO] 过滤后有效变异位点数: {len(positions)}")
+        
+        if len(positions) == 0:
+            print(f"[INFO] 区域 {chrom}:{start}-{end} 过滤后无有效变异")
             return positions, None, None
         
         # 构建单倍型序列
@@ -243,7 +268,7 @@ class ScanConfig:
     PROMOTER_LENGTH = 2000  # 启动子长度（bp），在TSS上游扩展
     
     # 变异类型过滤
-    SNP_ONLY = True  # True=只保留SNP，False=包含所有变异(含结构变异)
+    SNP_ONLY = False  # False=包含所有变异类型(SNP/indel/SV)
     
     # 过滤参数
     MIN_VARIANTS = 1  # 最小变异数

@@ -761,9 +761,34 @@ class HaplotypeExtractor:
         
         vcf.close()
         self.positions = positions
-        logger.info(f"区间内SNP位点数: {len(positions)}")
+        logger.info(f"区间内变异位点数: {len(positions)}")
         if snp_only and filtered_count > 0:
             logger.info(f"过滤掉的非SNP变异数: {filtered_count}")
+        
+        # 过滤无变异位点（所有样本在该位点的等位基因相同）
+        if len(positions) > 0:
+            invariant_positions = []  # 记录无变异位点的索引
+            for i in range(len(positions)):
+                alleles_at_pos = set()
+                for sample in self.samples:
+                    if sample_alleles[sample] and i < len(sample_alleles[sample]):
+                        allele = sample_alleles[sample][i]
+                        if allele != 'N':
+                            alleles_at_pos.add(allele)
+                # 如果该位点只有一种等位基因（或没有有效等位基因），标记为无变异
+                if len(alleles_at_pos) <= 1:
+                    invariant_positions.append(i)
+            
+            if invariant_positions:
+                logger.info(f"过滤掉的无变异位点数: {len(invariant_positions)}")
+                # 移除无变异位点
+                keep_indices = [i for i in range(len(positions)) if i not in invariant_positions]
+                positions = [positions[i] for i in keep_indices]
+                for sample in self.samples:
+                    if sample_alleles[sample]:
+                        sample_alleles[sample] = [sample_alleles[sample][i] for i in keep_indices]
+                self.positions = positions
+                logger.info(f"过滤后有效变异位点数: {len(positions)}")
         
         # 构建单倍型
         hap_dict = {}
