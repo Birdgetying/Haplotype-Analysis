@@ -242,6 +242,9 @@ class ScanConfig:
     # 启动子区域参数
     PROMOTER_LENGTH = 2000  # 启动子长度（bp），在TSS上游扩展
     
+    # 变异类型过滤
+    SNP_ONLY = True  # True=只保留SNP，False=包含所有变异(含结构变异)
+    
     # 过滤参数
     MIN_VARIANTS = 1  # 最小变异数
     MIN_SAMPLES = 5   # 最小样本数
@@ -392,7 +395,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         
         # 提取单倍型
         positions, hap_df, hap_sample_df = extractor.extract_region(
-            chrom, start, end, min_samples=min_samples
+            chrom, start, end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
         )
         
         # 保存基因基本信息
@@ -545,7 +548,7 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
         
         # 提取单倍型
         positions, hap_df, hap_sample_df = extractor.extract_region(
-            chrom, start, end, min_samples=min_samples
+            chrom, start, end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
         )
         
         if hap_df is None or len(hap_df) == 0 or len(hap_sample_df) < min_samples:
