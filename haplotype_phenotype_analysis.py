@@ -3240,13 +3240,24 @@ class ReportGenerator:
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 15px; }}
-        .container {{ max-width: 1800px; margin: 0 auto; background: white; border-radius: 10px; 
+        .container {{ margin: 0 auto; background: white; border-radius: 10px; 
                      box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
         .header {{ background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color: white; 
                   padding: 18px 25px; border-radius: 10px 10px 0 0; }}
         .header h1 {{ font-size: 18px; margin-bottom: 5px; }}
         .header-info {{ display: flex; gap: 20px; font-size: 11px; opacity: 0.9; flex-wrap: wrap; }}
-        .content {{ padding: 15px; overflow: auto; max-height: 85vh; }}
+        /* 缩放控制栏 */
+        .zoom-controls {{ display: flex; align-items: center; gap: 10px; padding: 10px 20px; 
+                         background: #f8f9fa; border-bottom: 1px solid #e8e8e8; }}
+        .zoom-controls label {{ font-size: 12px; color: #555; }}
+        .zoom-controls button {{ padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px;
+                                background: white; cursor: pointer; font-size: 14px; }}
+        .zoom-controls button:hover {{ background: #e8e8e8; }}
+        .zoom-controls input[type="range"] {{ width: 150px; }}
+        .zoom-controls span {{ font-size: 12px; color: #333; min-width: 45px; }}
+        /* 可缩放内容区 */
+        .content-wrapper {{ overflow: auto; max-height: 80vh; }}
+        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
         .footer {{ background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
                   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
                   border-radius: 0 0 10px 10px; }}
@@ -3291,7 +3302,18 @@ class ReportGenerator:
         </div>
     </div>
     
-    <div class="content">
+    <div class="zoom-controls">
+        <label>Zoom:</label>
+        <button onclick="zoomOut()">-</button>
+        <input type="range" id="zoomSlider" min="20" max="150" value="100" oninput="setZoom(this.value)">
+        <button onclick="zoomIn()">+</button>
+        <span id="zoomLevel">100%</span>
+        <button onclick="resetZoom()" style="margin-left:10px;">Reset</button>
+        <button onclick="fitToWindow()" style="margin-left:5px;">Fit</button>
+    </div>
+    
+    <div class="content-wrapper">
+    <div class="content" id="zoomContent">
 '''
         
         # SVG 基因结构图和连线（参照老师指定样式）
@@ -3635,6 +3657,7 @@ class ReportGenerator:
         
         html += '''</tbody></table>
     </div>
+    </div>
     
     <div class="footer">
         <div class="base-legend">
@@ -3651,6 +3674,57 @@ class ReportGenerator:
         <div style="font-size:10px;color:#7f8c8d;">Effect: point = estimate, line = 95% CI</div>
     </div>
 </div>
+
+<script>
+let currentZoom = 100;
+const content = document.getElementById('zoomContent');
+const slider = document.getElementById('zoomSlider');
+const levelDisplay = document.getElementById('zoomLevel');
+
+function setZoom(value) {{
+    currentZoom = parseInt(value);
+    content.style.transform = `scale(${{currentZoom / 100}})`;
+    slider.value = currentZoom;
+    levelDisplay.textContent = currentZoom + '%';
+}}
+
+function zoomIn() {{
+    if (currentZoom < 150) {{
+        setZoom(Math.min(150, currentZoom + 10));
+    }}
+}}
+
+function zoomOut() {{
+    if (currentZoom > 20) {{
+        setZoom(Math.max(20, currentZoom - 10));
+    }}
+}}
+
+function resetZoom() {{
+    setZoom(100);
+}}
+
+function fitToWindow() {{
+    const wrapper = document.querySelector('.content-wrapper');
+    const contentWidth = content.scrollWidth;
+    const wrapperWidth = wrapper.clientWidth;
+    const fitZoom = Math.floor((wrapperWidth / contentWidth) * 100);
+    setZoom(Math.max(20, Math.min(150, fitZoom)));
+}}
+
+// 鼠标滚轮缩放
+const wrapper = document.querySelector('.content-wrapper');
+wrapper.addEventListener('wheel', function(e) {{
+    if (e.ctrlKey) {{
+        e.preventDefault();
+        if (e.deltaY < 0) {{
+            zoomIn();
+        }} else {{
+            zoomOut();
+        }}
+    }}
+}}, {{ passive: false }});
+</script>
 </body>
 </html>'''
         
