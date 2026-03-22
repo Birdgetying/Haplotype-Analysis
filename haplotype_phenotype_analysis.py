@@ -810,50 +810,9 @@ class HaplotypeExtractor:
         hap_df["Hap_Name"] = [f"Hap{i+1}" for i in range(len(hap_df))]
         hap_df["Alleles"] = hap_df["Haplotype_Seq"].str.split("|")
         
-        # 基于最终保留的单倍型进行第二次无变异位点过滤
-        if len(hap_df) > 0 and len(positions) > 0:
-            all_alleles = hap_df["Alleles"].tolist()  # 所有保留的单倍型序列
-            invariant_in_hap = []  # 在所有单倍型中相同的位点索引
-            
-            for i in range(len(positions)):
-                alleles_at_pos = set()
-                for allele_list in all_alleles:
-                    if i < len(allele_list):
-                        alleles_at_pos.add(allele_list[i])
-                # 如果该位点在所有单倍型中都相同，标记为无变异
-                if len(alleles_at_pos) <= 1:
-                    invariant_in_hap.append(i)
-            
-            if invariant_in_hap:
-                logger.info(f"单倍型层面无变异位点数: {len(invariant_in_hap)}，已过滤")
-                # 保留有变异的位点索引
-                keep_indices = [i for i in range(len(positions)) if i not in invariant_in_hap]
-                positions = [positions[i] for i in keep_indices]
-                self.positions = positions
-                
-                # 更新单倍型序列
-                new_alleles = []
-                new_seqs = []
-                for allele_list in all_alleles:
-                    filtered_alleles = [allele_list[i] for i in keep_indices]
-                    new_alleles.append(filtered_alleles)
-                    new_seqs.append("|".join(filtered_alleles))
-                
-                hap_df["Alleles"] = new_alleles
-                hap_df["Haplotype_Seq"] = new_seqs
-                
-                # 同时更新sample_alleles和sample_to_hap
-                for sample in self.samples:
-                    if sample_alleles[sample]:
-                        sample_alleles[sample] = [sample_alleles[sample][i] for i in keep_indices]
-                
-                # 重建 sample_to_hap
-                sample_to_hap = {}
-                for sample in self.samples:
-                    if sample_alleles[sample] and "N" not in sample_alleles[sample]:
-                        sample_to_hap[sample] = "|".join(sample_alleles[sample])
-                
-                logger.info(f"最终有效变异位点数: {len(positions)}")
+        # 注意：不再基于主要单倍型进行第二次过滤
+        # 因为次要单倍型中的变异可能对表型有显著影响
+        # 第一次过滤（样本层面）已经删除了真正无变异的位点
         
         # 样本-单倍型对应表
         hap_seq_to_name = dict(zip(hap_df["Haplotype_Seq"], hap_df["Hap_Name"]))
@@ -4039,7 +3998,7 @@ class HaplotypePhenotypeAnalyzer:
         logger.info("[Step 1] 提取单倍型...")
         perf_monitor.step_start("Step_1_Haplotype_Extraction")
         self.positions, self.hap_df, self.hap_sample_df = self.extractor.extract_region(
-            chrom, extended_start, extended_end, min_samples=min_samples
+            chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False  # 包含所有变异类型(SNP/indel/SV)
         )
         step1_time = perf_monitor.step_end("Step_1_Haplotype_Extraction")
         logger.info(f"  - Step 1 耗时：{step1_time:.2f}s")

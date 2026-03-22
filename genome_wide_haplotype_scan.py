@@ -228,43 +228,8 @@ class BuiltinHaplotypeExtractor:
         
         hap_df = pd.DataFrame(hap_list) if hap_list else None
         
-        # 基于最终保留的单倍型进行第二次无变异位点过滤
-        if hap_df is not None and len(hap_df) > 0 and len(positions) > 0:
-            all_alleles = hap_df['Alleles'].tolist()
-            invariant_in_hap = []
-            
-            for i in range(len(positions)):
-                alleles_at_pos = set()
-                for allele_list in all_alleles:
-                    if i < len(allele_list):
-                        alleles_at_pos.add(allele_list[i])
-                if len(alleles_at_pos) <= 1:
-                    invariant_in_hap.append(i)
-            
-            if invariant_in_hap:
-                print(f"[INFO] 单倍型层面无变异位点数: {len(invariant_in_hap)}，已过滤")
-                keep_indices = [i for i in range(len(positions)) if i not in invariant_in_hap]
-                positions = [positions[i] for i in keep_indices]
-                
-                # 更新单倍型序列
-                new_alleles = []
-                new_seqs = []
-                for allele_list in all_alleles:
-                    filtered_alleles = [allele_list[i] for i in keep_indices]
-                    new_alleles.append(filtered_alleles)
-                    new_seqs.append('|'.join(filtered_alleles))
-                
-                hap_df['Alleles'] = new_alleles
-                hap_df['Haplotype_Seq'] = new_seqs
-                
-                # 更新sample_haps
-                for item in sample_haps:
-                    old_alleles = item['Haplotype_Seq'].split('|')
-                    new_filtered = [old_alleles[i] for i in keep_indices if i < len(old_alleles)]
-                    item['Haplotype_Seq'] = '|'.join(new_filtered)
-                
-                hap_sample_df = pd.DataFrame(sample_haps)
-                print(f"[INFO] 最终有效变异位点数: {len(positions)}")
+        # 注意：不再基于主要单倍型进行第二次过滤
+        # 因为次要单倍型中的变异可能对表型有显著影响
         
         print(f"[INFO] 提取完成: {len(positions)} 个变异, {len(hap_list)} 个单倍型")
         return positions, hap_df, hap_sample_df
