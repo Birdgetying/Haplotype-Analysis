@@ -440,9 +440,28 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                                      gene_strand: str, positions: list) -> dict:
     """
     计算指定位点列表的 SNP 功能注释
-    返回: {pos: 'missense'|'synonymous'|'UTR'|'other'}
+    返回: {pos: 'missense'|'synonymous'|'UTR'|'indel'|'SV'|'other'}
+    
+    变异类型判断标准：
+    - SNP: ref和alt都是单碱基
+    - Indel: ref和alt长度不同，但长度差<50bp
+    - SV: ref和alt长度差>=50bp，或VCF INFO字段有SVTYPE
+    - missense/synonymous: CDS区域内的SNP，改变/不改变氨基酸
+    - UTR: 外显子区域但非CDS区域
+    - other: 其他情况
     """
     effects = {pos: 'other' for pos in positions}  # 默认都是 other
+    
+    # 定义变异类型判断函数
+    def classify_variant(ref, alt):
+        """根据ref/alt长度判断变异类型: SNP, indel, SV"""
+        len_diff = abs(len(ref) - len(alt))
+        if len(ref) == 1 and len(alt) == 1:
+            return 'SNP'
+        elif len_diff >= 50:  # 长度差>=50bp认为是SV
+            return 'SV'
+        else:  # 长度不同但差值<50bp是indel
+            return 'indel'
 
     if not cds_intervals and not exon_intervals:
         return effects
@@ -490,13 +509,20 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                             continue
                         remaining.discard(pos)
                         alt_allele = alt.split(',')[0]
+                        var_type = classify_variant(ref, alt_allele)
                         in_cds  = _pos_in_any_interval(pos, cds_intervals)
                         in_exon = _pos_in_any_interval(pos, exon_intervals)
-                        if not in_exon:
-                            effects[pos] = 'other'
+                        
+                        # 先判断SV/indel（不区分位置，统一标记）
+                        if var_type == 'SV':
+                            effects[pos] = 'SV'
+                        elif var_type == 'indel':
+                            effects[pos] = 'indel'
+                        elif not in_exon:
+                            effects[pos] = 'other'  # 基因间区、内含子等
                         elif not in_cds:
                             effects[pos] = 'UTR'
-                        elif len(ref) == 1 and len(alt_allele) == 1 and pos in cds_pos_to_idx and cds_seq:
+                        elif var_type == 'SNP' and pos in cds_pos_to_idx and cds_seq:
                             idx = cds_pos_to_idx[pos]
                             codon_start = (idx // 3) * 3
                             if codon_start + 3 <= len(cds_seq):
@@ -544,13 +570,20 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         continue
                     remaining.discard(pos)
                     alt_allele = alt.split(',')[0]
+                    var_type = classify_variant(ref, alt_allele)
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
-                    if not in_exon:
-                        effects[pos] = 'other'
+                    
+                    # 先判断SV/indel（不区分位置，统一标记）
+                    if var_type == 'SV':
+                        effects[pos] = 'SV'
+                    elif var_type == 'indel':
+                        effects[pos] = 'indel'
+                    elif not in_exon:
+                        effects[pos] = 'other'  # 基因间区、内含子等
                     elif not in_cds:
                         effects[pos] = 'UTR'
-                    elif len(ref) == 1 and len(alt_allele) == 1 and pos in cds_pos_to_idx and cds_seq:
+                    elif var_type == 'SNP' and pos in cds_pos_to_idx and cds_seq:
                         idx = cds_pos_to_idx[pos]
                         codon_start = (idx // 3) * 3
                         if codon_start + 3 <= len(cds_seq):
@@ -3110,12 +3143,16 @@ class ReportGenerator:
             'missense':    '#e74c3c',  # 红色
             'synonymous':  '#f39c12',  # 橙色
             'UTR':         '#9b59b6',  # 紫色
+            'indel':       '#3498db',  # 蓝色 - 新增
+            'SV':          '#e91e63',  # 深粉色 - 新增（结构变异）
             'other':       '#95a5a6',  # 灰色
         }
         var_type_labels = {
             'missense':   'Missense',
             'synonymous': 'Synonymous',
             'UTR':        'UTR',
+            'indel':      'Indel',      # 新增
+            'SV':         'SV',         # 新增（结构变异）
             'other':      'Other',
         }
         
