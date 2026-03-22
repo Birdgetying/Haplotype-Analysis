@@ -3977,15 +3977,19 @@ class HaplotypePhenotypeAnalyzer:
         exons_list = gtf_data.get('exons', [])
         cds_list = gtf_data.get('cds', [])
         gene_chrom = gtf_data.get('chrom') or chrom
-        strand = gtf_data.get('strand', '+')  # 从 GTF 获取链方向
+        strand = gtf_data.get('strand', '+')  # 从GTF获取链方向
+        # 获取GTF中的真实基因体坐标
+        gene_body_start = gtf_data.get('gene_start') or start
+        gene_body_end = gtf_data.get('gene_end') or end
         logger.info(f"  - GTF 解析：{len(exons_list)} 个外显子，{len(cds_list)} 个 CDS, strand={strand}")
+        logger.info(f"  - 基因体坐标: {gene_body_start:,}-{gene_body_end:,}")
         step0_time = perf_monitor.step_end("Step_0_GTF_Parser")
         logger.info(f"  - Step 0 耗时：{step0_time:.2f}s")
         
-        # 计算启动子区域（使用真实的 strand）
+        # 计算启动子区域（使用GTF中的真实基因体坐标）
         promoter_annotator = PromoterAnnotator()
         promoter_start_pos, promoter_end_pos = promoter_annotator.get_promoter_region(
-            chrom, start, end, strand=strand, upstream=2000
+            chrom, gene_body_start, gene_body_end, strand=strand, upstream=2000
         )
         logger.info(f"  - 启动子区域: {promoter_start_pos:,}-{promoter_end_pos:,} (strand={strand})")
         
@@ -4175,8 +4179,8 @@ class HaplotypePhenotypeAnalyzer:
         promoter_report = promoter_annotator.generate_promoter_report(
             gene_id=gene_id,
             chrom=chrom,
-            gene_start=start,
-            gene_end=end,
+            gene_start=gene_body_start,  # 使用GTF中的真实基因体坐标
+            gene_end=gene_body_end,
             strand=strand,  # 使用 Step 0 获取的真实链方向
             variants_positions=self.positions
         )
