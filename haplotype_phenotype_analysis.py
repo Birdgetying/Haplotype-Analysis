@@ -3169,15 +3169,43 @@ class ReportGenerator:
                 return var_type_colors['other'], 'other'
             return var_type_colors['other'], 'other'
         
-        # 从Haplotype_Seq获取序列
+        # 从 Haplotype_Seq 获取序列
         if 'Haplotype_Seq' in hap_sample_df.columns:
             first_seq = hap_sample_df['Haplotype_Seq'].iloc[0] if len(hap_sample_df) > 0 else ''
             seq_len = len(first_seq.split('|')) if first_seq else 0
             max_vars = min(30, seq_len)
-            display_positions = variant_positions[:max_vars] if variant_positions else list(range(max_vars))
+                    
+            # 智能选择变异位点：优先包含启动子区域的变异
+            if variant_positions and promoter_start and promoter_end:
+                # 分离启动子区域和非启动子区域的变异（保留原始索引）
+                promoter_vars_with_idx = [(i, p) for i, p in enumerate(variant_positions) if promoter_start <= p <= promoter_end]
+                non_promoter_vars_with_idx = [(i, p) for i, p in enumerate(variant_positions) if not (promoter_start <= p <= promoter_end)]
+                            
+                # 优先保留启动子变异，剩余名额给非启动子变异
+                n_promoter = min(len(promoter_vars_with_idx), max_vars)
+                n_other = max_vars - n_promoter
+                            
+                # 非启动子变异均匀采样（如果太多）
+                if len(non_promoter_vars_with_idx) > n_other and n_other > 0:
+                    step = len(non_promoter_vars_with_idx) / n_other
+                    selected_non_promoter = [non_promoter_vars_with_idx[int(i * step)] for i in range(n_other)]
+                else:
+                    selected_non_promoter = non_promoter_vars_with_idx[:n_other]
+                            
+                # 合并并按坐标排序，保留(orig_idx, pos)元组
+                all_selected = selected_non_promoter + promoter_vars_with_idx[:n_promoter]
+                all_selected_sorted = sorted(all_selected, key=lambda x: x[1])  # 按位置排序
+                            
+                display_positions = [x[1] for x in all_selected_sorted]  # 显示位置
+                display_orig_indices = [x[0] for x in all_selected_sorted]  # 原始索引（用于从seq中取碱基）
+                print(f"[DEBUG] 变异位点选择: 启动子{n_promoter}个 + 非启动子{len(selected_non_promoter)}个 = {len(display_positions)}个")
+            else:
+                display_positions = variant_positions[:max_vars] if variant_positions else list(range(max_vars))
+                display_orig_indices = list(range(len(display_positions)))  # 顺序索引
         else:
             display_positions = variant_positions[:30] if variant_positions else []
             max_vars = len(display_positions)
+            display_orig_indices = list(range(max_vars))  # 顺序索引
         
         effects = effect_results.get('haplotype_effects', []) if effect_results else []
         grand_mean = effect_results.get('grand_mean', 0) if effect_results else 0
@@ -3581,7 +3609,8 @@ class ReportGenerator:
             if 'Haplotype_Seq' in row.index:
                 seq = row['Haplotype_Seq'].replace('|', '')
                 for idx in range(len(display_positions)):
-                    base = seq[idx].upper() if idx < len(seq) else 'N'
+                    orig_idx = display_orig_indices[idx] if idx < len(display_orig_indices) else idx
+                    base = seq[orig_idx].upper() if orig_idx < len(seq) else 'N'
                     color = base_colors.get(base, '#666')
                     html += f'<td style="width:28px;min-width:28px;max-width:28px;padding:0;text-align:center;"><span class="base" style="color:{color};">{base}</span></td>\n'
             
