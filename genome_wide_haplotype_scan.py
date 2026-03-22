@@ -101,22 +101,39 @@ class BuiltinHaplotypeExtractor:
         print(f"[INFO] 内置提取器初始化成功，样本数: {len(self.samples)}")
     
     def extract_region(self, chrom: str, start: int, end: int, 
-                       min_samples: int = 5) -> tuple:
+                       min_samples: int = 5, snp_only: bool = True) -> tuple:
         """
         提取指定区域的单倍型
+        
+        Args:
+            snp_only: 是否只保留SNP（默认True，过滤indel和SV）
         
         Returns:
             tuple: (positions, hap_df, hap_sample_df)
         """
+        # SNP判断函数
+        def is_snp(ref_allele, alt_allele):
+            valid_bases = {'A', 'T', 'G', 'C', 'a', 't', 'g', 'c'}
+            return (len(ref_allele) == 1 and len(alt_allele) == 1 and
+                    ref_allele.upper() in valid_bases and alt_allele.upper() in valid_bases)
+        
         positions = []
         genotypes_by_sample = {s: [] for s in self.samples}
+        filtered_count = 0
         
         try:
             for record in self.vcf.fetch(chrom, start, end):
-                pos = record.pos
-                positions.append(pos)
                 ref = record.ref
                 alts = record.alts if record.alts else []
+                alt0 = alts[0] if alts else ""
+                
+                # SNP过滤
+                if snp_only and not is_snp(ref, alt0):
+                    filtered_count += 1
+                    continue
+                
+                pos = record.pos
+                positions.append(pos)
                 
                 for sample in self.samples:
                     gt = record.samples[sample]['GT']
@@ -136,8 +153,11 @@ class BuiltinHaplotypeExtractor:
             print(f"[WARNING] 提取区域 {chrom}:{start}-{end} 失败: {e}")
             return None, None, None
         
+        if filtered_count > 0:
+            print(f"[INFO] 过滤掉的非SNP变异数: {filtered_count}")
+        
         if len(positions) == 0:
-            print(f"[INFO] 区域 {chrom}:{start}-{end} 无变异")
+            print(f"[INFO] 区域 {chrom}:{start}-{end} 无SNP变异")
             return positions, None, None
         
         # 构建单倍型序列

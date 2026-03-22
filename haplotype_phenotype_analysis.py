@@ -637,9 +637,16 @@ class HaplotypeExtractor:
             return ref if ref else "N"
         return "N"
     
-    def extract_region(self, chrom: str, start: int, end: int, min_samples: int = 2) -> tuple:
+    def extract_region(self, chrom: str, start: int, end: int, min_samples: int = 2, snp_only: bool = True) -> tuple:
         """
         提取指定区间的单倍型
+        
+        Args:
+            chrom: 染色体
+            start: 起始位置
+            end: 终止位置
+            min_samples: 单倍型最少样本数
+            snp_only: 是否只保留SNP（默认True，过滤indel和SV）
         
         Returns:
             positions: 变异位置列表
@@ -688,19 +695,33 @@ class HaplotypeExtractor:
         vcf.close()
         vcf = pysam.VariantFile(self.vcf_file)
         
+        # SNP判断函数
+        def is_snp(ref_allele, alt_allele):
+            """判断是否为SNP（ref和alt都是单碱基）"""
+            valid_bases = {'A', 'T', 'G', 'C', 'a', 't', 'g', 'c'}
+            return (len(ref_allele) == 1 and len(alt_allele) == 1 and
+                    ref_allele.upper() in valid_bases and alt_allele.upper() in valid_bases)
+        
         # 提取区间内的变异
         record_count = 0
+        filtered_count = 0  # 被过滤的非SNP数量
         if has_index:
             # 使用索引快速查询
             logger.info(f"快速查询区间: {chrom}:{start}-{end}")
             for rec in vcf.fetch(chrom, start, end):
-                record_count += 1
-                if record_count % 100 == 0:
-                    logger.debug(f"已处理 {record_count} 条记录...")
-                
                 pos = rec.pos
                 ref = rec.ref or ""
                 alt0 = (rec.alts[0] if rec.alts else "") or ""
+                
+                # SNP过滤
+                if snp_only and not is_snp(ref, alt0):
+                    filtered_count += 1
+                    continue
+                
+                record_count += 1
+                if record_count % 100 == 0:
+                    logger.debug(f"已处理 {record_count} 条SNP记录...")
+                
                 positions.append(pos)
                 
                 for s in self.samples:
@@ -713,28 +734,36 @@ class HaplotypeExtractor:
             for rec in vcf:
                 total_scanned += 1
                 if total_scanned % 100000 == 0:
-                    logger.info(f"已扫描 {total_scanned} 条记录，匹配 {record_count} 条...")
+                    logger.info(f"已扫描 {total_scanned} 条记录，匹配 {record_count} 条SNP...")
                 
                 if rec.chrom != chrom:
                     continue
                 if rec.pos < start or rec.pos > end:
                     continue
                 
-                record_count += 1
                 pos = rec.pos
                 ref = rec.ref or ""
                 alt0 = (rec.alts[0] if rec.alts else "") or ""
+                
+                # SNP过滤
+                if snp_only and not is_snp(ref, alt0):
+                    filtered_count += 1
+                    continue
+                
+                record_count += 1
                 positions.append(pos)
                 
                 for s in self.samples:
                     allele = self._gt_to_allele(rec, s, ref, alt0)
                     sample_alleles[s].append(allele if allele else "N")
             
-            logger.info(f"全文件扫描完成: 共扫描 {total_scanned} 条，匹配 {record_count} 条")
+            logger.info(f"全文件扫描完成: 共扫描 {total_scanned} 条，匹配 {record_count} 条SNP")
         
         vcf.close()
         self.positions = positions
-        logger.info(f"区间内变异位点数: {len(positions)}")
+        logger.info(f"区间内SNP位点数: {len(positions)}")
+        if snp_only and filtered_count > 0:
+            logger.info(f"过滤掉的非SNP变异数: {filtered_count}")
         
         # 构建单倍型
         hap_dict = {}
