@@ -4064,6 +4064,98 @@ class HaplotypePhenotypeAnalyzer:
         
         return effects
     
+    def _analyze_promoter_variants(self, chrom: str, promoter_start: int, promoter_end: int, gene_id: str = None):
+        """
+        直接分析VCF中启动子区域的变异，输出详细信息用于调试
+        """
+        logger = get_logger()
+        vcf_file = self.vcf_file
+        
+        try:
+            import pysam
+            vcf = pysam.VariantFile(vcf_file)
+            
+            # 检查染色体命名
+            chrom_in_vcf = None
+            if chrom in vcf.header.contigs:
+                chrom_in_vcf = chrom
+            elif chrom.replace('Chr', '') in vcf.header.contigs:
+                chrom_in_vcf = chrom.replace('Chr', '')
+            elif 'chr' + chrom.replace('Chr', '') in vcf.header.contigs:
+                chrom_in_vcf = 'chr' + chrom.replace('Chr', '')
+            
+            if not chrom_in_vcf:
+                logger.warning(f"  - 染色体 {chrom} 不在VCF中")
+                vcf.close()
+                return
+            
+            logger.info(f"  - 查询VCF: {chrom_in_vcf}:{promoter_start:,}-{promoter_end:,}")
+            
+            # 获取启动子区域的变异
+            variants = []
+            try:
+                for rec in vcf.fetch(chrom_in_vcf, promoter_start, promoter_end):
+                    ref = rec.ref
+                    alt = rec.alts[0] if rec.alts else ""
+                    
+                    # 判断变异类型
+                    len_diff = abs(len(ref) - len(alt))
+                    if len(ref) == 1 and len(alt) == 1:
+                        var_type = "SNP"
+                    elif len_diff >= 50:
+                        var_type = "SV"
+                    else:
+                        var_type = "indel"
+                    
+                    # 检查INFO字段是否有SVTYPE
+                    svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
+                    if svtype:
+                        var_type = f"SV({svtype})"
+                    
+                    variants.append({
+                        'pos': rec.pos,
+                        'ref': ref[:20] + "..." if len(ref) > 20 else ref,
+                        'alt': alt[:20] + "..." if len(alt) > 20 else alt,
+                        'type': var_type,
+                        'len_diff': len_diff
+                    })
+            except Exception as e:
+                logger.warning(f"  - VCF fetch失败: {e}")
+            
+            vcf.close()
+            
+            # 输出结果
+            if variants:
+                logger.info(f"  - 启动子区域发现 {len(variants)} 个变异:")
+                sv_variants = [v for v in variants if 'SV' in v['type']]
+                if sv_variants:
+                    logger.info(f"    - 结构变异(SV): {len(sv_variants)} 个")
+                    for v in sv_variants:
+                        logger.info(f"      * 位置 {v['pos']:,}: {v['type']}, ref长度{len(ref)}, alt长度{len(alt)}, 差值{v['len_diff']}bp")
+                
+                indel_variants = [v for v in variants if v['type'] == 'indel']
+                if indel_variants:
+                    logger.info(f"    - 插入缺失(indel): {len(indel_variants)} 个")
+                
+                snp_variants = [v for v in variants if v['type'] == 'SNP']
+                if snp_variants:
+                    logger.info(f"    - 单碱基变异(SNP): {len(snp_variants)} 个")
+                
+                # 保存详细信息到文件
+                promoter_var_file = os.path.join(self.output_dir, "promoter_variants_detail.txt")
+                with open(promoter_var_file, 'w') as f:
+                    f.write(f"Gene: {gene_id}\n")
+                    f.write(f"Promoter: {chrom}:{promoter_start:,}-{promoter_end:,}\n")
+                    f.write(f"Total variants: {len(variants)}\n\n")
+                    for v in variants:
+                        f.write(f"{v['pos']:,}\t{v['type']}\tref:{v['ref']}\talt:{v['alt']}\tlen_diff:{v['len_diff']}\n")
+                logger.info(f"  - 详细信息已保存: {promoter_var_file}")
+            else:
+                logger.warning(f"  - 启动子区域未发现任何变异!")
+                
+        except Exception as e:
+            logger.warning(f"  - 启动子变异分析失败: {e}")
+    
     def analyze_gene(self, chrom: str, start: int, end: int, 
                      gene_id: str = None, phenotype_cols: list = None,
                      min_samples: int = 2, gwas_file: str = None) -> dict:
@@ -4117,6 +4209,10 @@ class HaplotypePhenotypeAnalyzer:
             chrom, gene_body_start, gene_body_end, strand=strand, upstream=2000
         )
         logger.info(f"  - 启动子区域: {promoter_start_pos:,}-{promoter_end_pos:,} (strand={strand})")
+        
+        # **新增**: 直接分析VCF中启动子区域的变异
+        logger.info("[Step 0.5] 分析VCF中启动子区域的变异...")
+        self._analyze_promoter_variants(chrom, promoter_start_pos, promoter_end_pos, gene_id)
         
         # 扩展区域以包含启动子
         extended_start = min(start, promoter_start_pos)
