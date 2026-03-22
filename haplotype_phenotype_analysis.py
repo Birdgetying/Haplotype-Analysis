@@ -3678,98 +3678,36 @@ class ReportGenerator:
 </div>
 
 <script>
-(function() {{
-    'use strict';
-    
-    let currentZoom = 100;
-    let content = null;
-    let slider = null;
-    let levelDisplay = null;
-    let wrapper = null;
-    
-    function initZoom() {{
-        content = document.getElementById('zoomContent');
-        slider = document.getElementById('zoomSlider');
-        levelDisplay = document.getElementById('zoomLevel');
-        wrapper = document.querySelector('.content-wrapper');
-        
-        if (!content) {{
-            console.error('Zoom: zoomContent element not found');
-            return;
-        }}
-        if (!slider) {{
-            console.error('Zoom: zoomSlider element not found');
-            return;
-        }}
-        if (!levelDisplay) {{
-            console.error('Zoom: zoomLevel element not found');
-            return;
-        }}
-        
-        console.log('Zoom initialized, content found:', content);
+// 简单版缩放功能
+var zc = document.getElementById('zoomContent');
+var zs = document.getElementById('zoomSlider');
+var zl = document.getElementById('zoomLevel');
+var cz = 100;
+
+function applyZoom() {{
+    if (zc) {{
+        zc.style.transform = 'scale(' + (cz / 100) + ')';
+        zc.style.transformOrigin = 'top left';
     }}
-    
-    window.setZoom = function(value) {{
-        if (!content) initZoom();
-        if (!content) return;
-        
-        currentZoom = parseInt(value);
-        content.style.transform = 'scale(' + (currentZoom / 100) + ')';
-        if (slider) slider.value = currentZoom;
-        if (levelDisplay) levelDisplay.textContent = currentZoom + '%';
-        console.log('Zoom set to:', currentZoom + '%');
-    }};
-    
-    window.zoomIn = function() {{
-        if (currentZoom < 150) {{
-            window.setZoom(Math.min(150, currentZoom + 10));
-        }}
-    }};
-    
-    window.zoomOut = function() {{
-        if (currentZoom > 20) {{
-            window.setZoom(Math.max(20, currentZoom - 10));
-        }}
-    }};
-    
-    window.resetZoom = function() {{
-        window.setZoom(100);
-    }};
-    
-    window.fitToWindow = function() {{
-        if (!content) initZoom();
-        if (!content || !wrapper) return;
-        
-        const contentWidth = content.scrollWidth;
-        const wrapperWidth = wrapper.clientWidth;
-        const fitZoom = Math.floor((wrapperWidth / contentWidth) * 100);
-        window.setZoom(Math.max(20, Math.min(150, fitZoom)));
-    }};
-    
-    // DOM加载完成后初始化
-    if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', initZoom);
-    }} else {{
-        initZoom();
+    if (zs) zs.value = cz;
+    if (zl) zl.innerText = cz + '%';
+}}
+
+function zoomIn() {{ cz = Math.min(150, cz + 10); applyZoom(); }}
+function zoomOut() {{ cz = Math.max(20, cz - 10); applyZoom(); }}
+function resetZoom() {{ cz = 100; applyZoom(); }}
+function setZoom(v) {{ cz = parseInt(v); applyZoom(); }}
+
+function fitToWindow() {{
+    var w = document.querySelector('.content-wrapper');
+    if (zc && w) {{
+        cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100)));
+        applyZoom();
     }}
-    
-    // 鼠标滚轮缩放
-    document.addEventListener('DOMContentLoaded', function() {{
-        const wheelWrapper = document.querySelector('.content-wrapper');
-        if (wheelWrapper) {{
-            wheelWrapper.addEventListener('wheel', function(e) {{
-                if (e.ctrlKey) {{
-                    e.preventDefault();
-                    if (e.deltaY < 0) {{
-                        window.zoomIn();
-                    }} else {{
-                        window.zoomOut();
-                    }}
-                }}
-            }}, {{ passive: false }});
-        }}
-    }});
-}})();
+}}
+
+// 初始化
+applyZoom();
 </script>
 </body>
 </html>'''
