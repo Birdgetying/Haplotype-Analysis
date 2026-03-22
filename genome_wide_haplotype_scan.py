@@ -239,6 +239,9 @@ class ScanConfig:
         "CSIAAS4BG0701800HC"   # hox基因
     ]
     
+    # 启动子区域参数
+    PROMOTER_LENGTH = 2000  # 启动子长度（bp），在TSS上游扩展
+    
     # 过滤参数
     MIN_VARIANTS = 1  # 最小变异数
     MIN_SAMPLES = 5   # 最小样本数
@@ -337,9 +340,20 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
     """
     gene_id = gene_info['gene_id']
     chrom = gene_info['chrom']
-    start = gene_info['start']
-    end = gene_info['end']
+    gene_start = gene_info['start']  # GFF中的基因体起始
+    gene_end = gene_info['end']      # GFF中的基因体终止
     strand = gene_info['strand']
+    
+    # 扩展启动子区域
+    promoter_length = ScanConfig.PROMOTER_LENGTH
+    if strand == '+':  # +链：TSS在gene_start，启动子在上游(更小坐标)
+        start = max(1, gene_start - promoter_length)  # 向上游扩展
+        end = gene_end
+    else:  # -链：TSS在gene_end，启动子在下游(更大坐标)
+        start = gene_start
+        end = gene_end + promoter_length  # 向下游扩展
+    
+    print(f"[INFO] {gene_id}: 基因体={gene_start}-{gene_end}({strand}), 启动子扩展后={start}-{end}")
     
     # 测试模式：限制区间长度
     original_end = end
@@ -385,10 +399,13 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         gene_info_dict = {
             'gene_id': gene_id,
             'chrom': chrom,
-            'start': start,
-            'end': end,
+            'start': start,  # 启动子扩展后的起始
+            'end': end,      # 启动子扩展后的终止
+            'gene_start': gene_start,  # 原始基因体起始
+            'gene_end': gene_end,      # 原始基因体终止
             'strand': strand,
             'length': end - start + 1,
+            'promoter_length': promoter_length,
             'vcf_file': vcf_file,
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
@@ -492,15 +509,26 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
     """
     gene_id = gene_info['gene_id']
     chrom = gene_info['chrom']
-    start = gene_info['start']
-    end = gene_info['end']
+    gene_start = gene_info['start']  # GFF中的基因体起始
+    gene_end = gene_info['end']      # GFF中的基因体终止
     strand = gene_info['strand']
+    
+    # 扩展启动子区域
+    promoter_length = ScanConfig.PROMOTER_LENGTH
+    if strand == '+':  # +链：TSS在gene_start，启动子在上游
+        start = max(1, gene_start - promoter_length)
+        end = gene_end
+    else:  # -链：TSS在gene_end，启动子在下游
+        start = gene_start
+        end = gene_end + promoter_length
     
     result = {
         'gene_id': gene_id,
         'chrom': chrom,
         'start': start,
         'end': end,
+        'gene_start': gene_start,  # 保留原始基因体坐标
+        'gene_end': gene_end,
         'strand': strand,
         'n_variants': 0,
         'n_haplotypes': 0,
