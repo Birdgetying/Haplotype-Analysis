@@ -3678,54 +3678,98 @@ class ReportGenerator:
 </div>
 
 <script>
-let currentZoom = 100;
-const content = document.getElementById('zoomContent');
-const slider = document.getElementById('zoomSlider');
-const levelDisplay = document.getElementById('zoomLevel');
-
-function setZoom(value) {{
-    currentZoom = parseInt(value);
-    content.style.transform = 'scale(' + (currentZoom / 100) + ')';
-    slider.value = currentZoom;
-    levelDisplay.textContent = currentZoom + '%';
-}}
-
-function zoomIn() {{
-    if (currentZoom < 150) {{
-        setZoom(Math.min(150, currentZoom + 10));
-    }}
-}}
-
-function zoomOut() {{
-    if (currentZoom > 20) {{
-        setZoom(Math.max(20, currentZoom - 10));
-    }}
-}}
-
-function resetZoom() {{
-    setZoom(100);
-}}
-
-function fitToWindow() {{
-    const wrapper = document.querySelector('.content-wrapper');
-    const contentWidth = content.scrollWidth;
-    const wrapperWidth = wrapper.clientWidth;
-    const fitZoom = Math.floor((wrapperWidth / contentWidth) * 100);
-    setZoom(Math.max(20, Math.min(150, fitZoom)));
-}}
-
-// 鼠标滚轮缩放
-const wrapper = document.querySelector('.content-wrapper');
-wrapper.addEventListener('wheel', function(e) {{
-    if (e.ctrlKey) {{
-        e.preventDefault();
-        if (e.deltaY < 0) {{
-            zoomIn();
-        }} else {{
-            zoomOut();
+(function() {{
+    'use strict';
+    
+    let currentZoom = 100;
+    let content = null;
+    let slider = null;
+    let levelDisplay = null;
+    let wrapper = null;
+    
+    function initZoom() {{
+        content = document.getElementById('zoomContent');
+        slider = document.getElementById('zoomSlider');
+        levelDisplay = document.getElementById('zoomLevel');
+        wrapper = document.querySelector('.content-wrapper');
+        
+        if (!content) {{
+            console.error('Zoom: zoomContent element not found');
+            return;
         }}
+        if (!slider) {{
+            console.error('Zoom: zoomSlider element not found');
+            return;
+        }}
+        if (!levelDisplay) {{
+            console.error('Zoom: zoomLevel element not found');
+            return;
+        }}
+        
+        console.log('Zoom initialized, content found:', content);
     }}
-}}, {{ passive: false }});
+    
+    window.setZoom = function(value) {{
+        if (!content) initZoom();
+        if (!content) return;
+        
+        currentZoom = parseInt(value);
+        content.style.transform = 'scale(' + (currentZoom / 100) + ')';
+        if (slider) slider.value = currentZoom;
+        if (levelDisplay) levelDisplay.textContent = currentZoom + '%';
+        console.log('Zoom set to:', currentZoom + '%');
+    }};
+    
+    window.zoomIn = function() {{
+        if (currentZoom < 150) {{
+            window.setZoom(Math.min(150, currentZoom + 10));
+        }}
+    }};
+    
+    window.zoomOut = function() {{
+        if (currentZoom > 20) {{
+            window.setZoom(Math.max(20, currentZoom - 10));
+        }}
+    }};
+    
+    window.resetZoom = function() {{
+        window.setZoom(100);
+    }};
+    
+    window.fitToWindow = function() {{
+        if (!content) initZoom();
+        if (!content || !wrapper) return;
+        
+        const contentWidth = content.scrollWidth;
+        const wrapperWidth = wrapper.clientWidth;
+        const fitZoom = Math.floor((wrapperWidth / contentWidth) * 100);
+        window.setZoom(Math.max(20, Math.min(150, fitZoom)));
+    }};
+    
+    // DOM加载完成后初始化
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', initZoom);
+    }} else {{
+        initZoom();
+    }}
+    
+    // 鼠标滚轮缩放
+    document.addEventListener('DOMContentLoaded', function() {{
+        const wheelWrapper = document.querySelector('.content-wrapper');
+        if (wheelWrapper) {{
+            wheelWrapper.addEventListener('wheel', function(e) {{
+                if (e.ctrlKey) {{
+                    e.preventDefault();
+                    if (e.deltaY < 0) {{
+                        window.zoomIn();
+                    }} else {{
+                        window.zoomOut();
+                    }}
+                }}
+            }}, {{ passive: false }});
+        }}
+    }});
+}})();
 </script>
 </body>
 </html>'''
