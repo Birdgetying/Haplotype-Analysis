@@ -3698,7 +3698,10 @@ class ReportGenerator:
             <div class="base-legend-item"><div class="base-box" style="background:#27AE60;">T</div>Thymine</div>
             <div class="base-legend-item"><div class="base-box" style="background:#3498DB;">C</div>Cytosine</div>
             <div class="base-legend-item"><div class="base-box" style="background:#F1C40F;">G</div>Guanine</div>
-            <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:20px;"></span>
+            <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
+            <div class="base-legend-item"><div class="base-box" style="background:#e91e63;">I</div>Insertion</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#9b59b6;">D</div>Deletion</div>
+            <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
             <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#95a5a6;"></div>Reference</div>
             <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#8B0000;"></div>P &lt; 0.01</div>
             <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#e74c3c;"></div>P &lt; 0.05</div>
