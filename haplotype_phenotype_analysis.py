@@ -622,35 +622,39 @@ class HaplotypeExtractor:
         self.sample_haplotypes = {}
         
     def _gt_to_allele(self, rec, sample_name: str, ref: str, alt0: str) -> str:
-        """从 GT 字段获取等位基因"""
+        """从 GT 字段获取等位基因
+        
+        对于不同变异类型，统一返回单字符以保证序列格式一致：
+        - SNP: 返回实际碱基 (A/T/G/C)
+        - 插入(INS): 返回 '+' (限REF返回小写ref第一字符)
+        - 缺失(DEL): 返回 '-' (限REF返回小写ref第一字符)
+        """
+        # 判断变异类型，确定如何展示ALT
+        if len(ref) == 1 and len(alt0) == 1:
+            # SNP: 直接用实际碱基
+            alt_repr = alt0.upper()
+        elif len(alt0) > len(ref):  # 插入
+            alt_repr = 'I'  # Insertion
+        else:  # 缺失
+            alt_repr = 'D'  # Deletion
+        ref_repr = ref[0].upper() if ref else 'N'  # REF统一取第一个字符
+        
         try:
-            # pysam VariantRecord.samples 返回一个 dict-like 对象
             sample = rec.samples[sample_name]
             
-            # 在 pysam 0.19+ 中，sample 是一个 VariantRecordSample 对象
-            # 可以直接访问 GT 属性
             gt = None
-            
-            # 方法1: 直接访问 .GT 属性 (pysam 0.19+)
             if hasattr(sample, 'GT'):
                 gt = sample.GT
-            
-            # 方法2: 使用 get 方法
             if gt is None and hasattr(sample, 'get'):
                 gt = sample.get('GT')
-            
-            # 方法3: 使用 __getitem__
             if gt is None and hasattr(sample, '__getitem__'):
                 try:
                     gt = sample['GT']
                 except (KeyError, TypeError):
                     pass
-            
-            # 方法4: 使用 alleles 属性
             if gt is None and hasattr(sample, 'alleles'):
                 alleles = sample.alleles
                 if alleles and len(alleles) >= 1:
-                    # 根据 alleles 推断 GT
                     gt = tuple([0 if a == ref else 1 for a in alleles if a is not None])
                     
         except Exception as e:
@@ -661,13 +665,13 @@ class HaplotypeExtractor:
             
         # 纯合 REF
         if gt == (0, 0) or gt == (0,) or gt == [0, 0] or gt == [0]:
-            return ref if ref else "N"
+            return ref_repr
         # 纯合 ALT
         if gt == (1, 1) or gt == (1,) or gt == [1, 1] or gt == [1]:
-            return alt0 if alt0 else "N"
+            return alt_repr
         # 杂合按 REF 处理
         if (isinstance(gt, (tuple, list)) and len(gt) >= 2 and 0 in gt and 1 in gt):
-            return ref if ref else "N"
+            return ref_repr
         return "N"
     
     def extract_region(self, chrom: str, start: int, end: int, min_samples: int = 2, snp_only: bool = True) -> tuple:
@@ -3254,7 +3258,8 @@ class ReportGenerator:
             eff_min, eff_max = -1, 1
             eff_range = 1
         
-        base_colors = {'A': '#E41A1C', 'T': '#27AE60', 'C': '#3498DB', 'G': '#F1C40F'}
+        base_colors = {'A': '#E41A1C', 'T': '#27AE60', 'C': '#3498DB', 'G': '#F1C40F',
+                       'I': '#e91e63', 'D': '#9b59b6'}  # I=插入(深粉), D=缺失(紫)
         row_height = 36
         n_haps = len(top_haps)
         
