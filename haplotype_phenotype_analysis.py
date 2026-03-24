@@ -3135,11 +3135,13 @@ class ReportGenerator:
                                   exons: list = None, cds: list = None,
                                   snp_effects: dict = None,
                                   chrom: str = None,
-                                  cluster_haplotypes: bool = False) -> str:
+                                  cluster_haplotypes: bool = False,
+                                  variant_info: dict = None) -> str:
         """生成综合HTML大图（效应图 + 箱线图 + 单倍型序列 共用Hap标签）
         
         Args:
             cluster_haplotypes: 是否按序列相似度聚类排序（默认False按数量排序）
+            variant_info: 变异信息字典 {pos: {'ref': '', 'alt': '', 'len_diff': int}}
         
         基因结构使用真实的外显子和 CDS 坐标（从 GTF 解析）:
         - exons: 外显子坐标列表 [(start, end), ...]
@@ -3715,14 +3717,13 @@ class ReportGenerator:
                     
                     # 获取位置信息，用于显示长度形式
                     pos = display_positions[idx] if idx < len(display_positions) else None
-                    variant_info = self.extractor.variant_info if hasattr(self, 'extractor') and hasattr(self.extractor, 'variant_info') else {}
                     
                     # 对于I/D，显示长度形式如 "+466bp" 或 "-725bp"
                     display_base = base
-                    if base == 'I' and pos and pos in variant_info:
+                    if base == 'I' and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         display_base = f"+{len_diff}bp" if len_diff > 0 else "+INS"
-                    elif base == 'D' and pos and pos in variant_info:
+                    elif base == 'D' and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         display_base = f"{len_diff}bp" if len_diff < 0 else "-DEL"
                     
@@ -4556,7 +4557,8 @@ class HaplotypePhenotypeAnalyzer:
                 cds=cds_list,
                 snp_effects=snp_effects,
                 chrom=chrom,
-                cluster_haplotypes=cluster_haplotypes
+                cluster_haplotypes=cluster_haplotypes,
+                variant_info=self.extractor.variant_info if hasattr(self.extractor, 'variant_info') else {}
             )
         except Exception as e:
             logger.warning(f"综合HTML生成失败: {e}")
