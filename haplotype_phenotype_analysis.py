@@ -3152,49 +3152,42 @@ class ReportGenerator:
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
         
-        # 如果启用聚类排序，按序列相似度排序
-        if cluster_haplotypes and 'Haplotype_Seq' in hap_sample_df.columns:
-            # 获取所有单倍型及其序列
-            hap_seqs = {}
+        # 获取所有单倍型及其序列（用于聚类）
+        hap_seqs = {}
+        if 'Haplotype_Seq' in hap_sample_df.columns:
             for hap in hap_counts.index:
                 hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
                 if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
                     seq = hap_rows['Haplotype_Seq'].iloc[0].replace('|', '')
                     hap_seqs[hap] = seq
-            
-            # 使用层次聚类按序列相似度排序
-            from scipy.cluster.hierarchy import linkage, leaves_list
-            from scipy.spatial.distance import pdist
-            
-            if len(hap_seqs) > 1:
-                # 将序列转换为数字编码用于距离计算
-                all_seqs = list(hap_seqs.values())
-                hap_names = list(hap_seqs.keys())
+        
+        # 计算两种排序：按数量和按聚类
+        top_haps_count = hap_counts.head(8).index.tolist()  # 按数量排序
+        
+        # 计算聚类排序
+        top_haps_cluster = top_haps_count.copy()  # 默认使用数量排序
+        if len(hap_seqs) > 1:
+            try:
+                from scipy.cluster.hierarchy import linkage, leaves_list
+                from scipy.spatial.distance import pdist
                 
-                # 将序列转换为二进制矩阵（A=0, T=1, C=2, G=3, I/D/N=4）
+                all_seqs = [hap_seqs[hap] for hap in hap_counts.index if hap in hap_seqs]
+                hap_names = [hap for hap in hap_counts.index if hap in hap_seqs]
+                
                 base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 4, 'N': 4}
-                seq_matrix = []
-                for seq in all_seqs:
-                    seq_matrix.append([base_map.get(base.upper(), 4) for base in seq])
+                seq_matrix = [[base_map.get(base.upper(), 4) for base in seq] for seq in all_seqs]
                 
-                # 计算汉明距离并进行层次聚类
-                try:
-                    distances = pdist(seq_matrix, metric='hamming')
-                    linkage_matrix = linkage(distances, method='average')
-                    leaf_order = leaves_list(linkage_matrix)
-                    
-                    # 按聚类结果重新排序
-                    sorted_haps = [hap_names[i] for i in leaf_order]
-                    top_haps = sorted_haps[:8]  # 取前8个
-                    print(f"[DEBUG] 使用聚类排序: {len(top_haps)} 个单倍型")
-                except Exception as e:
-                    print(f"[WARNING] 聚类排序失败: {e}，使用默认数量排序")
-                    top_haps = hap_counts.head(8).index.tolist()
-            else:
-                top_haps = hap_counts.head(8).index.tolist()
-        else:
-            # 默认按数量排序
-            top_haps = hap_counts.head(8).index.tolist()
+                distances = pdist(seq_matrix, metric='hamming')
+                linkage_matrix = linkage(distances, method='average')
+                leaf_order = leaves_list(linkage_matrix)
+                
+                sorted_haps = [hap_names[i] for i in leaf_order]
+                top_haps_cluster = sorted_haps[:8]
+            except Exception as e:
+                print(f"[WARNING] 聚类排序计算失败: {e}")
+        
+        # 使用数量排序作为默认显示
+        top_haps = top_haps_count
         
         # 基因边界
         g_start = gene_start if gene_start else region_start
@@ -3414,6 +3407,9 @@ class ReportGenerator:
         <span id="zoomLevel">100%</span>
         <button onclick="resetZoom()" style="margin-left:10px;">Reset</button>
         <button onclick="fitToWindow()" style="margin-left:5px;">Fit</button>
+        <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
+        <label>Sort:</label>
+        <button id="sortBtn" onclick="toggleSort()" style="min-width:80px;">By Count</button>
     </div>
     
     <div class="content-wrapper">
@@ -3694,7 +3690,7 @@ class ReportGenerator:
             else:
                 box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
             
-            html += f'''<tr class="{row_class}">
+            html += f'''<tr class="{row_class}" data-hap="{hap}">
     <td class="hap-cell">{hap}{ref_tag}</td>
     <td class="effect-cell">
         <div class="bar-container">
@@ -3804,8 +3800,8 @@ class ReportGenerator:
             <div class="base-legend-item"><div class="base-box" style="background:#3498DB;">C</div>Cytosine</div>
             <div class="base-legend-item"><div class="base-box" style="background:#F1C40F;">G</div>Guanine</div>
             <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
-            <div class="base-legend-item"><div class="base-box" style="background:#e91e63;">I</div>Insertion</div>
-            <div class="base-legend-item"><div class="base-box" style="background:#9b59b6;">D</div>Deletion</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#e91e63;">+</div>Insertion (+nbp)</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#9b59b6;">-</div>Deletion (-nbp)</div>
             <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
             <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#95a5a6;"></div>Reference</div>
             <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#8B0000;"></div>P &lt; 0.01</div>
@@ -3847,9 +3843,53 @@ function fitToWindow() {{
 
 // 初始化
 applyZoom();
+
+// 单倍型排序功能
+var countOrder = {hap_order_count};
+var clusterOrder = {hap_order_cluster};
+var currentSort = 'count';
+
+function toggleSort() {{
+    var tbody = document.querySelector('.data-table tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr[data-hap]'));
+    var btn = document.getElementById('sortBtn');
+    
+    if (currentSort === 'count') {{
+        // 切换到聚类排序
+        currentSort = 'cluster';
+        btn.innerText = 'By Cluster';
+        var orderMap = {{}};
+        clusterOrder.forEach((hap, idx) => {{ orderMap[hap] = idx; }});
+        rows.sort((a, b) => {{
+            var hapA = a.getAttribute('data-hap');
+            var hapB = b.getAttribute('data-hap');
+            return (orderMap[hapA] || 999) - (orderMap[hapB] || 999);
+        }});
+    }} else {{
+        // 切换到数量排序
+        currentSort = 'count';
+        btn.innerText = 'By Count';
+        var orderMap = {{}};
+        countOrder.forEach((hap, idx) => {{ orderMap[hap] = idx; }});
+        rows.sort((a, b) => {{
+            var hapA = a.getAttribute('data-hap');
+            var hapB = b.getAttribute('data-hap');
+            return (orderMap[hapA] || 999) - (orderMap[hapB] || 999);
+        }});
+    }}
+    
+    // 重新排列行
+    rows.forEach(row => tbody.appendChild(row));
+}}
 </script>
 </body>
 </html>'''
+        
+        # 替换排序顺序变量
+        hap_order_count_json = str(top_haps_count).replace("'", '"')
+        hap_order_cluster_json = str(top_haps_cluster).replace("'", '"')
+        html = html.replace('{hap_order_count}', hap_order_count_json)
+        html = html.replace('{hap_order_cluster}', hap_order_cluster_json)
         
         out = os.path.join(self.output_dir, "integrated_analysis.html")
         with open(out, 'w', encoding='utf-8') as f:
