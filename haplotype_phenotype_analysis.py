@@ -3819,14 +3819,14 @@ var zs = document.getElementById('zoomSlider');
 var zl = document.getElementById('zoomLevel');
 var cz = 100;
 
-function applyZoom() {{
+function applyZoom() {
     if (zc) {
         zc.style.transform = 'scale(' + (cz / 100) + ')';
         zc.style.transformOrigin = 'top left';
     }
     if (zs) zs.value = cz;
     if (zl) zl.innerText = cz + '%';
-}}
+}
 
 function zoomIn() { cz = Math.min(150, cz + 10); applyZoom(); }
 function zoomOut() { cz = Math.max(20, cz - 10); applyZoom(); }
@@ -3839,7 +3839,7 @@ function fitToWindow() {
         cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100)));
         applyZoom();
     }
-}}
+}
 
 // 初始化
 applyZoom();
