@@ -528,12 +528,14 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
 
 def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                             min_samples: int = 5, pvalue_threshold: float = 0.05,
-                            gff_file: str = None, results_dir: str = None) -> dict:
+                            gff_file: str = None, results_dir: str = None,
+                            cluster_haplotypes: bool = False) -> dict:
     """
     对单个基因进行单倍型-表型关联分析，并生成综HTML图
     
     Args:
         results_dir: HTML图表输出目录
+        cluster_haplotypes: 是否按序列相似度聚类排序单倍型
     
     Returns:
         dict: 包含关联分析结果和HTML路径的字典
@@ -673,7 +675,8 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                     start=start,
                     end=end,
                     gene_id=gene_id,
-                    phenotype_cols=[pheno_col]
+                    phenotype_cols=[pheno_col],
+                    cluster_haplotypes=cluster_haplotypes
                 )
                 
                 # 查找生成的HTML文件
@@ -705,7 +708,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     min_samples: int = 5, run_analysis: bool = True, 
                     pvalue_threshold: float = 0.05,
                     generate_html: bool = True,
-                    test_region_length: int = 0) -> pd.DataFrame:
+                    test_region_length: int = 0,
+                    cluster_haplotypes: bool = False) -> pd.DataFrame:
     """
     运行指定基因的单倍型数据集构建
     
@@ -738,6 +742,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
         run_analysis: 是否进行关联分析
         pvalue_threshold: P值显著性阈值
         generate_html: 是否生成HTML报告
+        cluster_haplotypes: 是否按序列相似度聚类排序单倍型
     
     Returns:
         DataFrame: 扫描结果总表
@@ -928,7 +933,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                             start=result['start'],
                             end=result['end'],
                             gene_id=gene_id,
-                            phenotype_cols=[pheno_col]
+                            phenotype_cols=[pheno_col],
+                            cluster_haplotypes=cluster_haplotypes
                         )
                         print(f"  [HTML] {gene_id}: 综合分析图已生成")
                     except Exception as html_e:
@@ -1024,6 +1030,8 @@ def main():
                         help="P值显著性阈值")
     parser.add_argument("--test-region", type=int, default=ScanConfig.TEST_REGION_LENGTH,
                         help="测试模式：限制区间长度(bp)，0表示使用完整基因区间")
+    parser.add_argument("--cluster", action="store_true",
+                        help="按序列相似度聚类排序单倍型（默认按数量排序）")
     
     args = parser.parse_args()
     
@@ -1038,7 +1046,8 @@ def main():
         min_samples=args.min_samples,
         run_analysis=not args.no_analysis,
         pvalue_threshold=args.pvalue_threshold,
-        test_region_length=args.test_region
+        test_region_length=args.test_region,
+        cluster_haplotypes=args.cluster
     )
 
 

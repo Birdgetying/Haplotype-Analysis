@@ -619,6 +619,7 @@ class HaplotypeExtractor:
         self.vcf_file = vcf_file
         self.samples = []
         self.positions = []
+        self.variant_info = {}  # 存储变异信息: {pos: {'ref': '', 'alt': '', 'len_diff': int}}
         self.sample_haplotypes = {}
         
     def _gt_to_allele(self, rec, sample_name: str, ref: str, alt0: str) -> str:
@@ -715,6 +716,7 @@ class HaplotypeExtractor:
             logger.warning("VCF header中没有染色体信息，将尝试直接查询")
         positions = []
         sample_alleles = {s: [] for s in self.samples}
+        variant_info = {}  # 存储变异详细信息
         
         # 检查是否有索引
         has_index = False
@@ -759,6 +761,15 @@ class HaplotypeExtractor:
                 if record_count % 100 == 0:
                     logger.debug(f"已处理 {record_count} 条SNP记录...")
                 
+                # 存储变异信息
+                len_diff = len(alt0) - len(ref)
+                variant_info[pos] = {
+                    'ref': ref,
+                    'alt': alt0,
+                    'len_diff': len_diff,
+                    'is_sv': abs(len_diff) >= 50
+                }
+                
                 positions.append(pos)
                 
                 for s in self.samples:
@@ -789,6 +800,15 @@ class HaplotypeExtractor:
                 
                 record_count += 1
                 positions.append(pos)
+                
+                # 存储变异信息
+                len_diff = len(alt0) - len(ref)
+                variant_info[pos] = {
+                    'ref': ref,
+                    'alt': alt0,
+                    'len_diff': len_diff,
+                    'is_sv': abs(len_diff) >= 50
+                }
                 
                 for s in self.samples:
                     allele = self._gt_to_allele(rec, s, ref, alt0)
@@ -821,6 +841,8 @@ class HaplotypeExtractor:
                 # 移除无变异位点
                 keep_indices = [i for i in range(len(positions)) if i not in invariant_positions]
                 positions = [positions[i] for i in keep_indices]
+                # 同步更新variant_info
+                variant_info = {pos: variant_info[pos] for pos in positions if pos in variant_info}
                 for sample in self.samples:
                     if sample_alleles[sample]:
                         sample_alleles[sample] = [sample_alleles[sample][i] for i in keep_indices]
@@ -866,6 +888,7 @@ class HaplotypeExtractor:
         hap_sample_df = pd.DataFrame(rows)
         
         self.sample_haplotypes = sample_to_hap
+        self.variant_info = variant_info  # 保存变异信息
         
         return positions, hap_df, hap_sample_df
 
@@ -3111,8 +3134,12 @@ class ReportGenerator:
                                   strand: str = '+',
                                   exons: list = None, cds: list = None,
                                   snp_effects: dict = None,
-                                  chrom: str = None) -> str:
+                                  chrom: str = None,
+                                  cluster_haplotypes: bool = False) -> str:
         """生成综合HTML大图（效应图 + 箱线图 + 单倍型序列 共用Hap标签）
+        
+        Args:
+            cluster_haplotypes: 是否按序列相似度聚类排序（默认False按数量排序）
         
         基因结构使用真实的外显子和 CDS 坐标（从 GTF 解析）:
         - exons: 外显子坐标列表 [(start, end), ...]
@@ -3122,7 +3149,50 @@ class ReportGenerator:
         """
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
-        top_haps = hap_counts.head(8).index.tolist()
+        
+        # 如果启用聚类排序，按序列相似度排序
+        if cluster_haplotypes and 'Haplotype_Seq' in hap_sample_df.columns:
+            # 获取所有单倍型及其序列
+            hap_seqs = {}
+            for hap in hap_counts.index:
+                hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
+                if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
+                    seq = hap_rows['Haplotype_Seq'].iloc[0].replace('|', '')
+                    hap_seqs[hap] = seq
+            
+            # 使用层次聚类按序列相似度排序
+            from scipy.cluster.hierarchy import linkage, leaves_list
+            from scipy.spatial.distance import pdist
+            
+            if len(hap_seqs) > 1:
+                # 将序列转换为数字编码用于距离计算
+                all_seqs = list(hap_seqs.values())
+                hap_names = list(hap_seqs.keys())
+                
+                # 将序列转换为二进制矩阵（A=0, T=1, C=2, G=3, I/D/N=4）
+                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 4, 'N': 4}
+                seq_matrix = []
+                for seq in all_seqs:
+                    seq_matrix.append([base_map.get(base.upper(), 4) for base in seq])
+                
+                # 计算汉明距离并进行层次聚类
+                try:
+                    distances = pdist(seq_matrix, metric='hamming')
+                    linkage_matrix = linkage(distances, method='average')
+                    leaf_order = leaves_list(linkage_matrix)
+                    
+                    # 按聚类结果重新排序
+                    sorted_haps = [hap_names[i] for i in leaf_order]
+                    top_haps = sorted_haps[:8]  # 取前8个
+                    print(f"[DEBUG] 使用聚类排序: {len(top_haps)} 个单倍型")
+                except Exception as e:
+                    print(f"[WARNING] 聚类排序失败: {e}，使用默认数量排序")
+                    top_haps = hap_counts.head(8).index.tolist()
+            else:
+                top_haps = hap_counts.head(8).index.tolist()
+        else:
+            # 默认按数量排序
+            top_haps = hap_counts.head(8).index.tolist()
         
         # 基因边界
         g_start = gene_start if gene_start else region_start
@@ -3642,7 +3712,21 @@ class ReportGenerator:
                     orig_idx = display_orig_indices[idx] if idx < len(display_orig_indices) else idx
                     base = seq[orig_idx].upper() if orig_idx < len(seq) else 'N'
                     color = base_colors.get(base, '#666')
-                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;"><span class="base" style="color:{color};">{base}</span></td>\n'
+                    
+                    # 获取位置信息，用于显示长度形式
+                    pos = display_positions[idx] if idx < len(display_positions) else None
+                    variant_info = self.extractor.variant_info if hasattr(self, 'extractor') and hasattr(self.extractor, 'variant_info') else {}
+                    
+                    # 对于I/D，显示长度形式如 "+466bp" 或 "-725bp"
+                    display_base = base
+                    if base == 'I' and pos and pos in variant_info:
+                        len_diff = variant_info[pos].get('len_diff', 0)
+                        display_base = f"+{len_diff}bp" if len_diff > 0 else "+INS"
+                    elif base == 'D' and pos and pos in variant_info:
+                        len_diff = variant_info[pos].get('len_diff', 0)
+                        display_base = f"{len_diff}bp" if len_diff < 0 else "-DEL"
+                    
+                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;"><span class="base" style="color:{color};font-size:9px;">{display_base}</span></td>\n'
             
             html += f'<td class="n-cell">{cnt}</td></tr>\n'
         
@@ -4166,7 +4250,8 @@ class HaplotypePhenotypeAnalyzer:
     
     def analyze_gene(self, chrom: str, start: int, end: int, 
                      gene_id: str = None, phenotype_cols: list = None,
-                     min_samples: int = 2, gwas_file: str = None) -> dict:
+                     min_samples: int = 2, gwas_file: str = None,
+                     cluster_haplotypes: bool = False) -> dict:
         """
         分析指定基因区间的单倍型 - 表型关联
             
@@ -4178,6 +4263,7 @@ class HaplotypePhenotypeAnalyzer:
             phenotype_cols: 要分析的表型列列表（None=全部）
             min_samples: 最小样本数阈值
             gwas_file: GWAS结果文件路径（可选，用于对比分析）
+            cluster_haplotypes: 是否按序列相似度聚类排序（默认False）
                 
         Returns:
             dict: 分析结果汇总
@@ -4469,7 +4555,8 @@ class HaplotypePhenotypeAnalyzer:
                 exons=exons_list,
                 cds=cds_list,
                 snp_effects=snp_effects,
-                chrom=chrom
+                chrom=chrom,
+                cluster_haplotypes=cluster_haplotypes
             )
         except Exception as e:
             logger.warning(f"综合HTML生成失败: {e}")
