@@ -3722,12 +3722,32 @@ class ReportGenerator:
                     display_base = base
                     if base == 'I' and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
-                        display_base = f"+{len_diff}bp" if len_diff > 0 else "+INS"
+                        # 插入: alt比ref长，显示正数
+                        if len_diff > 0:
+                            display_base = f"+{len_diff}bp"
+                        elif len_diff < 0:
+                            display_base = f"{len_diff}bp"  # 负数带符号
+                        else:
+                            display_base = "INS"
                     elif base == 'D' and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
-                        display_base = f"{len_diff}bp" if len_diff < 0 else "-DEL"
+                        # 缺失: alt比ref短，显示负数
+                        if len_diff < 0:
+                            display_base = f"{len_diff}bp"  # 已经是负数，包含-号
+                        elif len_diff > 0:
+                            display_base = f"+{len_diff}bp"
+                        else:
+                            display_base = "DEL"
                     
-                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;"><span class="base" style="color:{color};font-size:9px;">{display_base}</span></td>\n'
+                    # 根据文本长度调整字体大小，避免重叠
+                    if len(display_base) > 4:
+                        font_size = "7px"
+                    elif len(display_base) > 3:
+                        font_size = "8px"
+                    else:
+                        font_size = "9px"
+                    
+                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
             html += f'<td class="n-cell">{cnt}</td></tr>\n'
         
