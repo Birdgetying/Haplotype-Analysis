@@ -3820,25 +3820,25 @@ var zl = document.getElementById('zoomLevel');
 var cz = 100;
 
 function applyZoom() {{
-    if (zc) {{
+    if (zc) {
         zc.style.transform = 'scale(' + (cz / 100) + ')';
         zc.style.transformOrigin = 'top left';
-    }}
+    }
     if (zs) zs.value = cz;
     if (zl) zl.innerText = cz + '%';
 }}
 
-function zoomIn() {{ cz = Math.min(150, cz + 10); applyZoom(); }}
-function zoomOut() {{ cz = Math.max(20, cz - 10); applyZoom(); }}
-function resetZoom() {{ cz = 100; applyZoom(); }}
-function setZoom(v) {{ cz = parseInt(v); applyZoom(); }}
+function zoomIn() { cz = Math.min(150, cz + 10); applyZoom(); }
+function zoomOut() { cz = Math.max(20, cz - 10); applyZoom(); }
+function resetZoom() { cz = 100; applyZoom(); }
+function setZoom(v) { cz = parseInt(v); applyZoom(); }
 
-function fitToWindow() {{
+function fitToWindow() {
     var w = document.querySelector('.content-wrapper');
-    if (zc && w) {{
+    if (zc && w) {
         cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100)));
         applyZoom();
-    }}
+    }
 }}
 
 // 初始化
@@ -3849,38 +3849,38 @@ var countOrder = {hap_order_count};
 var clusterOrder = {hap_order_cluster};
 var currentSort = 'count';
 
-function toggleSort() {{
+function toggleSort() {
     var tbody = document.querySelector('.data-table tbody');
     var rows = Array.from(tbody.querySelectorAll('tr[data-hap]'));
     var btn = document.getElementById('sortBtn');
     
-    if (currentSort === 'count') {{
+    if (currentSort === 'count') {
         // 切换到聚类排序
         currentSort = 'cluster';
         btn.innerText = 'By Cluster';
-        var orderMap = {{}};
-        clusterOrder.forEach((hap, idx) => {{ orderMap[hap] = idx; }});
-        rows.sort((a, b) => {{
+        var orderMap = {};
+        clusterOrder.forEach(function(hap, idx) { orderMap[hap] = idx; });
+        rows.sort(function(a, b) {
             var hapA = a.getAttribute('data-hap');
             var hapB = b.getAttribute('data-hap');
             return (orderMap[hapA] || 999) - (orderMap[hapB] || 999);
-        }});
-    }} else {{
+        });
+    } else {
         // 切换到数量排序
         currentSort = 'count';
         btn.innerText = 'By Count';
-        var orderMap = {{}};
-        countOrder.forEach((hap, idx) => {{ orderMap[hap] = idx; }});
-        rows.sort((a, b) => {{
+        var orderMap = {};
+        countOrder.forEach(function(hap, idx) { orderMap[hap] = idx; });
+        rows.sort(function(a, b) {
             var hapA = a.getAttribute('data-hap');
             var hapB = b.getAttribute('data-hap');
             return (orderMap[hapA] || 999) - (orderMap[hapB] || 999);
-        }});
-    }}
+        });
+    }
     
     // 重新排列行
-    rows.forEach(row => tbody.appendChild(row));
-}}
+    rows.forEach(function(row) { tbody.appendChild(row); });
+}
 </script>
 </body>
 </html>'''
