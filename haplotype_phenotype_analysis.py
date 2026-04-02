@@ -5055,7 +5055,7 @@ document.addEventListener('DOMContentLoaded', function() {
         with open(out, 'w', encoding='utf-8') as f:
             f.write(html)
         print(f"[INFO] 综合HTML报告已保存: {out}")
-        return out
+        return html
 
     def generate_haplotype_network_html(self, hap_sample_df: pd.DataFrame,
                                         phenotype_col: str = None,
