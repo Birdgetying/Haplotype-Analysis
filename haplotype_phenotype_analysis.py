@@ -4115,6 +4115,14 @@ class ReportGenerator:
         .bar-median {{ position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }}
         .data-dot {{ position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }}
         .n-cell {{ font-size: 11px; color: #666; }}
+        @media print {{
+            .filter-panel, .zoom-controls {{ display: none !important; }}
+            .content-wrapper {{ max-height: none !important; overflow: visible !important; }}
+            .content {{ transform: none !important; }}
+            body {{ padding: 0; }}
+            .container {{ box-shadow: none; }}
+            @page {{ size: landscape; margin: 1cm; }}
+        }}
     </style>
 </head>
 <body>
