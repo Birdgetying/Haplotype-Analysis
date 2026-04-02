@@ -6442,15 +6442,17 @@ if (promoterStart < promoterEnd) {{
         
         # 生成 integrated_analysis.html
         integrated_path = os.path.join(self.output_dir, "integrated_analysis.html")
-        if not os.path.exists(integrated_path):
-            self.generate_integrated_html(
-                hap_sample_df, effect_results, variant_positions,
-                region_start, region_end, phenotype_col,
-                gene_start, gene_end, None, None, '+', [], [], None, chrom,
-                variant_info=variant_info,
-                variant_pvalues=variant_pvalues,
-                network_data=network_data
-            )
+        # 强制重新生成以确保使用最新代码
+        if os.path.exists(integrated_path):
+            os.remove(integrated_path)
+        self.generate_integrated_html(
+            hap_sample_df, effect_results, variant_positions,
+            region_start, region_end, phenotype_col,
+            gene_start, gene_end, None, None, '+', [], [], None, chrom,
+            variant_info=variant_info,
+            variant_pvalues=variant_pvalues,
+            network_data=network_data
+        )
         
         # JSON 序列化
         network_nodes_json = json.dumps(network_nodes, cls=NumpyEncoder)
