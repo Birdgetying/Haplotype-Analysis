@@ -5050,6 +5050,16 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__LEAD_POS__", _lead_js)
         html = html.replace("__EXON_REGIONS__", _exon_json)
         html = html.replace("__GENE_LABEL__", _glabel)
+        
+        # DEBUG: 检查exportSVG是否存在
+        if 'exportSVG' in html:
+            print("[DEBUG] exportSVG found in HTML before saving")
+        else:
+            print("[DEBUG] WARNING: exportSVG NOT found in HTML before saving")
+        if 'SVG</button>' in html:
+            print("[DEBUG] SVG button found in HTML before saving")
+        else:
+            print("[DEBUG] WARNING: SVG button NOT found in HTML before saving")
 
         out = os.path.join(self.output_dir, "integrated_analysis.html")
         with open(out, 'w', encoding='utf-8') as f:
@@ -6442,9 +6452,12 @@ if (promoterStart < promoterEnd) {{
         
         # 生成 integrated_analysis.html
         integrated_path = os.path.join(self.output_dir, "integrated_analysis.html")
+        print(f"[DEBUG] About to generate integrated_analysis.html at: {integrated_path}")
         # 强制重新生成以确保使用最新代码
         if os.path.exists(integrated_path):
+            print(f"[DEBUG] Removing existing file: {integrated_path}")
             os.remove(integrated_path)
+        print("[DEBUG] Calling generate_integrated_html...")
         self.generate_integrated_html(
             hap_sample_df, effect_results, variant_positions,
             region_start, region_end, phenotype_col,
