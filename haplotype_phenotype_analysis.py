@@ -4057,7 +4057,7 @@ class ReportGenerator:
         .filter-reset:hover {{ background: #7f8c8d; }}
         
         /* 缩放控制栏 */
-        .zoom-controls {{ display: flex; align-items: center; gap: 10px; padding: 10px 20px; 
+        .zoom-controls {{ display: flex; align-items: center; gap: 10px; padding: 10px 20px; flex-wrap: wrap;
                          background: #f8f9fa; border-bottom: 1px solid #e8e8e8; }}
         .zoom-controls label {{ font-size: 12px; color: #555; }}
         .zoom-controls button {{ padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px;
