@@ -4115,14 +4115,6 @@ class ReportGenerator:
         .bar-median {{ position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }}
         .data-dot {{ position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }}
         .n-cell {{ font-size: 11px; color: #666; }}
-        @media print {{
-            .filter-panel, .zoom-controls {{ display: none !important; }}
-            .content-wrapper {{ max-height: none !important; overflow: visible !important; }}
-            .content {{ transform: none !important; }}
-            body {{ padding: 0; }}
-            .container {{ box-shadow: none; }}
-            @page {{ size: landscape; margin: 1cm; }}
-        }}
     </style>
 </head>
 <body>
@@ -4182,7 +4174,7 @@ class ReportGenerator:
         <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
         <label>Export:</label>
         <button onclick="exportSVG()">SVG</button>
-        <button onclick="window.print()">Print/PDF</button>
+        <button onclick="window.print()">Print</button>
     </div>
     
     <div class="content-wrapper">
@@ -4983,18 +4975,18 @@ function drawGWASPlot(data) {
     });
 }
 
-function exportSVG() {
+function exportSVG() {{
     var content = document.getElementById('zoomContent');
     var svgElements = content.querySelectorAll('svg');
-    if (svgElements.length === 0) { alert('No SVG content found'); return; }
+    if (svgElements.length === 0) {{ alert('No SVG'); return; }}
     var svgNS = "http://www.w3.org/2000/svg";
     var combinedSVG = document.createElementNS(svgNS, "svg");
     var totalWidth = 0, totalHeight = 0;
-    for (var i = 0; i < svgElements.length; i++) {
+    for (var i = 0; i < svgElements.length; i++) {{
         var rect = svgElements[i].getBoundingClientRect();
         totalWidth = Math.max(totalWidth, rect.width);
         totalHeight += rect.height + 20;
-    }
+    }}
     combinedSVG.setAttribute("width", totalWidth);
     combinedSVG.setAttribute("height", totalHeight);
     combinedSVG.setAttribute("xmlns", svgNS);
@@ -5004,19 +4996,19 @@ function exportSVG() {
     bg.setAttribute("fill", "white");
     combinedSVG.appendChild(bg);
     var currentY = 0;
-    for (var j = 0; j < svgElements.length; j++) {
+    for (var j = 0; j < svgElements.length; j++) {{
         var rect = svgElements[j].getBoundingClientRect();
         var clonedSVG = svgElements[j].cloneNode(true);
         var g = document.createElementNS(svgNS, "g");
         g.setAttribute("transform", "translate(0," + currentY + ")");
-        while (clonedSVG.firstChild) {
+        while (clonedSVG.firstChild) {{
             g.appendChild(clonedSVG.firstChild);
-        }
+        }}
         combinedSVG.appendChild(g);
         currentY += rect.height + 20;
-    }
+    }}
     var serializer = new XMLSerializer();
-    var svgString = "<?xml version=\"1.0\" standalone=\"no\"?>\n" + serializer.serializeToString(combinedSVG);
+    var svgString = "<?xml version=\"1.0\" standalone=\"no\"?>\\n" + serializer.serializeToString(combinedSVG);
     var blob = new Blob([svgString], {{type: "image/svg+xml"}});
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
@@ -5026,7 +5018,7 @@ function exportSVG() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-}
+}}
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
