@@ -5008,7 +5008,7 @@ function exportSVG() {{
         currentY += rect.height + 20;
     }}
     var serializer = new XMLSerializer();
-    var svgString = "<?xml version=\"1.0\" standalone=\"no\"?>\\n" + serializer.serializeToString(combinedSVG);
+    var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
     var blob = new Blob([svgString], {{type: "image/svg+xml"}});
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
