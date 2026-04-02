@@ -409,6 +409,335 @@ def _translate_codon(codon: str) -> str:
     return _GENETIC_CODE.get(codon, "X")
 
 
+# 氨基酸理化性质分类（用于错义突变分级）
+_AA_PROPERTIES = {
+    # 疏水氨基酸
+    'hydrophobic': {'A', 'V', 'L', 'I', 'M', 'F', 'W', 'P', 'G'},
+    # 极性不带电氨基酸
+    'polar_uncharged': {'S', 'T', 'C', 'N', 'Q', 'Y'},
+    # 带正电氨基酸（碱性）
+    'positive': {'K', 'R', 'H'},
+    # 带负电氨基酸（酸性）
+    'negative': {'D', 'E'},
+    # 终止密码子
+    'stop': {'*'},
+}
+
+def _get_aa_property(aa: str) -> str:
+    """获取氨基酸的理化性质类别"""
+    aa = aa.upper()
+    for prop, aas in _AA_PROPERTIES.items():
+        if aa in aas:
+            return prop
+    return 'unknown'
+
+def _classify_amino_acid_substitution(aa_ref: str, aa_alt: str) -> str:
+    """
+    对错义突变进行分级
+    
+    返回:
+        'conservative': 保守替换（同性质氨基酸之间替换）
+        'semi_conservative': 半保守替换（相似性质之间替换）
+        'non_conservative': 非保守替换（不同性质氨基酸之间替换）
+    """
+    prop_ref = _get_aa_property(aa_ref)
+    prop_alt = _get_aa_property(aa_alt)
+    
+    # 相同性质 = 保守替换
+    if prop_ref == prop_alt:
+        return 'conservative'
+    
+    # 定义相似性质组（半保守）
+    similar_groups = [
+        {'hydrophobic', 'polar_uncharged'},  # 疏水 ↔ 极性不带电
+        {'positive', 'negative'},  # 带电氨基酸之间
+    ]
+    
+    for group in similar_groups:
+        if prop_ref in group and prop_alt in group:
+            return 'semi_conservative'
+    
+    # 其他情况 = 非保守替换
+    return 'non_conservative'
+
+
+# ============================================================================
+# 功能影响注释（限制性内切酶、剪接位点、磷酸化位点）
+# ============================================================================
+
+# 常见限制性内切酶识别位点（简化版）
+_RESTRICTION_ENZYMES = {
+    'EcoRI': 'GAATTC',
+    'BamHI': 'GGATCC',
+    'HindIII': 'AAGCTT',
+    'XbaI': 'TCTAGA',
+    'XhoI': 'CTCGAG',
+    'KpnI': 'GGTACC',
+    'SacI': 'GAGCTC',
+    'PstI': 'CTGCAG',
+    'SmaI': 'CCCGGG',
+    'SalI': 'GTCGAC',
+}
+
+# 常见磷酸化位点基序（简化版）
+_PHOSPHORYLATION_MOTIFS = {
+    'PKA': ['RRXS', 'RXXS'],  # cAMP-dependent protein kinase
+    'PKC': ['SXRXK', 'SXRXX'],  # Protein kinase C
+    'CK2': ['SXXE', 'SXXD'],  # Casein kinase II
+    'MAPK': ['PXSP', 'PXTP'],  # MAP kinase
+}
+
+def _check_restriction_site(sequence: str, position: int, ref: str, alt: str) -> list:
+    """
+    检查变异是否影响限制性内切酶识别位点
+    
+    返回:
+        list: 被破坏或创建的内切酶列表
+    """
+    affected_enzymes = []
+    
+    for enzyme, site in _RESTRICTION_ENZYMES.items():
+        site_len = len(site)
+        # 检查变异位置是否在识别位点内
+        for i in range(max(0, position - site_len + 1), min(len(sequence) - site_len + 1, position + 1)):
+            window = sequence[i:i+site_len]
+            # 检查变异是否破坏了识别位点
+            if window == site:
+                # 模拟变异后的序列
+                mutated_window = window[:position-i] + alt + window[position-i+1:]
+                if mutated_window != site:
+                    affected_enzymes.append(f"-{enzyme}")  # 破坏
+            # 检查变异是否创建了识别位点
+            else:
+                mutated_window = window[:position-i] + alt + window[position-i+1:]
+                if mutated_window == site:
+                    affected_enzymes.append(f"+{enzyme}")  # 创建
+    
+    return affected_enzymes
+
+
+def _check_splice_site(chrom: str, position: int, gene_strand: str, 
+                       exon_intervals: list, fasta_path: str) -> dict:
+    """
+    检查变异是否影响剪接位点
+    
+    返回:
+        dict: {'is_splice_site': bool, 'site_type': str, 'distance': int}
+    """
+    result = {'is_splice_site': False, 'site_type': None, 'distance': None}
+    
+    if not PYSAM_AVAILABLE or not fasta_path:
+        return result
+    
+    try:
+        import pysam as _pysam
+        fasta = _pysam.FastaFile(fasta_path)
+        
+        for exon_start, exon_end in exon_intervals:
+            # 检查5'剪接位点 (GT)
+            if gene_strand == '+':
+                donor_site = exon_end  # 外显子末端
+                acceptor_site = exon_start - 1  # 外显子起始前
+            else:
+                donor_site = exon_start - 1
+                acceptor_site = exon_end
+            
+            # 检查是否与剪接位点重叠
+            if abs(position - donor_site) <= 2:
+                result['is_splice_site'] = True
+                result['site_type'] = 'donor'
+                result['distance'] = abs(position - donor_site)
+                return result
+            elif abs(position - acceptor_site) <= 2:
+                result['is_splice_site'] = True
+                result['site_type'] = 'acceptor'
+                result['distance'] = abs(position - acceptor_site)
+                return result
+        
+        fasta.close()
+    except Exception:
+        pass
+    
+    return result
+
+
+def _check_phosphorylation_site(sequence: str, position: int, 
+                                 aa_ref: str, aa_alt: str) -> list:
+    """
+    检查变异是否影响磷酸化位点
+    
+    返回:
+        list: 受影响的激酶列表
+    """
+    affected_kinases = []
+    
+    # 只检查丝氨酸(S)、苏氨酸(T)、酪氨酸(Y)的替换
+    if aa_ref not in 'STY' and aa_alt not in 'STY':
+        return affected_kinases
+    
+    # 检查是否在磷酸化基序中
+    for kinase, motifs in _PHOSPHORYLATION_MOTIFS.items():
+        for motif in motifs:
+            motif_len = len(motif)
+            # 简化的基序匹配（实际应用需要更复杂的算法）
+            for i in range(max(0, position - motif_len + 1), 
+                          min(len(sequence) - motif_len + 1, position + 1)):
+                window = sequence[i:i+motif_len]
+                # 检查变异是否破坏或创建磷酸化位点
+                if 'X' in motif:
+                    # 简化处理：如果变异涉及S/T/Y，认为可能影响
+                    if aa_ref in 'STY' or aa_alt in 'STY':
+                        affected_kinases.append(kinase)
+                        break
+    
+    return list(set(affected_kinases))
+
+
+# ============================================================================
+# 进化保守性评分（PhyloP/GERP模拟）
+# ============================================================================
+
+def _calculate_conservation_score(position: int, chrom: str, 
+                                   fasta_path: str, window: int = 10) -> dict:
+    """
+    计算位点的进化保守性评分（简化版）
+    
+    使用局部序列复杂度作为保守性的代理指标：
+    - 低复杂度区域（重复序列）= 低保守性
+    - 高复杂度区域 = 高保守性
+    
+    返回:
+        dict: {
+            'phylop_score': float,  # 模拟PhyloP分数 (-1到1)
+            'gerp_score': float,    # 模拟GERP分数 (0到6)
+            'conservation_level': str  # 'high', 'moderate', 'low'
+        }
+    """
+    result = {
+        'phylop_score': 0.0,
+        'gerp_score': 0.0,
+        'conservation_level': 'unknown'
+    }
+    
+    if not PYSAM_AVAILABLE or not fasta_path:
+        return result
+    
+    try:
+        import pysam as _pysam
+        fasta = _pysam.FastaFile(fasta_path)
+        
+        # 获取窗口序列
+        seq = fasta.fetch(chrom, max(0, position - window - 1), position + window)
+        if len(seq) < window * 2:
+            fasta.close()
+            return result
+        
+        # 计算序列复杂度（使用k-mer频率）
+        k = 3
+        kmers = {}
+        total_kmers = 0
+        for i in range(len(seq) - k + 1):
+            kmer = seq[i:i+k]
+            kmers[kmer] = kmers.get(kmer, 0) + 1
+            total_kmers += 1
+        
+        # 计算熵（复杂度指标）
+        import math
+        entropy = 0
+        for count in kmers.values():
+            if count > 0:
+                p = count / total_kmers
+                entropy -= p * math.log2(p)
+        
+        # 最大熵（均匀分布）
+        max_entropy = math.log2(min(4**k, total_kmers))
+        
+        # 归一化复杂度 (0-1)
+        complexity = entropy / max_entropy if max_entropy > 0 else 0
+        
+        # 转换为保守性分数（高复杂度 = 高保守性）
+        # PhyloP: 正值表示保守，负值表示快速进化
+        result['phylop_score'] = round((complexity - 0.5) * 2, 3)
+        
+        # GERP: 分数越高越保守 (0-6)
+        result['gerp_score'] = round(complexity * 6, 2)
+        
+        # 保守性等级
+        if result['gerp_score'] > 4:
+            result['conservation_level'] = 'high'
+        elif result['gerp_score'] > 2:
+            result['conservation_level'] = 'moderate'
+        else:
+            result['conservation_level'] = 'low'
+        
+        fasta.close()
+    except Exception:
+        pass
+    
+    return result
+
+
+def _annotate_variant_functional_impact(pos: int, chrom: str, gene_strand: str,
+                                        ref: str, alt: str, aa_ref: str, aa_alt: str,
+                                        exon_intervals: list, fasta_path: str,
+                                        cds_seq: str = None, cds_pos_to_idx: dict = None) -> dict:
+    """
+    综合注释变异的功能影响
+    
+    返回:
+        dict: 包含所有功能注释信息
+    """
+    annotation = {
+        'restriction_enzymes': [],
+        'splice_site': {},
+        'phosphorylation': [],
+        'conservation': {},
+        'functional_score': 0  # 综合功能影响分数
+    }
+    
+    # 1. 检查限制性内切酶位点
+    if fasta_path and PYSAM_AVAILABLE:
+        try:
+            import pysam as _pysam
+            fasta = _pysam.FastaFile(fasta_path)
+            # 获取足够长的序列用于分析
+            seq = fasta.fetch(chrom, max(0, pos - 20), pos + 20)
+            annotation['restriction_enzymes'] = _check_restriction_site(seq, 20, ref, alt)
+            fasta.close()
+        except Exception:
+            pass
+    
+    # 2. 检查剪接位点
+    annotation['splice_site'] = _check_splice_site(chrom, pos, gene_strand, exon_intervals, fasta_path)
+    
+    # 3. 检查磷酸化位点
+    if cds_seq and cds_pos_to_idx and pos in cds_pos_to_idx:
+        idx = cds_pos_to_idx[pos]
+        window_start = max(0, idx - 10)
+        window_end = min(len(cds_seq), idx + 10)
+        protein_window = cds_seq[window_start:window_end]
+        window_pos = idx - window_start
+        annotation['phosphorylation'] = _check_phosphorylation_site(protein_window, window_pos, aa_ref, aa_alt)
+    
+    # 4. 计算保守性评分
+    annotation['conservation'] = _calculate_conservation_score(pos, chrom, fasta_path)
+    
+    # 5. 计算综合功能影响分数
+    score = 0
+    if annotation['splice_site'].get('is_splice_site'):
+        score += 5  # 剪接位点变异影响大
+    if annotation['phosphorylation']:
+        score += 2  # 磷酸化位点
+    if annotation['restriction_enzymes']:
+        score += 1  # 限制性内切酶位点
+    if annotation['conservation'].get('conservation_level') == 'high':
+        score += 2  # 高保守区域
+    
+    annotation['functional_score'] = score
+    
+    return annotation
+
+
 def _pos_in_any_interval(pos: int, intervals) -> bool:
     for s, e in intervals:
         if s <= pos <= e:
@@ -775,20 +1104,43 @@ class HaplotypeExtractor:
                 if record_count % 100 == 0:
                     logger.debug(f"已处理 {record_count} 条SNP记录...")
                 
+                positions.append(pos)
+                
+                # 收集该位点的所有等位基因以计算MAF和缺失率
+                pos_alleles = []
+                missing_count = 0
+                for s in self.samples:
+                    allele = self._gt_to_allele(rec, s, ref, alt0)
+                    if allele == "N" or allele is None:
+                        missing_count += 1
+                    else:
+                        pos_alleles.append(allele)
+                    sample_alleles[s].append(allele if allele else "N")
+                
+                # 计算MAF和缺失率
+                n_total = len(self.samples)
+                n_valid = n_total - missing_count
+                missing_rate = missing_count / n_total if n_total > 0 else 0
+                
+                # 计算MAF（基于有效等位基因）
+                maf = 0.5  # 默认值
+                if n_valid > 0:
+                    from collections import Counter
+                    allele_counts = Counter(pos_alleles)
+                    if len(allele_counts) >= 2:
+                        counts = sorted(allele_counts.values(), reverse=True)
+                        maf = counts[1] / n_valid  # 次等位基因频率
+                
                 # 存储变异信息
                 len_diff = len(alt0) - len(ref)
                 variant_info[pos] = {
                     'ref': ref,
                     'alt': alt0,
                     'len_diff': len_diff,
-                    'is_sv': abs(len_diff) >= 50
+                    'is_sv': abs(len_diff) >= 50,
+                    'maf': maf,
+                    'missing_rate': missing_rate
                 }
-                
-                positions.append(pos)
-                
-                for s in self.samples:
-                    allele = self._gt_to_allele(rec, s, ref, alt0)
-                    sample_alleles[s].append(allele if allele else "N")
         else:
             # 无索引，需要扫描整个文件（非常慢！）
             logger.warning("无索引，开始全文件扫描（可能非常慢）...")
@@ -815,18 +1167,41 @@ class HaplotypeExtractor:
                 record_count += 1
                 positions.append(pos)
                 
+                # 收集该位点的所有等位基因以计算MAF和缺失率
+                pos_alleles = []
+                missing_count = 0
+                for s in self.samples:
+                    allele = self._gt_to_allele(rec, s, ref, alt0)
+                    if allele == "N" or allele is None:
+                        missing_count += 1
+                    else:
+                        pos_alleles.append(allele)
+                    sample_alleles[s].append(allele if allele else "N")
+                
+                # 计算MAF和缺失率
+                n_total = len(self.samples)
+                n_valid = n_total - missing_count
+                missing_rate = missing_count / n_total if n_total > 0 else 0
+                
+                # 计算MAF（基于有效等位基因）
+                maf = 0.5  # 默认值
+                if n_valid > 0:
+                    from collections import Counter
+                    allele_counts = Counter(pos_alleles)
+                    if len(allele_counts) >= 2:
+                        counts = sorted(allele_counts.values(), reverse=True)
+                        maf = counts[1] / n_valid  # 次等位基因频率
+                
                 # 存储变异信息
                 len_diff = len(alt0) - len(ref)
                 variant_info[pos] = {
                     'ref': ref,
                     'alt': alt0,
                     'len_diff': len_diff,
-                    'is_sv': abs(len_diff) >= 50
+                    'is_sv': abs(len_diff) >= 50,
+                    'maf': maf,
+                    'missing_rate': missing_rate
                 }
-                
-                for s in self.samples:
-                    allele = self._gt_to_allele(rec, s, ref, alt0)
-                    sample_alleles[s].append(allele if allele else "N")
             
             logger.info(f"全文件扫描完成: 共扫描 {total_scanned} 条，匹配 {record_count} 条SNP")
         
@@ -905,6 +1280,185 @@ class HaplotypeExtractor:
         self.variant_info = variant_info  # 保存变异信息
         
         return positions, hap_df, hap_sample_df
+
+
+def compute_variant_phenotype_pvalues(
+    merged_df: pd.DataFrame,
+    positions: list,
+    phenotype_col: str,
+) -> dict:
+    """
+    按位点计算表型与等位基因关联的近似 p 值（两组 Welch t 检验，多组 ANOVA）。
+    用于 GWAS 棒棒糖图等可视化；若某位点等位基因无变异或样本不足则 p=1.0。
+    """
+    out: dict = {}
+    if merged_df is None or len(merged_df) == 0 or not positions or not phenotype_col:
+        return out
+    if "Haplotype_Seq" not in merged_df.columns:
+        return out
+    df = merged_df[
+        (merged_df["Hap_Name"] != "Other")
+        & (merged_df[phenotype_col].notna())
+        & (merged_df["Haplotype_Seq"].notna())
+    ].copy()
+    pos_to_idx = {int(p): i for i, p in enumerate(positions)}
+    for pos in positions:
+        ip = int(pos)
+        idx = pos_to_idx.get(ip)
+        if idx is None:
+            continue
+        alleles, phenos = [], []
+        for _, row in df.iterrows():
+            parts = str(row["Haplotype_Seq"]).split("|")
+            if idx >= len(parts):
+                continue
+            a = parts[idx].strip().upper()
+            if not a or a == "N":
+                continue
+            try:
+                y = float(row[phenotype_col])
+            except (TypeError, ValueError):
+                continue
+            alleles.append(a)
+            phenos.append(y)
+        if len(phenos) < 5:
+            out[ip] = 1.0
+            continue
+        uniq = []
+        seen = set()
+        for a in alleles:
+            if a not in seen:
+                seen.add(a)
+                uniq.append(a)
+        if len(uniq) < 2:
+            out[ip] = 1.0
+            continue
+        groups = {a: [] for a in uniq}
+        for a, y in zip(alleles, phenos):
+            groups[a].append(y)
+        group_lists = [groups[a] for a in uniq if len(groups[a]) > 0]
+        if len(group_lists) < 2:
+            out[ip] = 1.0
+            continue
+        try:
+            if len(group_lists) == 2:
+                _, pval = ttest_ind(group_lists[0], group_lists[1], equal_var=False)
+            else:
+                _, pval = f_oneway(*group_lists)
+            if pval is None or (isinstance(pval, float) and np.isnan(pval)):
+                pval = 1.0
+            out[ip] = float(np.clip(pval, 1e-300, 1.0))
+        except Exception:
+            out[ip] = 1.0
+    return out
+
+
+def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
+    """返回每位样本在 Haplotype_Seq 第 idx 个位点的碱基字符（object 数组）。"""
+    out = np.empty(len(merged_df), dtype=object)
+    for i, (_, row) in enumerate(merged_df.iterrows()):
+        if "Haplotype_Seq" not in row or pd.isna(row["Haplotype_Seq"]):
+            out[i] = None
+            continue
+        parts = str(row["Haplotype_Seq"]).split("|")
+        if idx >= len(parts):
+            out[i] = None
+            continue
+        a = parts[idx].strip().upper()
+        out[i] = None if not a or a == "N" else a
+    return out
+
+
+def _numeric_allele_vector(codes: np.ndarray) -> np.ndarray:
+    """等位基因类别 -> 数值向量，用于 Pearson 相关。"""
+    valid = [v for v in codes if v is not None]
+    uniq = sorted(set(valid), key=str)
+    if len(uniq) <= 1:
+        return np.array([0.0 if v is not None else np.nan for v in codes], dtype=float)
+    mp = {u: float(i) for i, u in enumerate(uniq)}
+    return np.array([mp[v] if v is not None else np.nan for v in codes], dtype=float)
+
+
+def compute_r2_to_lead(
+    merged_df: pd.DataFrame,
+    positions: list,
+    lead_pos: int,
+) -> dict:
+    """
+    与 lead 位点等位基因向量的样本 Pearson r^2（近似 LD 着色）。
+    """
+    out: dict = {}
+    if merged_df is None or len(merged_df) == 0 or not positions:
+        return out
+    if "Haplotype_Seq" not in merged_df.columns:
+        return out
+    ip_lead = int(lead_pos)
+    pos_to_idx = {int(p): i for i, p in enumerate(positions)}
+    if ip_lead not in pos_to_idx:
+        return {int(p): 0.0 for p in positions}
+    li = pos_to_idx[ip_lead]
+    df = merged_df[
+        (merged_df["Hap_Name"] != "Other")
+        & (merged_df["Haplotype_Seq"].notna())
+    ].copy()
+    if len(df) < 5:
+        return {int(p): (1.0 if int(p) == ip_lead else 0.0) for p in positions}
+
+    v_lead = _allele_codes_at_index(df, li)
+    a_lead = _numeric_allele_vector(v_lead)
+
+    for pos in positions:
+        pi = int(pos)
+        idx = pos_to_idx.get(pi)
+        if idx is None:
+            continue
+        if pi == ip_lead:
+            out[pi] = 1.0
+            continue
+        v_pos = _allele_codes_at_index(df, idx)
+        b = _numeric_allele_vector(v_pos)
+        mask = ~(np.isnan(a_lead) | np.isnan(b))
+        if mask.sum() < 5:
+            out[pi] = 0.0
+            continue
+        a0, b0 = a_lead[mask], b[mask]
+        if np.std(a0) < 1e-9 or np.std(b0) < 1e-9:
+            out[pi] = 1.0 if np.allclose(a0, b0) else 0.0
+            continue
+        r = np.corrcoef(a0, b0)[0, 1]
+        if np.isnan(r):
+            out[pi] = 0.0
+        else:
+            out[pi] = float(np.clip(r * r, 0.0, 1.0))
+    return out
+
+
+def variant_plot_class(info: dict | None, ann: str) -> str:
+    """散点形状：SNP / indel / SV / promoter / missense分级。"""
+    info = info or {}
+    ann = (ann or "other").lower()
+    ld = abs(int(info.get("len_diff", 0) or 0))
+    
+    # 优先判断 annotation 标签（支持错义突变分级）
+    if ann == "sv":
+        return "SV"
+    if ann == "promoter":
+        return "promoter"
+    if ann in ("indel", "indels"):
+        return "indel"
+    # 支持错义突变分级
+    if ann.startswith("missense_"):
+        return ann  # 直接返回 missense_conservative / missense_semi_conservative / missense_non_conservative
+    if ann == "missense":
+        return "missense"
+    
+    # 其次判断长度差异
+    if ld >= 50:
+        return "SV"
+    if ld > 0:
+        return "indel"
+    
+    return "SNP"
 
 
 # ============================================================================
@@ -3149,6 +3703,7 @@ class ReportGenerator:
                                   exons: list = None, cds: list = None,
                                   snp_effects: dict = None,
                                   chrom: str = None,
+                                  gene_id: str = None,
                                   cluster_haplotypes: bool = False,
                                   variant_info: dict = None,
                                   variant_pvalues: dict = None,
@@ -3226,20 +3781,28 @@ class ReportGenerator:
         
         # 变异类型颜色映射（与 plot_Gene_HapSeq.py 一致）
         var_type_colors = {
-            'missense':    '#e74c3c',  # 红色
-            'synonymous':  '#f39c12',  # 橙色
-            'UTR':         '#9b59b6',  # 紫色
-            'indel':       '#3498db',  # 蓝色 - 新增
-            'SV':          '#e91e63',  # 深粉色 - 新增（结构变异）
-            'other':       '#95a5a6',  # 灰色
+            'missense_conservative': '#e74c3c',    # 红色 - 保守替换
+            'missense_semi_conservative': '#e67e22',  # 橙红色 - 半保守替换
+            'missense_non_conservative': '#8e44ad',   # 紫色 - 非保守替换
+            'missense': '#e74c3c',  # 兼容旧代码
+            'synonymous': '#f39c12',  # 橙色
+            'UTR': '#9b59b6',  # 紫色
+            'promoter': '#2ecc71',  # 绿色 - 新增（启动子变异）
+            'indel': '#3498db',  # 蓝色 - 新增
+            'SV': '#e91e63',  # 深粉色 - 新增（结构变异）
+            'other': '#95a5a6',  # 灰色
         }
         var_type_labels = {
-            'missense':   'Missense',
+            'missense_conservative': 'Missense (Conservative)',
+            'missense_semi_conservative': 'Missense (Semi-conservative)',
+            'missense_non_conservative': 'Missense (Non-conservative)',
+            'missense': 'Missense',
             'synonymous': 'Synonymous',
-            'UTR':        'UTR',
-            'indel':      'Indel',      # 新增
-            'SV':         'SV',         # 新增（结构变异）
-            'other':      'Other',
+            'UTR': 'UTR',
+            'promoter': 'Promoter',
+            'indel': 'Indel',
+            'SV': 'SV',
+            'other': 'Other',
         }
         
         def get_var_color(pos):
@@ -3346,22 +3909,47 @@ class ReportGenerator:
         row_height = 36
         n_haps = len(top_haps)
         
-        # 准备GWAS P值数据
+        # 准备GWAS P值数据（优先 per-position 关联 p 值；缺省 1.0 表示无检验）
         variant_pvalues = variant_pvalues or {}
         gwas_data = []
         for pos in display_positions:
-            pval = variant_pvalues.get(pos, 0.5)
-            if pval <= 0:
-                pval = 0.0001
-            info = variant_info.get(pos, {}) if variant_info else {}
+            ip = int(pos)
+            pval = variant_pvalues.get(ip, variant_pvalues.get(pos, 1.0))
+            if pval <= 0 or pval is None or (isinstance(pval, float) and np.isnan(pval)):
+                pval = 1e-300
+            info = {}
+            if variant_info:
+                info = variant_info.get(ip, variant_info.get(pos, {}))
+            ann = info.get("annotation", "other")
+            if snp_effects:
+                if ip in snp_effects:
+                    ann = snp_effects[ip]
+                elif pos in snp_effects:
+                    ann = snp_effects[pos]
             gwas_data.append({
-                'pos': int(pos),
+                'pos': ip,
                 'pvalue': float(pval),
-                'logp': float(-np.log10(pval)),
+                'logp': float(-np.log10(max(pval, 1e-300))),
                 'maf': float(info.get('maf', 0.5)),
                 'missing_rate': float(info.get('missing_rate', 0.0)),
-                'annotation': info.get('annotation', 'other')
+                'annotation': ann
             })
+
+        lead_pos = None
+        if gwas_data:
+            lead_pos = int(min(gwas_data, key=lambda x: x["pvalue"])["pos"])
+        r2_map: dict = {}
+        if lead_pos is not None and display_positions:
+            r2_map = compute_r2_to_lead(hap_sample_df, list(display_positions), lead_pos)
+        for row in gwas_data:
+            ip = int(row["pos"])
+            info = {}
+            if variant_info:
+                info = variant_info.get(ip, variant_info.get(row["pos"], {}))
+            row["r2"] = float(r2_map.get(ip, 0.0))
+            if lead_pos is not None and ip == lead_pos:
+                row["r2"] = 1.0
+            row["vtype"] = variant_plot_class(info, row["annotation"])
         
         # 准备网络图数据
         if network_data is None:
@@ -3423,6 +4011,16 @@ class ReportGenerator:
             network_nodes = network_data.get('nodes', [])
             network_edges = network_data.get('edges', [])
         
+        # 计算SVG宽度（与基因结构图对齐）
+        n_vars = len(display_positions)
+        gene_area_start = 85  # 与基因结构图相同的基因区域起始位置
+        gene_area_width = n_vars * 20  # 基因区域宽度（变异列总宽度）
+        svg_total_width = gene_area_start + gene_area_width + 100  # 与基因结构图相同的总宽度
+        # GWAS图绘图区域宽度（只包含基因区域，不包含左侧固定列）
+        gwas_plot_width = gene_area_width + 100  # 基因区域 + 图例区域
+        # GWAS图左边距（与基因结构图的基因区域起始位置对齐）
+        gwas_left_margin = gene_area_start
+        
         # JSON序列化数据
         gwas_data_json = json.dumps(gwas_data, cls=NumpyEncoder)
         network_nodes_json = json.dumps(network_nodes, cls=NumpyEncoder)
@@ -3470,19 +4068,19 @@ class ReportGenerator:
         
         /* 可缩放内容区 */
         .content-wrapper {{ overflow: auto; max-height: calc(100vh - 200px); }}
-        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
+        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; }}
+        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
         .network-panel {{ width: 350px; min-width: 350px; height: 280px; 
                          border: 1px solid #e0e0e0; border-radius: 6px; 
-                         background: #fafafa; position: relative; }}
+                         background: #fafafa; position: absolute; left: 0; top: 0; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px; 
                                font-size: 12px; font-weight: 600; color: #2c3e50; 
                                background: rgba(255,255,255,0.9); padding: 2px 6px; 
                                border-radius: 3px; z-index: 10; }}
-        .gene-gwas-panel {{ flex: 1; height: 280px; border: 1px solid #e0e0e0; 
+        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px; 
                            font-size: 12px; font-weight: 600; color: #2c3e50; 
@@ -3545,16 +4143,18 @@ class ReportGenerator:
             <input type="range" id="missingSlider" min="0" max="1" step="0.05" value="1" oninput="updateFilterDisplay('missing', this.value)">
             <span class="filter-value" id="missingValue">1.0</span>
         </div>
-        <div class="filter-group">
-            <label>Annotation:</label>
-            <select id="annotationFilter" onchange="updateFilterDisplay('annotation', this.value)">
-                <option value="all">All</option>
-                <option value="missense">Missense</option>
-                <option value="synonymous">Synonymous</option>
-                <option value="UTR">UTR</option>
-                <option value="intron">Intron</option>
-                <option value="promoter">Promoter</option>
-            </select>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">Annotation (多选):</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="ann-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
+                <label><input type="checkbox" class="ann-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
+                <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
+                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                <label><input type="checkbox" class="ann-cb" value="indel" checked onchange="applyFilters()"> Indel</label>
+                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
+                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
+            </span>
         </div>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
         <button class="filter-btn" onclick="applyFilters()">Apply Filter</button>
@@ -3571,6 +4171,10 @@ class ReportGenerator:
         <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
         <label>Sort:</label>
         <button id="sortBtn" onclick="toggleSort()" style="min-width:80px;">By Count</button>
+        <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
+        <label>Export:</label>
+        <button onclick="exportSVG()">SVG</button>
+        <button onclick="window.print()">Print/PDF</button>
     </div>
     
     <div class="content-wrapper">
@@ -3583,7 +4187,7 @@ class ReportGenerator:
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
                 <div class="gene-gwas-panel">
-                    <div class="gene-gwas-title">GWAS P-values & Gene Structure</div>
+                    <div class="gene-gwas-title">GWAS P-values</div>
                     <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
                 </div>
             </div>
@@ -3744,12 +4348,18 @@ class ReportGenerator:
             var_color, var_type = get_var_color(pos)
             var_types_found.add(var_type)
             
+            # 获取该位置的变异信息（用于过滤）
+            var_info = variant_info.get(pos, {})
+            var_maf = var_info.get('maf', 0)
+            var_missing = var_info.get('missing_rate', 0)
+            
             # 变异竖线：从圆圈顶部一直延伸到断线上端 (gene_y+gene_h)
-            html += f'<line x1="{gene_x}" y1="{var_top_y+3}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{var_color}" stroke-width="1.2"/>\n'
-            html += f'<circle cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5"/>\n'
+            # 添加class和data-pos属性用于过滤控制
+            html += f'<line class="var-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y+3}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{var_color}" stroke-width="1.2"/>\n'
+            html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5"/>\n'
             
             # 斜线：从真实位置下导到序列列中心
-            html += f'<line x1="{gene_x}" y1="{gene_y+gene_h}" x2="{table_x}" y2="{line_end_y}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2"/>\n'
+            html += f'<line class="var-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{gene_y+gene_h}" x2="{table_x}" y2="{line_end_y}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2"/>\n'
                 
         # ==== 图例（右侧，根据实际变异类型动态生成）====
         leg_x = gene_area_start + gene_area_width + 15
@@ -3776,8 +4386,9 @@ class ReportGenerator:
         
         # 变异类型图例（基于实际检测到的类型）
         html += f'<text x="{leg_x}" y="{axis_y + 70}" font-size="8.5" fill="#333" font-weight="600">Variant Type</text>\n'
-        # 按顺序排列变异类型
-        ordered_types = ['missense', 'synonymous', 'UTR', 'other']
+        # 按顺序排列变异类型（包含错义突变分级）
+        ordered_types = ['missense_non_conservative', 'missense_semi_conservative', 'missense_conservative', 
+                        'missense', 'synonymous', 'UTR', 'promoter', 'indel', 'SV', 'other']
         found_types = [t for t in ordered_types if t in var_types_found]
         for li, var_type in enumerate(found_types):
             ly = axis_y + 78 + li * 14
@@ -4041,9 +4652,28 @@ var regionStart  = {region_start};
 var regionEnd    = {region_end};
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
+var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
+var gwasPlotWidth = {gwas_plot_width};  // GWAS图绘图区域宽度（基因区域+图例）
+var gwasLeftMargin = {gwas_left_margin};  // GWAS图左边距（与基因结构图基因区域起始对齐）
+var leadVariantPos = __LEAD_POS__;
+var exonRegions = __EXON_REGIONS__;
+var geneLabelText = __GENE_LABEL__;
 
 // ==================== 过滤功能 ====================
-var currentFilter = { maf: 0, missingRate: 1.0, annotation: 'all' };
+var currentFilter = { maf: 0, missingRate: 1.0 };
+
+function annNorm(d) {
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    return a;
+}
+
+function annAllowed(d) {
+    var a = annNorm(d);
+    var cb = document.querySelector('.ann-cb[value="' + a + '"]');
+    if (cb) return cb.checked;
+    var o = document.querySelector('.ann-cb[value="other"]');
+    return o ? o.checked : true;
+}
 
 function updateFilterDisplay(type, value) {
     if (type === 'maf') {
@@ -4052,79 +4682,126 @@ function updateFilterDisplay(type, value) {
     } else if (type === 'missing') {
         currentFilter.missingRate = parseFloat(value);
         document.getElementById('missingValue').textContent = parseFloat(value).toFixed(2);
-    } else if (type === 'annotation') {
-        currentFilter.annotation = value;
     }
 }
 
 function resetFilters() {
     document.getElementById('mafSlider').value     = 0;
     document.getElementById('missingSlider').value = 1;
-    document.getElementById('annotationFilter').value = 'all';
-    currentFilter = { maf: 0, missingRate: 1.0, annotation: 'all' };
+    currentFilter = { maf: 0, missingRate: 1.0 };
     document.getElementById('mafValue').textContent    = '0';
     document.getElementById('missingValue').textContent = '1.0';
+    document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     applyFilters();
 }
+
+window.addEventListener('message', function(ev) {
+    if (!ev.data || ev.data.type !== 'filter' || !ev.data.filters) return;
+    var f = ev.data.filters;
+    if (f.maf !== undefined) {
+        currentFilter.maf = f.maf;
+        var ms = document.getElementById('mafSlider');
+        if (ms) { ms.value = f.maf; document.getElementById('mafValue').textContent = parseFloat(f.maf).toFixed(2); }
+    }
+    if (f.missingRate !== undefined) {
+        currentFilter.missingRate = f.missingRate;
+        var mx = document.getElementById('missingSlider');
+        if (mx) { mx.value = f.missingRate; document.getElementById('missingValue').textContent = parseFloat(f.missingRate).toFixed(2); }
+    }
+    if (f.annotationEnabled) {
+        Object.keys(f.annotationEnabled).forEach(function(k) {
+            var cb = document.querySelector('.ann-cb[value="' + k + '"]');
+            if (cb) cb.checked = f.annotationEnabled[k];
+        });
+    }
+    applyFilters();
+});
 
 function applyFilters() {
     var filtered = gwasData.filter(function(d) {
         return d.maf >= currentFilter.maf
             && d.missing_rate <= currentFilter.missingRate
-            && (currentFilter.annotation === 'all' || d.annotation === currentFilter.annotation);
+            && annAllowed(d);
     });
     drawGWASPlot(filtered);
-    var posSset = {};
-    filtered.forEach(function(d){ posSset[d.pos] = true; });
+    var posSet = {};
+    filtered.forEach(function(d){ posSet[d.pos] = true; });
+    
+    // 更新表格表头
     document.querySelectorAll('.data-table th').forEach(function(th, idx) {
         if (idx >= 3) {
             var pos = parseInt(th.textContent.trim().replace(/,/g,''));
-            th.style.background = posSset[pos] ? '#2c3e50' : '#95a5a6';
-            th.style.opacity    = posSset[pos] ? '1' : '0.4';
+            th.style.background = posSet[pos] ? '#2c3e50' : '#95a5a6';
+            th.style.opacity    = posSet[pos] ? '1' : '0.4';
         }
     });
+    
+    // 更新表格单元格
     document.querySelectorAll('.data-table td[data-pos]').forEach(function(td) {
         var pos = parseInt(td.getAttribute('data-pos'));
-        td.style.opacity = (pos && !posSset[pos]) ? '0.25' : '1';
+        td.style.opacity = (pos && !posSet[pos]) ? '0.25' : '1';
+    });
+    
+    // 更新基因结构图上的变异元素（竖线、圆圈、斜线）
+    document.querySelectorAll('.var-line, .var-circle, .var-connector').forEach(function(el) {
+        var pos = parseInt(el.getAttribute('data-pos'));
+        var maf = parseFloat(el.getAttribute('data-maf') || 0);
+        var missing = parseFloat(el.getAttribute('data-missing') || 0);
+        var ann = el.getAttribute('data-ann') || 'other';
+        
+        // 检查是否通过过滤条件
+        var passed = posSet[pos] !== undefined && 
+                     maf >= currentFilter.maf && 
+                     missing <= currentFilter.missingRate;
+        
+        // 设置显示/隐藏
+        el.style.display = passed ? 'block' : 'none';
+        el.style.opacity = passed ? '1' : '0.1';
     });
 }
 
-// ==================== 单倍型网络图（D3 force simulation） ====================
+// ==================== 单倍型网络图（固定视口、无平移/缩放/拖拽；整体缩放用页面 Zoom 控件） ====================
 function drawNetworkPlot() {
     var container = document.getElementById('network-viz');
     if (!container || networkNodes.length === 0) return;
     var W = 350, H = 280;
+    var pad = 6;
     d3.select('#network-viz').selectAll('*').remove();
 
     var svg = d3.select('#network-viz').append('svg')
         .attr('width', W).attr('height', H)
-        .style('display','block').style('overflow','visible');
+        .style('display','block').style('overflow','hidden');
 
-    var g = svg.append('g');
-    svg.call(d3.zoom().scaleExtent([0.2, 6]).on('zoom', function(e) { g.attr('transform', e.transform); }));
+    svg.append('defs').append('clipPath').attr('id','network-clip-integrated')
+        .append('rect').attr('x',0).attr('y',0).attr('width',W).attr('height',H);
+    var g = svg.append('g').attr('clip-path','url(#network-clip-integrated)');
 
-    // 深拷贝节点
     var nodes = networkNodes.map(function(d) { return Object.assign({}, d); });
+    nodes.forEach(function(d) {
+        d.x = W / 2 + (Math.random() - 0.5) * 28;
+        d.y = H / 2 + (Math.random() - 0.5) * 28;
+    });
     var nodeById = {};
     nodes.forEach(function(d) { nodeById[d.id] = d; });
 
-    // 构建连线（source/target 指向节点对象）
     var links = networkEdges
         .filter(function(e) { return nodeById[e.source] && nodeById[e.target]; })
         .map(function(e) { return { source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }; });
 
-    // 若没有边，尝试按序列连接相邻节点
     if (links.length === 0 && nodes.length > 1) {
         for (var i = 0; i < nodes.length - 1; i++) {
             links.push({ source: nodes[i], target: nodes[i+1], distance: 1 });
         }
     }
 
+    var linkForce = d3.forceLink(links).distance(function(d) { return Math.min(95, 36 + d.distance * 16); }).strength(0.55);
     var sim = d3.forceSimulation(nodes)
-        .force('link',      d3.forceLink(links).distance(function(d) { return Math.min(110, 40 + d.distance * 18); }).strength(0.7))
-        .force('charge',    d3.forceManyBody().strength(-250))
-        .force('center',    d3.forceCenter(W / 2, H / 2))
-        .force('collision', d3.forceCollide().radius(function(d) { return d.size * 0.5 + 6; }));
+        .force('link', linkForce)
+        .force('charge', d3.forceManyBody().strength(-90))
+        .force('center', d3.forceCenter(W / 2, H / 2))
+        .force('x', d3.forceX(W / 2).strength(0.14))
+        .force('y', d3.forceY(H / 2).strength(0.14))
+        .force('collision', d3.forceCollide().radius(function(d) { return d.size * 0.5 + 7; }));
 
     var linkSel = g.append('g').selectAll('line').data(links).join('line')
         .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
@@ -4135,12 +4812,7 @@ function drawNetworkPlot() {
         .text(function(d) { return d.distance > 1 ? d.distance : ''; });
 
     var nodeG = g.append('g').selectAll('g').data(nodes).join('g')
-        .style('cursor','pointer')
-        .call(d3.drag()
-            .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
-            .on('drag',  function(e,d) { d.fx=e.x; d.fy=e.y; })
-            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
-        );
+        .style('cursor','default');
 
     nodeG.append('circle')
         .attr('r',      function(d) { return d.size * 0.5; })
@@ -4171,6 +4843,11 @@ function drawNetworkPlot() {
     });
 
     sim.on('tick', function() {
+        nodes.forEach(function(d) {
+            var r = (d.size || 20) * 0.5 + 4;
+            d.x = Math.max(pad + r, Math.min(W - pad - r, d.x));
+            d.y = Math.max(pad + r, Math.min(H - pad - r, d.y));
+        });
         linkSel
             .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
             .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
@@ -4181,13 +4858,18 @@ function drawNetworkPlot() {
     });
 }
 
-// ==================== GWAS 棒棒糖图 + 基因结构（共用X轴） ====================
+// ==================== GWAS -log10(P) 散点图（仅P值图，基因结构在下方SVG中） ====================
 function drawGWASPlot(data) {
     var container = document.getElementById('gwas-gene-viz');
     if (!container) return;
-    var W = container.clientWidth || 680;
-    var H = 280;
-    var ml = 52, mr = 85, mt = 32, mb = 28;
+    // GWAS图SVG宽度与基因结构图总宽度相同
+    // 基因结构图: svg_width = 450 + gene_area_width + 100
+    // GWAS图使用相同的总宽度，但绘图区域从gene_area_start(450)开始
+    var W = svgTotalWidth || (container.clientWidth || 680);
+    var H = 180;  // 减小高度，只显示P值图
+    // 左边距 = gene_area_start = 450，与基因结构图的基因区域起始对齐
+    var ml = gwasLeftMargin || 54;
+    var mr = 102, mt = 26, mb = 34;
     var iW = W - ml - mr, iH = H - mt - mb;
 
     d3.select('#gwas-gene-viz').selectAll('*').remove();
@@ -4198,100 +4880,144 @@ function drawGWASPlot(data) {
 
     var xSc = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, iW]);
 
-    var gwasH = Math.round(iH * 0.62);
-    var geneH = iH - gwasH - 6;
-    var geneY = gwasH + 6;
+    // 只使用全部高度显示P值图
+    var gwasH = iH;
 
-    // ---------- GWAS P 值图 ----------
-    var maxLogP = data.length > 0 ? Math.max(d3.max(data, function(d){ return d.logp; }), 1.4) : 1.4;
-    var ySc = d3.scaleLinear().domain([0, maxLogP * 1.12]).range([gwasH, 0]);
+    var maxLogP = data.length > 0 ? Math.max(1.4, d3.max(data, function(d){ return d.logp; })) : 1.4;
+    var ySc = d3.scaleLinear().domain([0, maxLogP * 1.1]).range([gwasH, 0]);
 
-    var annColor = { missense:'#e74c3c', synonymous:'#f39c12', UTR:'#9b59b6',
-                     indel:'#3498db', promoter:'#27ae60', intron:'#aab', other:'#95a5a6' };
+    var colorR2 = d3.scaleSequential(function(t) { return d3.interpolateRdBu(1 - t); }).domain([0, 1]);
 
-    g.append('g').selectAll('.stem').data(data).join('line')
-        .attr('x1',function(d){return xSc(d.pos);}).attr('x2',function(d){return xSc(d.pos);})
-        .attr('y1', gwasH).attr('y2', function(d){return ySc(d.logp);})
-        .attr('stroke', function(d){ return annColor[d.annotation]||'#95a5a6'; })
-        .attr('stroke-width',1.3).attr('opacity',0.65);
-
-    var tip = document.getElementById('d3-tooltip');
-    g.append('g').selectAll('.dot').data(data).join('circle')
-        .attr('cx',function(d){return xSc(d.pos);})
-        .attr('cy',function(d){return ySc(d.logp);})
-        .attr('r', function(d){ return d.pvalue<0.01?5.5 : d.pvalue<0.05?4:3; })
-        .attr('fill',function(d){ return d.pvalue<0.01?'#8B0000':d.pvalue<0.05?'#e74c3c':(annColor[d.annotation]||'#95a5a6'); })
-        .attr('stroke','#fff').attr('stroke-width',0.8).style('cursor','pointer')
-        .on('mouseover', function(e,d) {
-            d3.select(this).attr('r', function(){ return d.pvalue<0.01?8:d.pvalue<0.05?7:6; });
-            tip.innerHTML = '<b>Pos: '+d.pos.toLocaleString()+'</b><br>'
-                +'P = '+d.pvalue.toExponential(2)+'<br>'
-                +'-log\u2081\u2080P = '+d.logp.toFixed(2)+'<br>'
-                +'MAF = '+d.maf.toFixed(3)+'<br>'
-                +'Ann: '+d.annotation;
-            tip.style.display = 'block';
-        }).on('mousemove',function(e){
-            tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY-10)+'px';
-        }).on('mouseout',function(e,d){
-            d3.select(this).attr('r', function(){ return d.pvalue<0.01?5.5:d.pvalue<0.05?4:3; });
-            tip.style.display='none';
-        });
-
-    g.append('g').call(d3.axisLeft(ySc).ticks(5).tickFormat(function(d){ return d.toFixed(1); }))
-        .selectAll('text').attr('font-size','9px');
-    g.append('text').attr('transform','rotate(-90)').attr('y',-42).attr('x',-gwasH/2)
-        .attr('text-anchor','middle').attr('font-size','10px').attr('fill','#555')
-        .text('-log\u2081\u2080(P)');
-
-    var sigY = ySc(1.301);
-    if (sigY > 0 && sigY < gwasH) {
-        g.append('line').attr('x1',0).attr('x2',iW)
-            .attr('y1',sigY).attr('y2',sigY)
-            .attr('stroke','#e74c3c').attr('stroke-dasharray','4,3').attr('opacity',0.7);
-        g.append('text').attr('x',iW+3).attr('y',sigY+3)
-            .attr('font-size','8px').attr('fill','#e74c3c').text('0.05');
+    if (leadVariantPos != null && !isNaN(+leadVariantPos)) {
+        g.append('line')
+            .attr('x1', xSc(+leadVariantPos)).attr('x2', xSc(+leadVariantPos))
+            .attr('y1', 0).attr('y2', gwasH)
+            .attr('stroke', '#c0392b').attr('stroke-width', 1.5).attr('stroke-dasharray', '5,4')
+            .attr('opacity', 0.88).attr('pointer-events', 'none');
     }
 
-    // ---------- 基因结构图 ----------
-    var geneGroup = g.append('g').attr('transform','translate(0,'+geneY+')');
-    var gX1 = xSc(geneStart), gX2 = xSc(geneEnd);
-    var midY = geneH / 2;
+    var symTypes = { SNP: d3.symbolCircle, indel: d3.symbolSquare, SV: d3.symbolTriangle };
+    var symSize = { SNP: 38, indel: 42, SV: 46 };
 
-    geneGroup.append('line')
-        .attr('x1',gX1).attr('x2',gX2).attr('y1',midY).attr('y2',midY)
-        .attr('stroke','#2c3e50').attr('stroke-width',2);
+    var tip = document.getElementById('d3-tooltip');
+    g.append('g').attr('class', 'gwas-scatter-layer').selectAll('path.gwas-pt')
+        .data(data).join('path').attr('class', 'gwas-pt')
+        .attr('d', function(d) {
+            var isLead = (leadVariantPos != null && +d.pos === +leadVariantPos);
+            var vt = (d.vtype || 'SNP');
+            var ty = isLead ? d3.symbolDiamond : (symTypes[vt] || d3.symbolCircle);
+            var sz = isLead ? 88 : (symSize[vt] || 38);
+            return d3.symbol().type(ty).size(sz)();
+        })
+        .attr('transform', function(d) {
+            return 'translate(' + xSc(d.pos) + ',' + ySc(d.logp) + ')';
+        })
+        .attr('fill', function(d) {
+            if (leadVariantPos != null && +d.pos === +leadVariantPos) return '#c0392b';
+            var r = (d.r2 !== undefined && d.r2 !== null) ? +d.r2 : 0;
+            return colorR2(Math.max(0, Math.min(1, r)));
+        })
+        .attr('stroke', '#fff').attr('stroke-width', 0.65)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(e, d) {
+            d3.select(this).attr('stroke', '#2c3e50').attr('stroke-width', 1.3);
+            tip.innerHTML = '<b>Pos: ' + d.pos.toLocaleString() + '</b><br/>'
+                + 'P = ' + d.pvalue.toExponential(2) + '<br/>'
+                + '-log<sub>10</sub>(P) = ' + d.logp.toFixed(2) + '<br/>'
+                + 'r<sup>2</sup> to lead = ' + (d.r2 != null ? (+d.r2).toFixed(3) : 'NA') + '<br/>'
+                + 'Type: ' + (d.vtype || 'SNP') + ' &nbsp;|&nbsp; ' + (d.annotation || '');
+            tip.style.display = 'block';
+        })
+        .on('mousemove', function(e) {
+            tip.style.left = (e.clientX + 14) + 'px';
+            tip.style.top = (e.clientY - 10) + 'px';
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('stroke', '#fff').attr('stroke-width', 0.65);
+            tip.style.display = 'none';
+        });
 
-    geneGroup.append('rect')
-        .attr('x',gX1).attr('y',midY-7)
-        .attr('width',Math.max(2,gX2-gX1)).attr('height',14)
-        .attr('fill','#3498db').attr('rx',2).attr('opacity',0.8);
+    g.append('g').call(d3.axisLeft(ySc).ticks(6).tickFormat(function(d) { return d.toFixed(1); }))
+        .selectAll('text').attr('font-size', '9px');
+    g.append('text').attr('transform', 'rotate(-90)').attr('y', -40).attr('x', -gwasH / 2)
+        .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
+        .text('-log10(P)');
 
-    geneGroup.append('text').attr('x',(gX1+gX2)/2).attr('y',midY+1)
-        .attr('text-anchor','middle').attr('dominant-baseline','middle')
-        .attr('font-size','10px').attr('fill','#fff').attr('font-weight','bold')
-        .text('\u2192');
+    var sigY = ySc(-Math.log10(0.05));
+    if (sigY > 0 && sigY < gwasH) {
+        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY).attr('y2', sigY)
+            .attr('stroke', '#e67e22').attr('stroke-dasharray', '4,3').attr('opacity', 0.75);
+        g.append('text').attr('x', iW - 2).attr('y', sigY - 3).attr('text-anchor', 'end')
+            .attr('font-size', '8px').attr('fill', '#e67e22').text('p=0.05');
+    }
 
-    geneGroup.append('text').attr('x',gX1).attr('y',midY+19)
-        .attr('font-size','8px').attr('fill','#666').attr('text-anchor','middle')
-        .text((geneStart/1e6).toFixed(3)+'M');
-    geneGroup.append('text').attr('x',gX2).attr('y',midY+19)
-        .attr('font-size','8px').attr('fill','#666').attr('text-anchor','middle')
-        .text((geneEnd/1e6).toFixed(3)+'M');
+    g.append('g').attr('transform', 'translate(0,' + iH + ')')
+        .call(d3.axisBottom(xSc).ticks(6).tickFormat(function(d) { return (d / 1e6).toFixed(3) + ' Mb'; }))
+        .selectAll('text').attr('font-size', '9px').attr('transform', 'rotate(-18)').attr('text-anchor', 'end');
 
-    g.append('g').attr('transform','translate(0,'+iH+')')
-        .call(d3.axisBottom(xSc).ticks(6).tickFormat(function(d){ return (d/1e6).toFixed(2)+'M'; }))
-        .selectAll('text').attr('font-size','9px').attr('transform','rotate(-20)').attr('text-anchor','end');
+    var leg = g.append('g').attr('transform', 'translate(' + (iW + 6) + ',0)');
+    leg.append('text').attr('x', 0).attr('y', -2).attr('font-size', '9px').attr('fill', '#333').text('r\u00b2 to lead');
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient').attr('id', 'r2-grad-int').attr('x1', '0%').attr('x2', '100%');
+    grad.append('stop').attr('offset', '0%').attr('stop-color', d3.interpolateRdBu(1));
+    grad.append('stop').attr('offset', '100%').attr('stop-color', d3.interpolateRdBu(0));
+    leg.append('rect').attr('x', 0).attr('y', 4).attr('width', 72).attr('height', 10).attr('fill', 'url(#r2-grad-int)').attr('rx', 2);
+    leg.append('text').attr('x', 0).attr('y', 22).attr('font-size', '7px').attr('fill', '#666').text('0');
+    leg.append('text').attr('x', 72).attr('y', 22).attr('font-size', '7px').attr('fill', '#666').attr('text-anchor', 'end').text('1');
 
-    var leg = g.append('g').attr('transform','translate('+(iW+8)+',2)');
-    [ ['P<0.01','#8B0000',5.5], ['P<0.05','#e74c3c',4], ['n.s.','#95a5a6',3] ].forEach(function(l,i){
-        leg.append('circle').attr('cx',5).attr('cy',i*16).attr('r',l[2]).attr('fill',l[1]);
-        leg.append('text').attr('x',13).attr('y',i*16+4).attr('font-size','8px').attr('fill','#555').text(l[0]);
+    var ly = 34;
+    [['SNP', d3.symbolCircle], ['InDel', d3.symbolSquare], ['SV', d3.symbolTriangle]].forEach(function(item, i) {
+        leg.append('path')
+            .attr('d', d3.symbol().type(item[1]).size(36)())
+            .attr('transform', 'translate(8,' + (ly + i * 16) + ')')
+            .attr('fill', '#555').attr('stroke', '#fff').attr('stroke-width', 0.5);
+        leg.append('text').attr('x', 18).attr('y', ly + i * 16 + 4).attr('font-size', '8px').attr('fill', '#444').text(item[0]);
     });
-    var annLeg = [ ['Missense','#e74c3c'],['Synonymous','#f39c12'],['UTR','#9b59b6'],['Indel','#3498db'],['Promoter','#27ae60'] ];
-    annLeg.forEach(function(l,i){
-        leg.append('rect').attr('x',1).attr('y',56+i*14).attr('width',8).attr('height',8).attr('fill',l[1]).attr('rx',1);
-        leg.append('text').attr('x',13).attr('y',56+i*14+7).attr('font-size','8px').attr('fill','#555').text(l[0]);
-    });
+}
+
+function exportSVG() {
+    var content = document.getElementById('zoomContent');
+    var svgElements = content.querySelectorAll('svg');
+    if (svgElements.length === 0) { alert('No SVG content found'); return; }
+    var svgNS = "http://www.w3.org/2000/svg";
+    var combinedSVG = document.createElementNS(svgNS, "svg");
+    var totalWidth = 0, totalHeight = 0;
+    for (var i = 0; i < svgElements.length; i++) {
+        var rect = svgElements[i].getBoundingClientRect();
+        totalWidth = Math.max(totalWidth, rect.width);
+        totalHeight += rect.height + 20;
+    }
+    combinedSVG.setAttribute("width", totalWidth);
+    combinedSVG.setAttribute("height", totalHeight);
+    combinedSVG.setAttribute("xmlns", svgNS);
+    var bg = document.createElementNS(svgNS, "rect");
+    bg.setAttribute("width", "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("fill", "white");
+    combinedSVG.appendChild(bg);
+    var currentY = 0;
+    for (var j = 0; j < svgElements.length; j++) {
+        var rect = svgElements[j].getBoundingClientRect();
+        var clonedSVG = svgElements[j].cloneNode(true);
+        var g = document.createElementNS(svgNS, "g");
+        g.setAttribute("transform", "translate(0," + currentY + ")");
+        while (clonedSVG.firstChild) {
+            g.appendChild(clonedSVG.firstChild);
+        }
+        combinedSVG.appendChild(g);
+        currentY += rect.height + 20;
+    }
+    var serializer = new XMLSerializer();
+    var svgString = "<?xml version=\"1.0\" standalone=\"no\"?>\n" + serializer.serializeToString(combinedSVG);
+    var blob = new Blob([svgString], {type: "image/svg+xml"});
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "haplotype_analysis.svg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
 
 // ==================== 页面初始化 ====================
@@ -4315,6 +5041,15 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{region_end}',         str(region_end))
         html = html.replace('{gene_start}',         str(g_start))
         html = html.replace('{gene_end}',           str(g_end))
+        html = html.replace('{svg_total_width}',    str(svg_total_width))
+        html = html.replace('{gwas_plot_width}',    str(gwas_plot_width))
+        html = html.replace('{gwas_left_margin}',   str(gwas_left_margin))
+        _lead_js = str(lead_pos) if lead_pos is not None else "null"
+        _exon_json = json.dumps([[int(a[0]), int(a[1])] for a in (exons or [])])
+        _glabel = json.dumps(gene_id or chrom or "Gene")
+        html = html.replace("__LEAD_POS__", _lead_js)
+        html = html.replace("__EXON_REGIONS__", _exon_json)
+        html = html.replace("__GENE_LABEL__", _glabel)
 
         out = os.path.join(self.output_dir, "integrated_analysis.html")
         with open(out, 'w', encoding='utf-8') as f:
@@ -4330,7 +5065,7 @@ document.addEventListener('DOMContentLoaded', function() {
         生成单倍型网络图（D3.js交互式）
         
         功能:
-        - 缩放(zoom)和拖拽(drag)支持
+        - 力导向布局限制在固定画布内；不提供画布平移/节点拖拽，缩放按钮仅整体缩放
         - 按分类标签(表型/分组)着色
         - 节点大小表示SNP密集程度(样本数量)
         - 鼠标悬停显示详细数值
@@ -4545,29 +5280,36 @@ const height = 700;
 let currentLayout = 'force';
 let currentSizeMode = 'count';
 
-// 创建SVG
+// 创建SVG（固定视口；画布内不平移；缩放仅整体作用在 g 上）
 const svg = d3.select('#network')
     .append('svg')
     .attr('width', '100%')
-    .attr('height', height);
+    .attr('height', height)
+    .style('overflow', 'hidden');
 
-// 添加缩放容器
-const g = svg.append('g');
+svg.append('defs').append('clipPath').attr('id', 'clip-net-standalone')
+    .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
 
-// 缩放行为
-const zoom = d3.zoom()
-    .scaleExtent([0.2, 5])
-    .on('zoom', (event) => {{
-        g.attr('transform', event.transform);
-    }});
+const g = svg.append('g').attr('clip-path', 'url(#clip-net-standalone)');
 
-svg.call(zoom);
+nodes.forEach(d => {{
+    d.x = width / 2 + (Math.random() - 0.5) * 40;
+    d.y = height / 2 + (Math.random() - 0.5) * 40;
+}});
+
+let netScale = 1;
+const cx = width / 2, cy = height / 2;
+function applyNetZoom() {{
+    g.attr('transform', 'translate(' + cx + ',' + cy + ') scale(' + netScale + ') translate(' + (-cx) + ',' + (-cy) + ')');
+}}
 
 // 力导向模拟
 const simulation = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id).distance(d => 50 + d.distance * 10))
-    .force('charge', d3.forceManyBody().strength(-300))
+    .force('charge', d3.forceManyBody().strength(-120))
     .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('x', d3.forceX(width / 2).strength(0.08))
+    .force('y', d3.forceY(height / 2).strength(0.08))
     .force('collision', d3.forceCollide().radius(d => d.size + 5));
 
 // 绘制连线（带差异位点标记）
@@ -4617,11 +5359,7 @@ const node = g.append('g')
     .attr('r', d => d.size)
     .attr('fill', d => d.color)
     .attr('stroke', '#fff')
-    .attr('stroke-width', 2)
-    .call(d3.drag()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended));
+    .attr('stroke-width', 2);
 
 // 添加标签
 const labels = g.append('g')
@@ -4653,8 +5391,13 @@ node.on('mouseover', function(event, d) {{
     d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
 }});
 
-// 更新位置
+// 更新位置（限制在画布内）
 simulation.on('tick', () => {{
+    nodes.forEach(d => {{
+        const r = (d.size || 10) + 6;
+        d.x = Math.max(r, Math.min(width - r, d.x));
+        d.y = Math.max(r, Math.min(height - r, d.y));
+    }});
     link.attr('x1', d => d.source.x)
         .attr('y1', d => d.source.y)
         .attr('x2', d => d.target.x)
@@ -4690,35 +5433,20 @@ simulation.on('tick', () => {{
           .attr('y', d => d.y);
 }});
 
-// 拖拽函数
-function dragstarted(event, d) {{
-    if (!event.active) simulation.alphaTarget(0.3).restart();
-    d.fx = d.x;
-    d.fy = d.y;
-}}
-
-function dragged(event, d) {{
-    d.fx = event.x;
-    d.fy = event.y;
-}}
-
-function dragended(event, d) {{
-    if (!event.active) simulation.alphaTarget(0);
-    d.fx = null;
-    d.fy = null;
-}}
-
-// 缩放控制
+// 缩放控制（仅整体缩放绘图内容，不平移）
 function zoomIn() {{
-    svg.transition().call(zoom.scaleBy, 1.3);
+    netScale = Math.min(2.5, netScale * 1.2);
+    applyNetZoom();
 }}
 
 function zoomOut() {{
-    svg.transition().call(zoom.scaleBy, 0.7);
+    netScale = Math.max(0.45, netScale / 1.2);
+    applyNetZoom();
 }}
 
 function resetZoom() {{
-    svg.transition().call(zoom.transform, d3.zoomIdentity);
+    netScale = 1;
+    applyNetZoom();
 }}
 
 // 布局切换
@@ -5658,11 +6386,12 @@ if (promoterStart < promoterEnd) {{
         # ========== 2. 曼哈顿图数据 ==========
         manhattan_points = []
         for pos in (variant_positions or []):
-            pval = variant_pvalues.get(pos, 0.5)
-            if pval <= 0:
-                pval = 0.0001
+            ip = int(pos)
+            pval = variant_pvalues.get(ip, variant_pvalues.get(pos, 1.0))
+            if pval <= 0 or pval is None or (isinstance(pval, float) and np.isnan(pval)):
+                pval = 1e-300
             # 添加变异信息用于过滤
-            info = variant_info.get(pos, {})
+            info = variant_info.get(ip, variant_info.get(pos, {}))
             manhattan_points.append({
                 'pos': int(pos),
                 'pvalue': float(pval),
@@ -5847,16 +6576,18 @@ if (promoterStart < promoterEnd) {{
                         <input type="range" id="missingSlider" min="0" max="1" step="0.05" value="1" oninput="updateFilter('missing', this.value)">
                         <span class="filter-value" id="missingValue">1.0</span>
                     </div>
-                    <div class="filter-group">
-                        <label>Annotation:</label>
-                        <select id="annotationFilter" onchange="updateFilter('annotation', this.value)">
-                            <option value="all">All</option>
-                            <option value="missense">Missense</option>
-                            <option value="synonymous">Synonymous</option>
-                            <option value="UTR">UTR</option>
-                            <option value="intron">Intron</option>
-                            <option value="promoter">Promoter</option>
-                        </select>
+                    <div class="filter-group" style="flex-wrap:wrap;max-width:520px;">
+                        <label style="width:100%;">Annotation (多选):</label>
+                        <span style="display:flex;flex-wrap:wrap;gap:6px 10px;font-size:11px;">
+                            <label><input type="checkbox" class="ann-cb-mp" value="missense" checked onchange="applyFilters()"> Missense</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="UTR" checked onchange="applyFilters()"> UTR</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="intron" checked onchange="applyFilters()"> Intron</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="indel" checked onchange="applyFilters()"> Indel</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="SV" checked onchange="applyFilters()"> SV</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="other" checked onchange="applyFilters()"> Other</label>
+                        </span>
                     </div>
                     <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
                     <button class="filter-btn" onclick="applyFilters()">Apply</button>
@@ -5947,9 +6678,22 @@ const geneEnd = {gene_end};
 // 过滤状态
 let filterState = {{
     maf: 0,
-    missingRate: 1.0,
-    annotation: 'all'
+    missingRate: 1.0
 }};
+
+function getAnnotationEnabledMp() {{
+    const o = {{}};
+    document.querySelectorAll('.ann-cb-mp').forEach(cb => {{ o[cb.value] = cb.checked; }});
+    return o;
+}}
+
+function annAllowedMp(d) {{
+    const a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    const cb = document.querySelector('.ann-cb-mp[value="' + a + '"]');
+    if (cb) return cb.checked;
+    const o = document.querySelector('.ann-cb-mp[value="other"]');
+    return o ? o.checked : true;
+}}
 
 const tooltip = d3.select('#tooltip');
 
@@ -5978,62 +6722,77 @@ function updateFilter(type, value) {{
     }} else if (type === 'missing') {{
         filterState.missingRate = parseFloat(value);
         document.getElementById('missingValue').textContent = value;
-    }} else if (type === 'annotation') {{
-        filterState.annotation = value;
     }}
 }}
 
 function resetFilters() {{
     document.getElementById('mafSlider').value = 0;
     document.getElementById('missingSlider').value = 1;
-    document.getElementById('annotationFilter').value = 'all';
-    filterState = {{ maf: 0, missingRate: 1.0, annotation: 'all' }};
+    filterState = {{ maf: 0, missingRate: 1.0 }};
     document.getElementById('mafValue').textContent = '0';
     document.getElementById('missingValue').textContent = '1.0';
+    document.querySelectorAll('.ann-cb-mp').forEach(cb => {{ cb.checked = true; }});
     applyFilters();
 }}
 
 function applyFilters() {{
-    // 过滤曼哈顿图数据
     const filteredData = manhattanData.filter(d => {{
         const mafPass = d.maf >= filterState.maf;
         const missingPass = d.missing_rate <= filterState.missingRate;
-        const annoPass = filterState.annotation === 'all' || d.annotation === filterState.annotation;
-        return mafPass && missingPass && annoPass;
+        return mafPass && missingPass && annAllowedMp(d);
     }});
     
-    // 更新迷你曼哈顿图
     updateMiniManhattan(filteredData);
     
-    // 通知iframe更新（通过postMessage）
     const iframe = document.getElementById('integrated-frame');
     if (iframe && iframe.contentWindow) {{
         iframe.contentWindow.postMessage({{
             type: 'filter',
-            filters: filterState
+            filters: {{
+                maf: filterState.maf,
+                missingRate: filterState.missingRate,
+                annotationEnabled: getAnnotationEnabledMp()
+            }}
         }}, '*');
     }}
 }}
 
 // ========== 网络图 ==========
-let networkSvg, networkG, networkZoom, networkSimulation;
+let networkSvg, networkG, networkSimulation;
 window.networkInitialized = false;
+
+let networkScale = 1;
+const networkCx = () => document.getElementById('network-chart').clientWidth / 2;
+const networkCy = () => 275;
+
+function applyNetworkPanelZoom() {{
+    const cx = networkCx(), cy = networkCy();
+    networkG.attr('transform', 'translate(' + cx + ',' + cy + ') scale(' + networkScale + ') translate(' + (-cx) + ',' + (-cy) + ')');
+}}
 
 function initNetwork() {{
     const container = document.getElementById('network-chart');
     const width = container.clientWidth;
     const height = 550;
     
-    networkSvg = d3.select('#network-chart').append('svg').attr('width', width).attr('height', height);
-    networkG = networkSvg.append('g');
+    networkSvg = d3.select('#network-chart').append('svg').attr('width', width).attr('height', height).style('overflow', 'hidden');
+    networkSvg.append('defs').append('clipPath').attr('id', 'clip-net-panel')
+        .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+    networkG = networkSvg.append('g').attr('clip-path', 'url(#clip-net-panel)');
+    networkScale = 1;
+    applyNetworkPanelZoom();
     
-    networkZoom = d3.zoom().scaleExtent([0.2, 5]).on('zoom', (e) => networkG.attr('transform', e.transform));
-    networkSvg.call(networkZoom);
+    networkNodes.forEach(d => {{
+        d.x = width / 2 + (Math.random() - 0.5) * 50;
+        d.y = height / 2 + (Math.random() - 0.5) * 50;
+    }});
     
     networkSimulation = d3.forceSimulation(networkNodes)
         .force('link', d3.forceLink(networkEdges).id(d => d.id).distance(d => 60 + d.distance * 12))
-        .force('charge', d3.forceManyBody().strength(-400))
+        .force('charge', d3.forceManyBody().strength(-140))
         .force('center', d3.forceCenter(width/2, height/2))
+        .force('x', d3.forceX(width/2).strength(0.1))
+        .force('y', d3.forceY(height/2).strength(0.1))
         .force('collision', d3.forceCollide().radius(d => d.size + 8));
     
     // 绘制基础连线
@@ -6059,8 +6818,7 @@ function initNetwork() {{
     
     const node = networkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
         .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
-        .style('cursor', 'pointer')
-        .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
+        .style('cursor', 'default');
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
         .attr('text-anchor', 'middle').attr('dy', d => d.size + 14).attr('font-size', '11px')
@@ -6078,6 +6836,11 @@ function initNetwork() {{
     }});
     
     networkSimulation.on('tick', () => {{
+        networkNodes.forEach(d => {{
+            const r = (d.size || 10) + 8;
+            d.x = Math.max(r, Math.min(width - r, d.x));
+            d.y = Math.max(r, Math.min(height - r, d.y));
+        }});
         link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
         
         // 更新差异位点标记
@@ -6107,16 +6870,12 @@ function initNetwork() {{
         labels.attr('x', d => d.x).attr('y', d => d.y);
     }});
     
-    function dragstarted(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }}
-    function dragged(event, d) {{ d.fx = event.x; d.fy = event.y; }}
-    function dragended(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }}
-    
     window.networkInitialized = true;
 }}
 
-function networkZoomIn() {{ networkSvg.transition().call(networkZoom.scaleBy, 1.3); }}
-function networkZoomOut() {{ networkSvg.transition().call(networkZoom.scaleBy, 0.7); }}
-function networkResetZoom() {{ networkSvg.transition().call(networkZoom.transform, d3.zoomIdentity); }}
+function networkZoomIn() {{ networkScale = Math.min(2.5, networkScale * 1.2); applyNetworkPanelZoom(); }}
+function networkZoomOut() {{ networkScale = Math.max(0.45, networkScale / 1.2); applyNetworkPanelZoom(); }}
+function networkResetZoom() {{ networkScale = 1; applyNetworkPanelZoom(); }}
 
 function setNetworkLayout(type) {{
     document.getElementById('netForceBtn').classList.toggle('active', type === 'force');
@@ -6262,16 +7021,22 @@ function initMiniNetwork() {{
     d3.select('#mini-network').selectAll('*').remove();
     
     miniNetworkSvg = d3.select('#mini-network').append('svg')
-        .attr('width', width).attr('height', height);
-    miniNetworkG = miniNetworkSvg.append('g');
+        .attr('width', width).attr('height', height).style('overflow', 'hidden');
+    miniNetworkSvg.append('defs').append('clipPath').attr('id', 'clip-mini-net')
+        .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+    miniNetworkG = miniNetworkSvg.append('g').attr('clip-path', 'url(#clip-mini-net)');
     
-    const zoom = d3.zoom().scaleExtent([0.5, 3]).on('zoom', (e) => miniNetworkG.attr('transform', e.transform));
-    miniNetworkSvg.call(zoom);
+    networkNodes.forEach(d => {{
+        d.x = width / 2 + (Math.random() - 0.5) * 20;
+        d.y = height / 2 + (Math.random() - 0.5) * 20;
+    }});
     
     miniNetworkSimulation = d3.forceSimulation(networkNodes)
         .force('link', d3.forceLink(networkEdges).id(d => d.id).distance(d => 40 + d.distance * 8))
-        .force('charge', d3.forceManyBody().strength(-200))
+        .force('charge', d3.forceManyBody().strength(-90))
         .force('center', d3.forceCenter(width/2, height/2))
+        .force('x', d3.forceX(width/2).strength(0.12))
+        .force('y', d3.forceY(height/2).strength(0.12))
         .force('collision', d3.forceCollide().radius(d => d.size * 0.6 + 5));
     
     const link = miniNetworkG.append('g').selectAll('line').data(networkEdges).enter().append('line')
@@ -6279,10 +7044,7 @@ function initMiniNetwork() {{
     
     const node = miniNetworkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
         .attr('r', d => d.size * 0.6).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 1.5)
-        .style('cursor', 'pointer')
-        .call(d3.drag().on('start', (e, d) => {{ if (!e.active) miniNetworkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
-                       .on('drag', (e, d) => {{ d.fx = e.x; d.fy = e.y; }})
-                       .on('end', (e, d) => {{ if (!e.active) miniNetworkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }}));
+        .style('cursor', 'default');
     
     const labels = miniNetworkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
         .attr('text-anchor', 'middle').attr('dy', d => d.size * 0.6 + 10).attr('font-size', '9px')
@@ -6299,6 +7061,11 @@ function initMiniNetwork() {{
     }});
     
     miniNetworkSimulation.on('tick', () => {{
+        networkNodes.forEach(d => {{
+            const r = (d.size || 10) * 0.6 + 5;
+            d.x = Math.max(r, Math.min(width - r, d.x));
+            d.y = Math.max(r, Math.min(height - r, d.y));
+        }});
         link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
         node.attr('cx', d => d.x).attr('cy', d => d.y);
@@ -6551,60 +7318,16 @@ class HaplotypePhenotypeAnalyzer:
             logger.warning(f"提取基因型数据失败: {e}")
             return None
     
-    def _extract_genotypes_for_amova(self):
-        """
-        从VCF提取基因型数据用于AMOVA分析
-        返回: DataFrame (样本 x 位点)
-        """
-        logger = get_logger()
-        try:
-            if PYSAM_AVAILABLE:
-                vcf = pysam.VariantFile(self.vcf_file)
-                samples = list(vcf.header.samples)
-                
-                # 获取区间内的变异
-                variants = []
-                positions = []
-                for rec in vcf.fetch(self.chrom, self.start, self.end):
-                    variants.append(rec)
-                    positions.append(rec.pos)
-                
-                if len(variants) == 0:
-                    return None
-                
-                # 构建基因型矩阵
-                gt_data = []
-                for rec in variants:
-                    row = {'POS': rec.pos}
-                    for sample in samples:
-                        gt = rec.samples[sample]['GT']
-                        # 编码基因型: 0/0->0, 0/1->1, 1/1->2, missing->-1
-                        if gt is None or None in gt:
-                            row[sample] = -1
-                        else:
-                            row[sample] = sum(gt)
-                    gt_data.append(row)
-                
-                gt_df = pd.DataFrame(gt_data)
-                # 转置为 样本 x 位点 格式
-                gt_df = gt_df.set_index('POS').T.reset_index()
-                gt_df.columns = ['SampleID'] + [f'POS_{p}' for p in positions]
-                
-                return gt_df
-            else:
-                logger.warning("pysam不可用，无法提取基因型数据")
-                return None
-        except Exception as e:
-            logger.warning(f"提取基因型数据失败: {e}")
-            return None
-    
     def _annotate_snp_effects_tabix(self, vcf_file: str, fasta_path: str, gene_chrom: str,
                                      region_start: int, region_end: int,
                                      cds_intervals: list, exon_intervals: list,
-                                     gene_strand: str) -> dict:
+                                     gene_strand: str, promoter_start: int = None, 
+                                     promoter_end: int = None) -> dict:
         """
-        用 tabix 只读目标区间，做 SNP 精细分类 (missense/synonymous/UTR/other)
+        用 tabix 只读目标区间，做 SNP 精细分类 (missense/synonymous/UTR/promoter/SV/indel/other)
         读取范围：gene_chrom:region_start-region_end (含启动子)
+        
+        优先级顺序：missense > synonymous > UTR > promoter > SV > indel > other
         """
         logger = get_logger()
         effects = {}
@@ -6668,15 +7391,43 @@ class HaplotypePhenotypeAnalyzer:
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
                     
+                    # 计算变异长度差异（用于判断 SV/indel）
+                    len_diff = abs(len(ref) - len(alt_allele))
+                    
+                    # 优先级判断：exon/CDS > UTR > promoter > SV/indel > other
                     if not in_exon:
-                        effects[pos] = 'other'
+                        # 不在外显子区，检查是否在启动子区
+                        in_promoter = (promoter_start is not None and 
+                                      promoter_end is not None and 
+                                      promoter_start <= pos <= promoter_end)
+                        
+                        if in_promoter:
+                            # 启动子区域变异
+                            effects[pos] = 'promoter'
+                        elif len_diff >= 50:
+                            # 结构变异
+                            effects[pos] = 'SV'
+                        elif len_diff > 0:
+                            # 小插入缺失
+                            effects[pos] = 'indel'
+                        else:
+                            # 其他区域
+                            effects[pos] = 'other'
                     elif not in_cds:
+                        # 在 exon 但不在 CDS（UTR 区域）
                         effects[pos] = 'UTR'
                     elif len(ref) != 1 or len(alt_allele) != 1:
-                        effects[pos] = 'other'
+                        # CDS 区的非单碱基变异
+                        if len_diff >= 50:
+                            effects[pos] = 'SV'
+                        elif len_diff > 0:
+                            effects[pos] = 'indel'
+                        else:
+                            effects[pos] = 'other'
                     elif not cds_seq or pos not in cds_pos_to_idx:
                         effects[pos] = 'other'
                     else:
+                        # CDS 区的单碱基变异，判断错义/同义
                         idx = cds_pos_to_idx[pos]
                         codon_start = (idx // 3) * 3
                         if codon_start + 3 > len(cds_seq):
@@ -6693,7 +7444,9 @@ class HaplotypePhenotypeAnalyzer:
                             elif aa_ref == aa_alt:
                                 effects[pos] = 'synonymous'
                             else:
-                                effects[pos] = 'missense'
+                                # 错义突变分级：保守/半保守/非保守
+                                substitution_type = _classify_amino_acid_substitution(aa_ref, aa_alt)
+                                effects[pos] = f'missense_{substitution_type}'
                 
                 logger.info(f"    - VariantFile匹配位点数: {match_count}/{len(positions_list)}")
                 # 统计各类型数量
@@ -7092,9 +7845,17 @@ class HaplotypePhenotypeAnalyzer:
                 region_end=plot_region_end,
                 cds_intervals=cds_list,
                 exon_intervals=exons_list,
-                gene_strand=strand
+                gene_strand=strand,
+                promoter_start=promoter_start_pos,
+                promoter_end=promoter_end_pos
             )
             logger.info(f"  - SNP注释: {dict((k, sum(1 for v in snp_effects.values() if v==k)) for k in set(snp_effects.values()))}")
+
+            variant_pvalues = compute_variant_phenotype_pvalues(
+                assoc_module.merged_df,
+                list(self.positions or []),
+                first_pheno,
+            )
                     
             self.reporter.generate_integrated_html(
                 hap_sample_df=assoc_module.merged_df,  # 使用 merged_df，包含表型数据
@@ -7112,8 +7873,10 @@ class HaplotypePhenotypeAnalyzer:
                 cds=cds_list,
                 snp_effects=snp_effects,
                 chrom=chrom,
+                gene_id=gene_id,
                 cluster_haplotypes=cluster_haplotypes,
-                variant_info=self.extractor.variant_info if hasattr(self.extractor, 'variant_info') else {}
+                variant_info=self.extractor.variant_info if hasattr(self.extractor, 'variant_info') else {},
+                variant_pvalues=variant_pvalues,
             )
             
             # 5.2 生成新可视化功能
@@ -7130,20 +7893,8 @@ class HaplotypePhenotypeAnalyzer:
             except Exception as e:
                 logger.warning(f"  - 单倍型网络图生成失败: {e}")
             
-            # 生成曼哈顿图
+            # 生成曼哈顿图（与综合报告共用 per-position 表型-等位基因 p 值）
             try:
-                # 构建P值字典
-                variant_pvalues = {}
-                if snp_effects and first_effect:
-                    hap_effects = first_effect.get('haplotype_effects', [])
-                    if hap_effects:
-                        # 简化处理：将整体关联P值分配给各位点
-                        overall_pval = all_results['phenotype_results'].get(first_pheno, {}).get('association', {}).get('p_value', 0.5)
-                        for pos in self.positions:
-                            # 随机波动以示范不同位点的差异
-                            np.random.seed(pos)
-                            variant_pvalues[pos] = max(0.0001, min(0.99, overall_pval * np.random.uniform(0.1, 3.0)))
-                
                 self.reporter.generate_manhattan_plot_html(
                     variant_positions=self.positions,
                     variant_pvalues=variant_pvalues,
@@ -7167,8 +7918,8 @@ class HaplotypePhenotypeAnalyzer:
             
             # 生成P值热图
             try:
-                if not variant_pvalues:
-                    variant_pvalues = {pos: 0.05 for pos in self.positions}
+                if not variant_pvalues and self.positions:
+                    variant_pvalues = {int(p): 1.0 for p in self.positions}
                 self.reporter.generate_pvalue_heatmap_html(
                     variant_positions=self.positions,
                     variant_pvalues=variant_pvalues,
