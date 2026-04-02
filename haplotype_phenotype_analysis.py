@@ -1288,7 +1288,7 @@ def compute_variant_phenotype_pvalues(
     phenotype_col: str,
 ) -> dict:
     """
-    按位点计算表型与等位基因关联的近似 p 值（两组 Welch t 检验，多组 ANOVA）。
+    按位点计算表型与等位基因关联的近似 p 值（两组 Welch t 检验，多组 ANOVA）- 优化版。
     用于 GWAS 棒棒糖图等可视化；若某位点等位基因无变异或样本不足则 p=1.0。
     """
     out: dict = {}
@@ -1301,50 +1301,49 @@ def compute_variant_phenotype_pvalues(
         & (merged_df[phenotype_col].notna())
         & (merged_df["Haplotype_Seq"].notna())
     ].copy()
+    if len(df) < 5:
+        return {int(p): 1.0 for p in positions}
+    
     pos_to_idx = {int(p): i for i, p in enumerate(positions)}
+    pheno_values = df[phenotype_col].astype(float).values
+    
+    # 预计算所有位置的等位基因（向量化）
+    seqs = df["Haplotype_Seq"].astype(str)
+    all_parts = seqs.str.split("|", expand=True)
+    
     for pos in positions:
         ip = int(pos)
         idx = pos_to_idx.get(ip)
-        if idx is None:
-            continue
-        alleles, phenos = [], []
-        for _, row in df.iterrows():
-            parts = str(row["Haplotype_Seq"]).split("|")
-            if idx >= len(parts):
-                continue
-            a = parts[idx].strip().upper()
-            if not a or a == "N":
-                continue
-            try:
-                y = float(row[phenotype_col])
-            except (TypeError, ValueError):
-                continue
-            alleles.append(a)
-            phenos.append(y)
-        if len(phenos) < 5:
+        if idx is None or idx >= all_parts.shape[1]:
             out[ip] = 1.0
             continue
-        uniq = []
-        seen = set()
-        for a in alleles:
-            if a not in seen:
-                seen.add(a)
-                uniq.append(a)
-        if len(uniq) < 2:
+        
+        alleles = all_parts[idx].str.strip().str.upper()
+        mask = alleles.notna() & (alleles != "") & (alleles != "N")
+        
+        valid_alleles = alleles[mask].values
+        valid_phenos = pheno_values[mask]
+        
+        if len(valid_phenos) < 5:
             out[ip] = 1.0
             continue
-        groups = {a: [] for a in uniq}
-        for a, y in zip(alleles, phenos):
-            groups[a].append(y)
-        group_lists = [groups[a] for a in uniq if len(groups[a]) > 0]
-        if len(group_lists) < 2:
+        
+        uniq_alleles = np.unique(valid_alleles)
+        if len(uniq_alleles) < 2:
             out[ip] = 1.0
             continue
+        
+        # 分组进行统计检验
+        groups = [valid_phenos[valid_alleles == a] for a in uniq_alleles if np.sum(valid_alleles == a) > 0]
+        if len(groups) < 2:
+            out[ip] = 1.0
+            continue
+        
         try:
-            if len(group_lists) == 2:
-                _, pval = ttest_ind(group_lists[0], group_lists[1], equal_var=False)
+            if len(groups) == 2:
+                _, pval = ttest_ind(groups[0], groups[1], equal_var=False)
             else:
-                _, pval = f_oneway(*group_lists)
+                _, pval = f_oneway(*groups)
             if pval is None or (isinstance(pval, float) and np.isnan(pval)):
                 pval = 1.0
             out[ip] = float(np.clip(pval, 1e-300, 1.0))
@@ -1354,19 +1353,20 @@ def compute_variant_phenotype_pvalues(
 
 
 def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
-    """返回每位样本在 Haplotype_Seq 第 idx 个位点的碱基字符（object 数组）。"""
-    out = np.empty(len(merged_df), dtype=object)
-    for i, (_, row) in enumerate(merged_df.iterrows()):
-        if "Haplotype_Seq" not in row or pd.isna(row["Haplotype_Seq"]):
-            out[i] = None
-            continue
-        parts = str(row["Haplotype_Seq"]).split("|")
-        if idx >= len(parts):
-            out[i] = None
-            continue
-        a = parts[idx].strip().upper()
-        out[i] = None if not a or a == "N" else a
-    return out
+    """返回每位样本在 Haplotype_Seq 第 idx 个位点的碱基字符（object 数组）- 优化版使用向量化操作。"""
+    if "Haplotype_Seq" not in merged_df.columns:
+        return np.full(len(merged_df), None, dtype=object)
+    
+    seqs = merged_df["Haplotype_Seq"].astype(str)
+    # 使用str.split和str.get进行向量化操作
+    parts = seqs.str.split("|", expand=True)
+    if idx >= parts.shape[1]:
+        return np.full(len(merged_df), None, dtype=object)
+    
+    result = parts[idx].str.strip().str.upper()
+    # 将空字符串和"N"替换为None
+    result = result.where(result.notna() & (result != "") & (result != "N"), None)
+    return result.values
 
 
 def _numeric_allele_vector(codes: np.ndarray) -> np.ndarray:
