@@ -5018,7 +5018,7 @@ function exportSVG() {{
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-}}
+}
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
