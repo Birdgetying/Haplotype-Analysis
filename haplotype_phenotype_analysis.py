@@ -5208,14 +5208,43 @@ document.addEventListener('DOMContentLoaded', function() {
                         if c1 != c2:
                             diff_positions.append(idx)
                     dist = len(diff_positions)
-                    # 只连接距离较近的单倍型
-                    if dist <= len(seq1) * 0.3 and dist > 0:  # 最多30%差异，且必须有差异
+                    # 连接所有有差异的单倍型（确保所有节点相连）
+                    if dist > 0:
                         edges.append({
                             'source': hap_names[i],
                             'target': hap_names[j],
                             'distance': dist,
                             'diff_positions': diff_positions  # 记录差异位点索引
                         })
+        
+        # 确保所有节点都相连：如果有孤立节点，连接到最近的节点
+        connected_nodes = set()
+        for e in edges:
+            connected_nodes.add(e['source'])
+            connected_nodes.add(e['target'])
+        
+        for hap in hap_names:
+            if hap not in connected_nodes:
+                # 找到距离最近的已连接节点
+                min_dist = float('inf')
+                nearest = None
+                for other in connected_nodes:
+                    seq1, seq2 = hap_seqs.get(hap, ''), hap_seqs.get(other, '')
+                    if seq1 and seq2 and len(seq1) == len(seq2):
+                        dist = sum(c1 != c2 for c1, c2 in zip(seq1, seq2))
+                        if dist < min_dist and dist > 0:
+                            min_dist = dist
+                            nearest = other
+                if nearest:
+                    seq1, seq2 = hap_seqs.get(hap, ''), hap_seqs.get(nearest, '')
+                    diff_positions = [idx for idx, (c1, c2) in enumerate(zip(seq1, seq2)) if c1 != c2]
+                    edges.append({
+                        'source': hap,
+                        'target': nearest,
+                        'distance': min_dist,
+                        'diff_positions': diff_positions
+                    })
+                    connected_nodes.add(hap)
         
         # 生成D3.js HTML
         nodes_json = json.dumps(nodes, cls=NumpyEncoder)
@@ -5312,163 +5341,138 @@ const height = 700;
 let currentLayout = 'force';
 let currentSizeMode = 'count';
 
-// 创建SVG（支持缩放和拖动，但可视范围固定）
+// 创建SVG
 const svg = d3.select('#network')
     .append('svg')
-    .attr('width', '100%')
+    .attr('width', width)
     .attr('height', height)
-    .style('overflow', 'hidden');
+    .style('display', 'block');
 
-svg.append('defs').append('clipPath').attr('id', 'clip-net-standalone')
+// 添加clipPath限制显示范围
+svg.append('defs').append('clipPath')
+    .attr('id', 'clip-net-standalone')
     .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
 
+// 主绘图组
 const g = svg.append('g').attr('clip-path', 'url(#clip-net-standalone)');
 
-nodes.forEach(d => {{
-    d.x = width / 2 + (Math.random() - 0.5) * 40;
-    d.y = height / 2 + (Math.random() - 0.5) * 40;
-}});
+// 内部缩放组（用于滚轮缩放）
+const zoomG = g.append('g').attr('class', 'zoom-group');
 
-// 缩放和拖动状态
-let netScale = 1;
-let netTranslateX = 0;
-let netTranslateY = 0;
-let isDragging = false;
-let dragStartX = 0;
-let dragStartY = 0;
+// 缩放比例状态
+let currentScale = 1;
+let minScale = 0.5, maxScale = 2.5;
 
-function applyNetZoom() {{
-    g.attr('transform', 'translate(' + netTranslateX + ',' + netTranslateY + ') scale(' + netScale + ')');
-}}
-
-// 鼠标滚轮缩放（以鼠标位置为中心）
-svg.on('wheel', function(event) {{
-    event.preventDefault();
-    const rect = this.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    
-    const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.3, Math.min(3, netScale * scaleFactor));
-    
-    if (newScale !== netScale) {{
-        // 以鼠标位置为中心缩放
-        netTranslateX = mouseX - (mouseX - netTranslateX) * (newScale / netScale);
-        netTranslateY = mouseY - (mouseY - netTranslateY) * (newScale / netScale);
-        netScale = newScale;
-        applyNetZoom();
+// 滚轮缩放（以容器中心为基准）
+svg.on('wheel', function(e) {{
+    e.preventDefault();
+    var delta = e.deltaY > 0 ? 0.9 : 1.1;
+    var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
+    if (newScale !== currentScale) {{
+        currentScale = newScale;
+        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
     }}
 }});
 
-// 画布拖动
-svg.on('mousedown', function(event) {{
-    isDragging = true;
-    dragStartX = event.clientX - netTranslateX;
-    dragStartY = event.clientY - netTranslateY;
-    d3.select(this).style('cursor', 'grabbing');
-}});
+// 深拷贝节点
+const simNodes = nodes.map(d => Object.assign({{}}, d));
+const nodeById = {{}};
+simNodes.forEach(d => nodeById[d.id] = d);
 
-svg.on('mousemove', function(event) {{
-    if (isDragging) {{
-        netTranslateX = event.clientX - dragStartX;
-        netTranslateY = event.clientY - dragStartY;
-        applyNetZoom();
-    }}
-}});
-
-svg.on('mouseup', function() {{
-    isDragging = false;
-    d3.select(this).style('cursor', 'default');
-}});
-
-svg.on('mouseleave', function() {{
-    isDragging = false;
-    d3.select(this).style('cursor', 'default');
-}});
+// 构建连线
+let simLinks = links
+    .filter(e => nodeById[e.source] && nodeById[e.target])
+    .map(e => ({{ source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }}));
 
 // 力导向模拟
-const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(d => 50 + d.distance * 10))
-    .force('charge', d3.forceManyBody().strength(-120))
+const sim = d3.forceSimulation(simNodes)
+    .force('link', d3.forceLink(simLinks).distance(d => Math.min(80, 35 + d.distance * 12)).strength(0.8))
+    .force('charge', d3.forceManyBody().strength(-180))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('x', d3.forceX(width / 2).strength(0.08))
-    .force('y', d3.forceY(height / 2).strength(0.08))
-    .force('collision', d3.forceCollide().radius(d => d.size + 5));
+    .force('collision', d3.forceCollide().radius(d => d.size * 0.45 + 4))
+    .force('x', d3.forceX(width / 2).strength(0.05))
+    .force('y', d3.forceY(height / 2).strength(0.05));
 
-// 绘制连线（带差异位点标记）
-const linkGroup = g.append('g').attr('class', 'links');
+// 绘制连线
+const linkSel = zoomG.append('g').selectAll('line').data(simLinks).join('line')
+    .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
+    .attr('stroke-width', d => Math.max(1, 3.5 - d.distance * 0.4));
 
-// 绘制基础连线
-const link = linkGroup.selectAll('line.base-link')
-    .data(links)
-    .enter().append('line')
-    .attr('class', 'base-link')
-    .attr('stroke', '#666')
-    .attr('stroke-width', 1.5)
-    .attr('stroke-opacity', 0.6);
+// 绘制节点组（支持拖拽）
+const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+        .on('start', function(e, d) {{ if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
+        .on('drag', function(e, d) {{ 
+            var r = d.size * 0.5 + 5;
+            d.fx = Math.max(r, Math.min(width - r, e.x));
+            d.fy = Math.max(r, Math.min(height - r, e.y));
+        }})
+        .on('end', function(e, d) {{ if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }})
+    );
 
-// 在连线上绘制差异位点标记（竖线）
-const linkMarkers = linkGroup.selectAll('g.link-markers')
-    .data(links)
-    .enter().append('g')
-    .attr('class', 'link-markers');
-
-// 为每条边创建差异位点标记
-links.forEach((d, i) => {{
-    const markerGroup = linkMarkers.filter((ld, li) => li === i);
-    const numDiffs = d.distance;
-    
-    if (numDiffs > 0) {{
-        // 在连线上均匀分布差异标记
-        for (let j = 0; j < Math.min(numDiffs, 10); j++) {{
-            const t = (j + 1) / (numDiffs + 1);
-            markerGroup.append('line')
-                .attr('class', 'diff-marker')
-                .attr('stroke', '#e74c3c')  // 红色表示变异
-                .attr('stroke-width', 2)
-                .attr('stroke-opacity', 0.8)
-                .attr('data-t', t)  // 保存位置比例
-                .attr('data-link-index', i);
-        }}
-    }}
-}});
-
-// 绘制节点
-const node = g.append('g')
-    .selectAll('circle')
-    .data(nodes)
-    .enter().append('circle')
-    .attr('class', 'node')
-    .attr('r', d => d.size)
+// 节点圆形
+nodeG.append('circle')
+    .attr('r', d => d.size * 0.5)
     .attr('fill', d => d.color)
-    .attr('stroke', '#fff')
-    .attr('stroke-width', 2);
+    .attr('stroke', '#fff').attr('stroke-width', 2.5);
 
-// 添加标签
-const labels = g.append('g')
-    .selectAll('text')
-    .data(nodes)
-    .enter().append('text')
-    .attr('class', 'node-label')
-    .attr('text-anchor', 'middle')
-    .attr('dy', d => d.size + 15)
-    .text(d => d.id);
+// 节点标签
+nodeG.append('text')
+    .attr('text-anchor', 'middle').attr('dy', '0.35em')
+    .attr('font-size', d => Math.min(11, Math.max(7, d.size * 0.28)) + 'px')
+    .attr('fill', '#fff').attr('font-weight', 'bold').attr('pointer-events', 'none')
+    .text(d => d.id.replace('Hap', 'H'));
+
+// 样本数标签
+nodeG.append('text')
+    .attr('text-anchor', 'middle').attr('dy', d => d.size * 0.5 + 13)
+    .attr('font-size', '9px').attr('fill', '#445566').attr('pointer-events', 'none')
+    .text(d => 'n=' + d.count);
 
 // Tooltip
 const tooltip = d3.select('#tooltip');
-
-node.on('mouseover', function(event, d) {{
+nodeG.on('mouseover', function(event, d) {{
+    d3.select(this).select('circle').attr('stroke', '#f39c12').attr('stroke-width', 3.5);
     tooltip.style('display', 'block')
-        .html(`<h4>${{d.id}}</h4>
-               <p><strong>Sample Count:</strong> ${{d.count}}</p>
-               <p><strong>Node Size:</strong> ${{d.size.toFixed(1)}}</p>
-               <p><strong>Variant Sites:</strong> ${{d.snp_count}}</p>`);
-    d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
-}})
-.on('mousemove', function(event) {{
-    tooltip.style('left', (event.pageX + 15) + 'px')
-           .style('top', (event.pageY - 10) + 'px');
-}})
+        .html('<h4>' + d.id + '</h4><p>Count: ' + d.count + '</p><p>Variants: ' + d.snp_count + '</p>');
+}}).on('mousemove', function(event) {{
+    tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY - 10) + 'px');
+}}).on('mouseout', function(event) {{
+    d3.select(this).select('circle').attr('stroke', '#fff').attr('stroke-width', 2.5);
+    tooltip.style('display', 'none');
+}});
+
+// 更新位置
+sim.on('tick', () => {{
+    linkSel
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    nodeG.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+}});
+
+// 缩放控制函数
+function zoomIn() {{
+    var newScale = Math.min(maxScale, currentScale * 1.2);
+    if (newScale !== currentScale) {{
+        currentScale = newScale;
+        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
+    }}
+}}
+
+function zoomOut() {{
+    var newScale = Math.max(minScale, currentScale / 1.2);
+    if (newScale !== currentScale) {{
+        currentScale = newScale;
+        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
+    }}
+}}
+
+function resetZoom() {{
+    currentScale = 1;
+    zoomG.attr('transform', null);
+    sim.alpha(1).restart();
+}}
 .on('mouseout', function(event) {{
     tooltip.style('display', 'none');
     d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
@@ -5477,78 +5481,6 @@ node.on('mouseover', function(event, d) {{
     // 阻止节点上的mousedown冒泡，避免触发画布拖拽
     event.stopPropagation();
 }});
-
-// 更新位置（限制在画布内）
-simulation.on('tick', () => {{
-    nodes.forEach(d => {{
-        const r = (d.size || 10) + 6;
-        d.x = Math.max(r, Math.min(width - r, d.x));
-        d.y = Math.max(r, Math.min(height - r, d.y));
-    }});
-    link.attr('x1', d => d.source.x)
-        .attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x)
-        .attr('y2', d => d.target.y);
-    
-    // 更新差异位点标记位置
-    linkMarkers.selectAll('line.diff-marker')
-        .attr('x1', function() {{
-            const d = d3.select(this.parentNode).datum();
-            const t = +d3.select(this).attr('data-t');
-            return d.source.x + (d.target.x - d.source.x) * t;
-        }})
-        .attr('y1', function() {{
-            const d = d3.select(this.parentNode).datum();
-            const t = +d3.select(this).attr('data-t');
-            return d.source.y + (d.target.y - d.source.y) * t - 6;
-        }})
-        .attr('x2', function() {{
-            const d = d3.select(this.parentNode).datum();
-            const t = +d3.select(this).attr('data-t');
-            return d.source.x + (d.target.x - d.source.x) * t;
-        }})
-        .attr('y2', function() {{
-            const d = d3.select(this.parentNode).datum();
-            const t = +d3.select(this).attr('data-t');
-            return d.source.y + (d.target.y - d.source.y) * t + 6;
-        }});
-    
-    node.attr('cx', d => d.x)
-        .attr('cy', d => d.y);
-    
-    labels.attr('x', d => d.x)
-          .attr('y', d => d.y);
-}});
-
-// 缩放控制（支持独立缩放和重置）
-function zoomIn() {{
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const newScale = Math.min(3, netScale * 1.2);
-    // 以画布中心为基准缩放
-    netTranslateX = centerX - (centerX - netTranslateX) * (newScale / netScale);
-    netTranslateY = centerY - (centerY - netTranslateY) * (newScale / netScale);
-    netScale = newScale;
-    applyNetZoom();
-}}
-
-function zoomOut() {{
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const newScale = Math.max(0.3, netScale / 1.2);
-    // 以画布中心为基准缩放
-    netTranslateX = centerX - (centerX - netTranslateX) * (newScale / netScale);
-    netTranslateY = centerY - (centerY - netTranslateY) * (newScale / netScale);
-    netScale = newScale;
-    applyNetZoom();
-}}
-
-function resetZoom() {{
-    netScale = 1;
-    netTranslateX = 0;
-    netTranslateY = 0;
-    applyNetZoom();
-}}
 
 // 布局切换
 function setLayout(type) {{
@@ -5562,27 +5494,27 @@ function setLayout(type) {{
         const centerY = height / 2;
         const radius = Math.min(width, height) / 3;
         
-        nodes.forEach((d, i) => {{
-            const angle = (i / nodes.length) * 2 * Math.PI;
+        simNodes.forEach((d, i) => {{
+            const angle = (i / simNodes.length) * 2 * Math.PI;
             d.fx = centerX + radius * Math.cos(angle);
             d.fy = centerY + radius * Math.sin(angle);
         }});
-        simulation.alpha(0.3).restart();
+        sim.alpha(0.3).restart();
     }} else {{
         // 力导向布局
-        nodes.forEach(d => {{
+        simNodes.forEach(d => {{
             d.fx = null;
             d.fy = null;
         }});
-        simulation.alpha(1).restart();
+        sim.alpha(1).restart();
     }}
 }}
 
-// 节点大小模式 - 默认按样本数量
+// 节点大小模式
 function toggleSizeMode(mode) {{
     // 节点大小始终基于样本数量
-    node.transition().duration(300)
-        .attr('r', d => Math.max(10, Math.min(50, 10 + Math.sqrt(d.count) * 5)));
+    nodeG.selectAll('circle').transition().duration(300)
+        .attr('r', d => Math.max(10, Math.min(50, d.size * 0.5)));
 }}
 </script>
 </body>
