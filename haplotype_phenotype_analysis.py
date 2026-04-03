@@ -5244,7 +5244,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .controls button.active {{ background: #667eea; color: white; border-color: #667eea; }}
         .network-container {{ background: white; border-radius: 0 0 10px 10px; padding: 0;
                              box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }}
-        #network {{ width: 100%; height: 700px; }}
+        #network {{ width: 100%; height: 700px; user-select: none; touch-action: none; }}
         .tooltip {{ position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px 16px;
                    border-radius: 8px; font-size: 13px; pointer-events: none; z-index: 1000;
                    box-shadow: 0 4px 15px rgba(0,0,0,0.3); max-width: 250px; }}
@@ -5458,7 +5458,6 @@ const labels = g.append('g')
 const tooltip = d3.select('#tooltip');
 
 node.on('mouseover', function(event, d) {{
-    event.stopPropagation();
     tooltip.style('display', 'block')
         .html(`<h4>${{d.id}}</h4>
                <p><strong>Sample Count:</strong> ${{d.count}}</p>
@@ -5467,14 +5466,16 @@ node.on('mouseover', function(event, d) {{
     d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
 }})
 .on('mousemove', function(event) {{
-    event.stopPropagation();
     tooltip.style('left', (event.pageX + 15) + 'px')
            .style('top', (event.pageY - 10) + 'px');
 }})
 .on('mouseout', function(event) {{
-    event.stopPropagation();
     tooltip.style('display', 'none');
     d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+}})
+.on('mousedown', function(event) {{
+    // 阻止节点上的mousedown冒泡，避免触发画布拖拽
+    event.stopPropagation();
 }});
 
 // 更新位置（限制在画布内）
