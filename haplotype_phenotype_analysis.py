@@ -5018,7 +5018,7 @@ function exportSVG() {{
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-}
+}}
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
@@ -5028,6 +5028,14 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>'''
+        
+        # 修复JavaScript大括号转义问题（只在<script>标签内替换）
+        # 将 {{ 替换为 {，将 }} 替换为 }
+        import re
+        def fix_js_braces(match):
+            js_code = match.group(1)
+            return '<script>' + js_code.replace('{{', '{').replace('}}', '}') + '</script>'
+        html = re.sub(r'<script>(.*?)</script>', fix_js_braces, html, flags=re.DOTALL)
         
         # 替换所有JSON变量
         hap_order_count_json  = json.dumps(top_haps_count)
