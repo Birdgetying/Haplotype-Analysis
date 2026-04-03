@@ -5272,8 +5272,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .controls button:hover {{ background: #f0f0f0; }}
         .controls button.active {{ background: #667eea; color: white; border-color: #667eea; }}
         .network-container {{ background: white; border-radius: 0 0 10px 10px; padding: 0;
-                             box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }}
-        #network {{ width: 100%; height: 700px; user-select: none; touch-action: none; }}
+                             box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden;
+                             position: relative; }}
+        #network {{ width: 100%; height: 700px; user-select: none; touch-action: pan-y; }}
         .tooltip {{ position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px 16px;
                    border-radius: 8px; font-size: 13px; pointer-events: none; z-index: 1000;
                    box-shadow: 0 4px 15px rgba(0,0,0,0.3); max-width: 250px; }}
@@ -5336,7 +5337,8 @@ const nodes = {nodes_json};
 const links = {edges_json};
 
 // 设置
-const width = document.getElementById('network').clientWidth;
+const container = document.getElementById('network');
+const width = container.clientWidth || 1200;
 const height = 700;
 let currentLayout = 'force';
 let currentSizeMode = 'count';
@@ -5346,7 +5348,8 @@ const svg = d3.select('#network')
     .append('svg')
     .attr('width', width)
     .attr('height', height)
-    .style('display', 'block');
+    .style('display', 'block')
+    .style('pointer-events', 'all');
 
 // 添加clipPath限制显示范围
 svg.append('defs').append('clipPath')
@@ -5363,9 +5366,10 @@ const zoomG = g.append('g').attr('class', 'zoom-group');
 let currentScale = 1;
 let minScale = 0.5, maxScale = 2.5;
 
-// 滚轮缩放（以容器中心为基准）
-svg.on('wheel', function(e) {{
+// 滚轮缩放（以容器中心为基准）- 使用原生事件确保兼容性
+container.addEventListener('wheel', function(e) {{
     e.preventDefault();
+    e.stopPropagation();
     console.log('wheel event', e.deltaY);
     var delta = e.deltaY > 0 ? 0.9 : 1.1;
     var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
@@ -5374,7 +5378,7 @@ svg.on('wheel', function(e) {{
         zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
         console.log('zoom to', currentScale);
     }}
-}});
+}}, {{ passive: false }});
 
 // 深拷贝节点
 const simNodes = nodes.map(d => Object.assign({{}}, d));
@@ -5441,19 +5445,6 @@ nodeG.append('text')
     .attr('text-anchor', 'middle').attr('dy', d => d.size * 0.5 + 13)
     .attr('font-size', '9px').attr('fill', '#445566').attr('pointer-events', 'none')
     .text(d => 'n=' + d.count);
-
-// Tooltip
-const tooltip = d3.select('#tooltip');
-nodeG.on('mouseover', function(event, d) {{
-    d3.select(this).select('circle').attr('stroke', '#f39c12').attr('stroke-width', 3.5);
-    tooltip.style('display', 'block')
-        .html('<h4>' + d.id + '</h4><p>Count: ' + d.count + '</p><p>Variants: ' + d.snp_count + '</p>');
-}}).on('mousemove', function(event) {{
-    tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY - 10) + 'px');
-}}).on('mouseout', function(event) {{
-    d3.select(this).select('circle').attr('stroke', '#fff').attr('stroke-width', 2.5);
-    tooltip.style('display', 'none');
-}});
 
 // 更新位置
 sim.on('tick', () => {{
