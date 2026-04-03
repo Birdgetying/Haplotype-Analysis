@@ -1798,8 +1798,11 @@ class AMOVAAnalyzer:
         if len(geno_cols) == 0:
             return {'error': '无有效基因型列'}
         
-        # 编码基因型
-        genotypes = merged[geno_cols].map(self._encode_genotype).values.astype(float)
+        # 编码基因型（兼容旧版pandas使用applymap）
+        try:
+            genotypes = merged[geno_cols].map(self._encode_genotype).values.astype(float)
+        except AttributeError:
+            genotypes = merged[geno_cols].applymap(self._encode_genotype).values.astype(float)
         groups = merged[group_col].values
         
         # 计算距离矩阵
