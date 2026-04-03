@@ -5344,7 +5344,7 @@ function applyNetZoom() {{
 // 鼠标滚轮缩放（以鼠标位置为中心）
 svg.on('wheel', function(event) {{
     event.preventDefault();
-    const rect = svg.node().getBoundingClientRect();
+    const rect = this.getBoundingClientRect();
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
     
@@ -5365,7 +5365,7 @@ svg.on('mousedown', function(event) {{
     isDragging = true;
     dragStartX = event.clientX - netTranslateX;
     dragStartY = event.clientY - netTranslateY;
-    svg.style('cursor', 'grabbing');
+    d3.select(this).style('cursor', 'grabbing');
 }});
 
 svg.on('mousemove', function(event) {{
@@ -5378,12 +5378,12 @@ svg.on('mousemove', function(event) {{
 
 svg.on('mouseup', function() {{
     isDragging = false;
-    svg.style('cursor', 'default');
+    d3.select(this).style('cursor', 'default');
 }});
 
 svg.on('mouseleave', function() {{
     isDragging = false;
-    svg.style('cursor', 'default');
+    d3.select(this).style('cursor', 'default');
 }});
 
 // 力导向模拟
