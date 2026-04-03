@@ -2,11 +2,11 @@
 
 #JSUB -J genome_haplotype_scan
 
-#JSUB -q fat
+#JSUB -q gpu
 
-#JSUB -n 3
+#JSUB -n 4
 
-
+#JSUB -gpgpu 1
 
 #JSUB -o logs/output.%J
 

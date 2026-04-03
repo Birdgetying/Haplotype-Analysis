@@ -1798,11 +1798,8 @@ class AMOVAAnalyzer:
         if len(geno_cols) == 0:
             return {'error': '无有效基因型列'}
         
-        # 编码基因型（兼容旧版pandas使用applymap）
-        try:
-            genotypes = merged[geno_cols].map(self._encode_genotype).values.astype(float)
-        except AttributeError:
-            genotypes = merged[geno_cols].applymap(self._encode_genotype).values.astype(float)
+        # 编码基因型
+        genotypes = merged[geno_cols].map(self._encode_genotype).values.astype(float)
         groups = merged[group_col].values
         
         # 计算距离矩阵
@@ -1971,10 +1968,7 @@ class AMOVAAnalyzer:
             return {'error': '样本量不足'}
         
         geno_cols = [c for c in merged.columns if c not in required_cols]
-        try:
-            genotypes = merged[geno_cols].map(self._encode_genotype).values.astype(float)
-        except AttributeError:
-            genotypes = merged[geno_cols].applymap(self._encode_genotype).values.astype(float)
+        genotypes = merged[geno_cols].map(self._encode_genotype).values.astype(float)
         
         regions = merged[region_col].values
         populations = merged[population_col].values
@@ -3730,11 +3724,6 @@ class ReportGenerator:
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
         
-        # DEBUG: 检查 snp_effects
-        print(f"[DEBUG] generate_integrated_html: snp_effects type={type(snp_effects)}, len={len(snp_effects) if snp_effects else 0}")
-        if snp_effects:
-            print(f"[DEBUG] snp_effects sample: {list(snp_effects.items())[:3]}")
-        
         # 获取所有单倍型及其序列（用于聚类）
         hap_seqs = {}
         if 'Haplotype_Seq' in hap_sample_df.columns:
@@ -3818,17 +3807,8 @@ class ReportGenerator:
         
         def get_var_color(pos):
             """snp_effects 优先，无则回退到位置分类"""
-            # DEBUG - 打印所有位置的信息
-            if snp_effects:
-                if pos in snp_effects:
-                    ann = snp_effects[pos]
-                    color = var_type_colors.get(ann, '#95a5a6')
-                    print(f"[DEBUG] get_var_color: pos={pos}, found in snp_effects, ann={ann}, color={color}")
-                    return color, ann
-                else:
-                    print(f"[DEBUG] get_var_color: pos={pos}, NOT in snp_effects, keys sample={list(snp_effects.keys())[:3]}")
-            else:
-                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects is None or empty")
+            if snp_effects and pos in snp_effects:
+                return var_type_colors.get(snp_effects[pos], '#95a5a6'), snp_effects[pos]
             # 位置回退：简单分为 UTR / other
             in_exon = any(es <= pos <= ee for es, ee in exons)
             in_cds_b = any(cs <= pos <= ce for cs, ce in cds)
@@ -4087,20 +4067,20 @@ class ReportGenerator:
         .zoom-controls span {{ font-size: 12px; color: #333; min-width: 45px; }}
         
         /* 可缩放内容区 */
-        .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
+        .content-wrapper {{ overflow: auto; max-height: calc(100vh - 200px); }}
         .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; }}
-        .network-panel {{ width: 100%; height: 350px; 
-                         border: none; border-radius: 6px; 
-                         background: #fafafa; position: relative; overflow: hidden; }}
+        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        .network-panel {{ width: 350px; min-width: 350px; height: 280px; 
+                         border: 1px solid #e0e0e0; border-radius: 6px; 
+                         background: #fafafa; position: absolute; left: 0; top: 0; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px; 
                                font-size: 12px; font-weight: 600; color: #2c3e50; 
                                background: rgba(255,255,255,0.9); padding: 2px 6px; 
                                border-radius: 3px; z-index: 10; }}
-        .gene-gwas-panel {{ flex: 1; height: 180px; border: 1px solid #e0e0e0; 
+        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px; 
                            font-size: 12px; font-weight: 600; color: #2c3e50; 
@@ -4191,10 +4171,6 @@ class ReportGenerator:
         <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
         <label>Sort:</label>
         <button id="sortBtn" onclick="toggleSort()" style="min-width:80px;">By Count</button>
-        <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
-        <label>Export:</label>
-        <button onclick="exportSVG()">SVG</button>
-        <button onclick="window.print()">Print</button>
     </div>
     
     <div class="content-wrapper">
@@ -4780,93 +4756,59 @@ function applyFilters() {
     });
 }
 
-// ==================== 单倍型网络图（D3 force simulation） ====================
+// ==================== 单倍型网络图（固定视口、无平移/缩放/拖拽；整体缩放用页面 Zoom 控件） ====================
 function drawNetworkPlot() {
     var container = document.getElementById('network-viz');
     if (!container || networkNodes.length === 0) return;
-    var W = container.clientWidth || 800;
-    var H = container.clientHeight || 350;
+    var W = 350, H = 280;
+    var pad = 6;
     d3.select('#network-viz').selectAll('*').remove();
 
     var svg = d3.select('#network-viz').append('svg')
         .attr('width', W).attr('height', H)
-        .style('display','block');
+        .style('display','block').style('overflow','hidden');
 
-    // 添加clipPath限制显示范围（容器边界固定）
-    svg.append('defs').append('clipPath')
-        .attr('id', 'network-clip')
-        .append('rect')
-        .attr('x', 0).attr('y', 0)
-        .attr('width', W).attr('height', H);
+    svg.append('defs').append('clipPath').attr('id','network-clip-integrated')
+        .append('rect').attr('x',0).attr('y',0).attr('width',W).attr('height',H);
+    var g = svg.append('g').attr('clip-path','url(#network-clip-integrated)');
 
-    // 主绘图组 - 应用clipPath
-    var g = svg.append('g').attr('clip-path', 'url(#network-clip)');
-    
-    // 内部缩放组（用于滚轮缩放内部节点）
-    var zoomG = g.append('g').attr('class', 'zoom-group');
-    
-    // 缩放比例状态
-    var currentScale = 1;
-    var minScale = 0.5, maxScale = 2.5;
-    
-    // 滚轮缩放内部节点（容器边界不变）
-    svg.on('wheel', function(e) {
-        e.preventDefault();
-        var delta = e.deltaY > 0 ? 0.9 : 1.1;  // 缩放因子
-        var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
-        if (newScale !== currentScale) {
-            currentScale = newScale;
-            // 以容器中心为基准缩放
-            zoomG.attr('transform', 'translate('+W/2+','+H/2+') scale('+currentScale+') translate('+-W/2+','+-H/2+')');
-        }
-    });
-
-    // 深拷贝节点
     var nodes = networkNodes.map(function(d) { return Object.assign({}, d); });
+    nodes.forEach(function(d) {
+        d.x = W / 2 + (Math.random() - 0.5) * 28;
+        d.y = H / 2 + (Math.random() - 0.5) * 28;
+    });
     var nodeById = {};
     nodes.forEach(function(d) { nodeById[d.id] = d; });
 
-    // 构建连线
     var links = networkEdges
         .filter(function(e) { return nodeById[e.source] && nodeById[e.target]; })
         .map(function(e) { return { source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }; });
 
-    // 若没有边，尝试按序列连接相邻节点
     if (links.length === 0 && nodes.length > 1) {
         for (var i = 0; i < nodes.length - 1; i++) {
             links.push({ source: nodes[i], target: nodes[i+1], distance: 1 });
         }
     }
 
-    // 力导向模拟 - 调整参数使节点分布更充分
+    var linkForce = d3.forceLink(links).distance(function(d) { return Math.min(95, 36 + d.distance * 16); }).strength(0.55);
     var sim = d3.forceSimulation(nodes)
-        .force('link',      d3.forceLink(links).distance(function(d) { return Math.min(80, 35 + d.distance * 12); }).strength(0.8))
-        .force('charge',    d3.forceManyBody().strength(-180))
-        .force('center',    d3.forceCenter(W / 2, H / 2))
-        .force('collision', d3.forceCollide().radius(function(d) { return d.size * 0.45 + 4; }))
-        .force('x', d3.forceX(W / 2).strength(0.05))
-        .force('y', d3.forceY(H / 2).strength(0.05));
+        .force('link', linkForce)
+        .force('charge', d3.forceManyBody().strength(-90))
+        .force('center', d3.forceCenter(W / 2, H / 2))
+        .force('x', d3.forceX(W / 2).strength(0.14))
+        .force('y', d3.forceY(H / 2).strength(0.14))
+        .force('collision', d3.forceCollide().radius(function(d) { return d.size * 0.5 + 7; }));
 
-    var linkSel = zoomG.append('g').selectAll('line').data(links).join('line')
+    var linkSel = g.append('g').selectAll('line').data(links).join('line')
         .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
         .attr('stroke-width', function(d) { return Math.max(1, 3.5 - d.distance * 0.4); });
 
-    var linkLabelSel = zoomG.append('g').selectAll('text').data(links).join('text')
+    var linkLabelSel = g.append('g').selectAll('text').data(links).join('text')
         .attr('font-size','8px').attr('fill','#778899').attr('text-anchor','middle')
         .text(function(d) { return d.distance > 1 ? d.distance : ''; });
 
-    var nodeG = zoomG.append('g').selectAll('g').data(nodes).join('g')
-        .style('cursor','pointer')
-        .call(d3.drag()
-            .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
-            .on('drag',  function(e,d) {
-                // 限制拖拽范围在容器内
-                var r = d.size * 0.5 + 5;
-                d.fx = Math.max(r, Math.min(W - r, e.x));
-                d.fy = Math.max(r, Math.min(H - r, e.y));
-            })
-            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
-        );
+    var nodeG = g.append('g').selectAll('g').data(nodes).join('g')
+        .style('cursor','default');
 
     nodeG.append('circle')
         .attr('r',      function(d) { return d.size * 0.5; })
@@ -4897,6 +4839,11 @@ function drawNetworkPlot() {
     });
 
     sim.on('tick', function() {
+        nodes.forEach(function(d) {
+            var r = (d.size || 20) * 0.5 + 4;
+            d.x = Math.max(pad + r, Math.min(W - pad - r, d.x));
+            d.y = Math.max(pad + r, Math.min(H - pad - r, d.y));
+        });
         linkSel
             .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
             .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
@@ -5024,51 +4971,6 @@ function drawGWASPlot(data) {
     });
 }
 
-function exportSVG() {{
-    var content = document.getElementById('zoomContent');
-    var svgElements = content.querySelectorAll('svg');
-    if (svgElements.length === 0) {{ alert('No SVG'); return; }}
-    var svgNS = "http://www.w3.org/2000/svg";
-    var combinedSVG = document.createElementNS(svgNS, "svg");
-    var totalWidth = 0, totalHeight = 0;
-    for (var i = 0; i < svgElements.length; i++) {{
-        var rect = svgElements[i].getBoundingClientRect();
-        totalWidth = Math.max(totalWidth, rect.width);
-        totalHeight += rect.height + 20;
-    }}
-    combinedSVG.setAttribute("width", totalWidth);
-    combinedSVG.setAttribute("height", totalHeight);
-    combinedSVG.setAttribute("xmlns", svgNS);
-    var bg = document.createElementNS(svgNS, "rect");
-    bg.setAttribute("width", "100%");
-    bg.setAttribute("height", "100%");
-    bg.setAttribute("fill", "white");
-    combinedSVG.appendChild(bg);
-    var currentY = 0;
-    for (var j = 0; j < svgElements.length; j++) {{
-        var rect = svgElements[j].getBoundingClientRect();
-        var clonedSVG = svgElements[j].cloneNode(true);
-        var g = document.createElementNS(svgNS, "g");
-        g.setAttribute("transform", "translate(0," + currentY + ")");
-        while (clonedSVG.firstChild) {{
-            g.appendChild(clonedSVG.firstChild);
-        }}
-        combinedSVG.appendChild(g);
-        currentY += rect.height + 20;
-    }}
-    var serializer = new XMLSerializer();
-    var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
-    var blob = new Blob([svgString], {{type: "image/svg+xml"}});
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = "haplotype_analysis.svg";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-}}
-
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
     drawNetworkPlot();
@@ -5077,14 +4979,6 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>'''
-        
-        # 修复JavaScript大括号转义问题（只在<script>标签内替换）
-        # 将 {{ 替换为 {，将 }} 替换为 }
-        import re
-        def fix_js_braces(match):
-            js_code = match.group(1)
-            return '<script>' + js_code.replace('{{', '{').replace('}}', '}') + '</script>'
-        html = re.sub(r'<script>(.*?)</script>', fix_js_braces, html, flags=re.DOTALL)
         
         # 替换所有JSON变量
         hap_order_count_json  = json.dumps(top_haps_count)
@@ -5107,22 +5001,12 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__LEAD_POS__", _lead_js)
         html = html.replace("__EXON_REGIONS__", _exon_json)
         html = html.replace("__GENE_LABEL__", _glabel)
-        
-        # DEBUG: 检查exportSVG是否存在
-        if 'exportSVG' in html:
-            print("[DEBUG] exportSVG found in HTML before saving")
-        else:
-            print("[DEBUG] WARNING: exportSVG NOT found in HTML before saving")
-        if 'SVG</button>' in html:
-            print("[DEBUG] SVG button found in HTML before saving")
-        else:
-            print("[DEBUG] WARNING: SVG button NOT found in HTML before saving")
 
         out = os.path.join(self.output_dir, "integrated_analysis.html")
         with open(out, 'w', encoding='utf-8') as f:
             f.write(html)
         print(f"[INFO] 综合HTML报告已保存: {out}")
-        return html
+        return out
 
     def generate_haplotype_network_html(self, hap_sample_df: pd.DataFrame,
                                         phenotype_col: str = None,
@@ -5243,43 +5127,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         if c1 != c2:
                             diff_positions.append(idx)
                     dist = len(diff_positions)
-                    # 连接所有有差异的单倍型（确保所有节点相连）
-                    if dist > 0:
+                    # 只连接距离较近的单倍型
+                    if dist <= len(seq1) * 0.3 and dist > 0:  # 最多30%差异，且必须有差异
                         edges.append({
                             'source': hap_names[i],
                             'target': hap_names[j],
                             'distance': dist,
                             'diff_positions': diff_positions  # 记录差异位点索引
                         })
-        
-        # 确保所有节点都相连：如果有孤立节点，连接到最近的节点
-        connected_nodes = set()
-        for e in edges:
-            connected_nodes.add(e['source'])
-            connected_nodes.add(e['target'])
-        
-        for hap in hap_names:
-            if hap not in connected_nodes:
-                # 找到距离最近的已连接节点
-                min_dist = float('inf')
-                nearest = None
-                for other in connected_nodes:
-                    seq1, seq2 = hap_seqs.get(hap, ''), hap_seqs.get(other, '')
-                    if seq1 and seq2 and len(seq1) == len(seq2):
-                        dist = sum(c1 != c2 for c1, c2 in zip(seq1, seq2))
-                        if dist < min_dist and dist > 0:
-                            min_dist = dist
-                            nearest = other
-                if nearest:
-                    seq1, seq2 = hap_seqs.get(hap, ''), hap_seqs.get(nearest, '')
-                    diff_positions = [idx for idx, (c1, c2) in enumerate(zip(seq1, seq2)) if c1 != c2]
-                    edges.append({
-                        'source': hap,
-                        'target': nearest,
-                        'distance': min_dist,
-                        'diff_positions': diff_positions
-                    })
-                    connected_nodes.add(hap)
         
         # 生成D3.js HTML
         nodes_json = json.dumps(nodes, cls=NumpyEncoder)
@@ -5307,16 +5162,15 @@ document.addEventListener('DOMContentLoaded', function() {
         .controls button:hover {{ background: #f0f0f0; }}
         .controls button.active {{ background: #667eea; color: white; border-color: #667eea; }}
         .network-container {{ background: white; border-radius: 0 0 10px 10px; padding: 0;
-                             box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden;
-                             position: relative; }}
-        #network {{ width: 100%; height: 700px; user-select: none; touch-action: pan-y; }}
+                             box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }}
+        #network {{ width: 100%; height: 700px; }}
         .tooltip {{ position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px 16px;
                    border-radius: 8px; font-size: 13px; pointer-events: none; z-index: 1000;
                    box-shadow: 0 4px 15px rgba(0,0,0,0.3); max-width: 250px; }}
         .tooltip h4 {{ margin-bottom: 8px; font-size: 15px; color: #ffd700; }}
         .tooltip p {{ margin: 4px 0; }}
         .legend {{ position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95);
-                  padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); pointer-events: none; }}
+                  padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
         .legend h4 {{ margin-bottom: 10px; font-size: 13px; color: #333; }}
         .legend-item {{ display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }}
         .legend-circle {{ width: 12px; height: 12px; border-radius: 50%; }}
@@ -5372,155 +5226,179 @@ const nodes = {nodes_json};
 const links = {edges_json};
 
 // 设置
-const container = document.getElementById('network');
-const width = container.clientWidth || 1200;
+const width = document.getElementById('network').clientWidth;
 const height = 700;
 let currentLayout = 'force';
 let currentSizeMode = 'count';
 
-// 创建SVG
+// 创建SVG（固定视口；画布内不平移；缩放仅整体作用在 g 上）
 const svg = d3.select('#network')
     .append('svg')
-    .attr('width', width)
+    .attr('width', '100%')
     .attr('height', height)
-    .style('display', 'block');
+    .style('overflow', 'hidden');
 
-// 添加clipPath限制显示范围
-svg.append('defs').append('clipPath')
-    .attr('id', 'clip-net-standalone')
+svg.append('defs').append('clipPath').attr('id', 'clip-net-standalone')
     .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
 
-// 主绘图组
 const g = svg.append('g').attr('clip-path', 'url(#clip-net-standalone)');
 
-// 内部缩放组（用于滚轮缩放）
-const zoomG = g.append('g').attr('class', 'zoom-group');
-
-// 缩放比例状态
-let currentScale = 1;
-let minScale = 0.5, maxScale = 2.5;
-
-// 滚轮缩放内部节点（容器边界不变）
-svg.on('wheel', function(e) {{
-    e.preventDefault();
-    var delta = e.deltaY > 0 ? 0.9 : 1.1;
-    var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
-    if (newScale !== currentScale) {{
-        currentScale = newScale;
-        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
-    }}
+nodes.forEach(d => {{
+    d.x = width / 2 + (Math.random() - 0.5) * 40;
+    d.y = height / 2 + (Math.random() - 0.5) * 40;
 }});
 
-// 深拷贝节点
-const simNodes = nodes.map(d => Object.assign({{}}, d));
-const nodeById = {{}};
-simNodes.forEach(d => nodeById[d.id] = d);
-
-// 构建连线
-let simLinks = links
-    .filter(e => nodeById[e.source] && nodeById[e.target])
-    .map(e => ({{ source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }}));
+let netScale = 1;
+const cx = width / 2, cy = height / 2;
+function applyNetZoom() {{
+    g.attr('transform', 'translate(' + cx + ',' + cy + ') scale(' + netScale + ') translate(' + (-cx) + ',' + (-cy) + ')');
+}}
 
 // 力导向模拟
-const sim = d3.forceSimulation(simNodes)
-    .force('link', d3.forceLink(simLinks).distance(d => Math.min(80, 35 + d.distance * 12)).strength(0.8))
-    .force('charge', d3.forceManyBody().strength(-180))
+const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => 50 + d.distance * 10))
+    .force('charge', d3.forceManyBody().strength(-120))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(d => d.size * 0.45 + 4))
-    .force('x', d3.forceX(width / 2).strength(0.05))
-    .force('y', d3.forceY(height / 2).strength(0.05));
+    .force('x', d3.forceX(width / 2).strength(0.08))
+    .force('y', d3.forceY(height / 2).strength(0.08))
+    .force('collision', d3.forceCollide().radius(d => d.size + 5));
 
-// 绘制连线
-const linkSel = zoomG.append('g').selectAll('line').data(simLinks).join('line')
-    .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
-    .attr('stroke-width', d => Math.max(1, 3.5 - d.distance * 0.4));
+// 绘制连线（带差异位点标记）
+const linkGroup = g.append('g').attr('class', 'links');
 
-// 绘制节点组（支持拖拽）
-const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
-    .style('cursor', 'pointer')
-    .call(d3.drag()
-        .on('start', function(e, d) {{ 
-            if (!e.active) sim.alphaTarget(0.3).restart(); 
-            d.fx = d.x; 
-            d.fy = d.y; 
-        }})
-        .on('drag', function(e, d) {{ 
-            var r = d.size * 0.5 + 5;
-            d.fx = Math.max(r, Math.min(width - r, e.x));
-            d.fy = Math.max(r, Math.min(height - r, e.y));
-        }})
-        .on('end', function(e, d) {{ 
-            if (!e.active) sim.alphaTarget(0); 
-            d.fx = null; 
-            d.fy = null; 
-        }})
-    );
+// 绘制基础连线
+const link = linkGroup.selectAll('line.base-link')
+    .data(links)
+    .enter().append('line')
+    .attr('class', 'base-link')
+    .attr('stroke', '#666')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-opacity', 0.6);
 
-// 节点圆形
-nodeG.append('circle')
-    .attr('r', d => d.size * 0.5)
-    .attr('fill', d => d.color)
-    .attr('stroke', '#fff').attr('stroke-width', 2.5);
+// 在连线上绘制差异位点标记（竖线）
+const linkMarkers = linkGroup.selectAll('g.link-markers')
+    .data(links)
+    .enter().append('g')
+    .attr('class', 'link-markers');
 
-// 节点标签
-nodeG.append('text')
-    .attr('text-anchor', 'middle').attr('dy', '0.35em')
-    .attr('font-size', d => Math.min(11, Math.max(7, d.size * 0.28)) + 'px')
-    .attr('fill', '#fff').attr('font-weight', 'bold').attr('pointer-events', 'none')
-    .text(d => d.id.replace('Hap', 'H'));
-
-// 样本数标签
-nodeG.append('text')
-    .attr('text-anchor', 'middle').attr('dy', d => d.size * 0.5 + 13)
-    .attr('font-size', '9px').attr('fill', '#445566').attr('pointer-events', 'none')
-    .text(d => 'n=' + d.count);
-
-// 更新位置
-sim.on('tick', () => {{
-    linkSel
-        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-    nodeG.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+// 为每条边创建差异位点标记
+links.forEach((d, i) => {{
+    const markerGroup = linkMarkers.filter((ld, li) => li === i);
+    const numDiffs = d.distance;
+    
+    if (numDiffs > 0) {{
+        // 在连线上均匀分布差异标记
+        for (let j = 0; j < Math.min(numDiffs, 10); j++) {{
+            const t = (j + 1) / (numDiffs + 1);
+            markerGroup.append('line')
+                .attr('class', 'diff-marker')
+                .attr('stroke', '#e74c3c')  // 红色表示变异
+                .attr('stroke-width', 2)
+                .attr('stroke-opacity', 0.8)
+                .attr('data-t', t)  // 保存位置比例
+                .attr('data-link-index', i);
+        }}
+    }}
 }});
 
-// 缩放控制函数
-function zoomIn() {{
-    var newScale = Math.min(maxScale, currentScale * 1.2);
-    if (newScale !== currentScale) {{
-        currentScale = newScale;
-        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
-    }}
-}}
+// 绘制节点
+const node = g.append('g')
+    .selectAll('circle')
+    .data(nodes)
+    .enter().append('circle')
+    .attr('class', 'node')
+    .attr('r', d => d.size)
+    .attr('fill', d => d.color)
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 2);
 
-function zoomOut() {{
-    var newScale = Math.max(minScale, currentScale / 1.2);
-    if (newScale !== currentScale) {{
-        currentScale = newScale;
-        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
-    }}
-}}
-
-function resetZoom() {{
-    currentScale = 1;
-    zoomG.attr('transform', null);
-    sim.alpha(1).restart();
-}}
+// 添加标签
+const labels = g.append('g')
+    .selectAll('text')
+    .data(nodes)
+    .enter().append('text')
+    .attr('class', 'node-label')
+    .attr('text-anchor', 'middle')
+    .attr('dy', d => d.size + 15)
+    .text(d => d.id);
 
 // Tooltip
 const tooltip = d3.select('#tooltip');
-nodeG.on('mouseover', function(event, d) {{
-    d3.select(this).select('circle').attr('stroke', '#f39c12').attr('stroke-width', 3.5);
+
+node.on('mouseover', function(event, d) {{
     tooltip.style('display', 'block')
-        .html('<h4>' + d.id + '</h4><p>Count: ' + d.count + '</p><p>Variants: ' + d.snp_count + '</p>');
-}}).on('mousemove', function(event) {{
-    tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY - 10) + 'px');
-}}).on('mouseout', function(event) {{
-    d3.select(this).select('circle').attr('stroke', '#fff').attr('stroke-width', 2.5);
+        .html(`<h4>${{d.id}}</h4>
+               <p><strong>Sample Count:</strong> ${{d.count}}</p>
+               <p><strong>Node Size:</strong> ${{d.size.toFixed(1)}}</p>
+               <p><strong>Variant Sites:</strong> ${{d.snp_count}}</p>`);
+    d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
+}})
+.on('mousemove', function(event) {{
+    tooltip.style('left', (event.pageX + 15) + 'px')
+           .style('top', (event.pageY - 10) + 'px');
+}})
+.on('mouseout', function() {{
     tooltip.style('display', 'none');
-}}).on('mousedown', function(event) {{
-    // 阻止节点上的mousedown冒泡
-    event.stopPropagation();
+    d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
 }});
+
+// 更新位置（限制在画布内）
+simulation.on('tick', () => {{
+    nodes.forEach(d => {{
+        const r = (d.size || 10) + 6;
+        d.x = Math.max(r, Math.min(width - r, d.x));
+        d.y = Math.max(r, Math.min(height - r, d.y));
+    }});
+    link.attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+    
+    // 更新差异位点标记位置
+    linkMarkers.selectAll('line.diff-marker')
+        .attr('x1', function() {{
+            const d = d3.select(this.parentNode).datum();
+            const t = +d3.select(this).attr('data-t');
+            return d.source.x + (d.target.x - d.source.x) * t;
+        }})
+        .attr('y1', function() {{
+            const d = d3.select(this.parentNode).datum();
+            const t = +d3.select(this).attr('data-t');
+            return d.source.y + (d.target.y - d.source.y) * t - 6;
+        }})
+        .attr('x2', function() {{
+            const d = d3.select(this.parentNode).datum();
+            const t = +d3.select(this).attr('data-t');
+            return d.source.x + (d.target.x - d.source.x) * t;
+        }})
+        .attr('y2', function() {{
+            const d = d3.select(this.parentNode).datum();
+            const t = +d3.select(this).attr('data-t');
+            return d.source.y + (d.target.y - d.source.y) * t + 6;
+        }});
+    
+    node.attr('cx', d => d.x)
+        .attr('cy', d => d.y);
+    
+    labels.attr('x', d => d.x)
+          .attr('y', d => d.y);
+}});
+
+// 缩放控制（仅整体缩放绘图内容，不平移）
+function zoomIn() {{
+    netScale = Math.min(2.5, netScale * 1.2);
+    applyNetZoom();
+}}
+
+function zoomOut() {{
+    netScale = Math.max(0.45, netScale / 1.2);
+    applyNetZoom();
+}}
+
+function resetZoom() {{
+    netScale = 1;
+    applyNetZoom();
+}}
 
 // 布局切换
 function setLayout(type) {{
@@ -5534,27 +5412,27 @@ function setLayout(type) {{
         const centerY = height / 2;
         const radius = Math.min(width, height) / 3;
         
-        simNodes.forEach((d, i) => {{
-            const angle = (i / simNodes.length) * 2 * Math.PI;
+        nodes.forEach((d, i) => {{
+            const angle = (i / nodes.length) * 2 * Math.PI;
             d.fx = centerX + radius * Math.cos(angle);
             d.fy = centerY + radius * Math.sin(angle);
         }});
-        sim.alpha(0.3).restart();
+        simulation.alpha(0.3).restart();
     }} else {{
         // 力导向布局
-        simNodes.forEach(d => {{
+        nodes.forEach(d => {{
             d.fx = null;
             d.fy = null;
         }});
-        sim.alpha(1).restart();
+        simulation.alpha(1).restart();
     }}
 }}
 
-// 节点大小模式
+// 节点大小模式 - 默认按样本数量
 function toggleSizeMode(mode) {{
     // 节点大小始终基于样本数量
-    nodeG.selectAll('circle').transition().duration(300)
-        .attr('r', d => Math.max(10, Math.min(50, d.size * 0.5)));
+    node.transition().duration(300)
+        .attr('r', d => Math.max(10, Math.min(50, 10 + Math.sqrt(d.count) * 5)));
 }}
 </script>
 </body>
@@ -6362,8 +6240,7 @@ if (promoterStart < promoterEnd) {{
                                    chrom: str = None,
                                    variant_pvalues: dict = None,
                                    gwas_results: pd.DataFrame = None,
-                                   variant_info: dict = None,
-                                   snp_effects: dict = None) -> str:
+                                   variant_info: dict = None) -> str:
         """
         生成多图整合面板（Association Analysis为主面板，整合网络图、曼哈顿图、PCA）
         
@@ -6516,21 +6393,15 @@ if (promoterStart < promoterEnd) {{
         
         # 生成 integrated_analysis.html
         integrated_path = os.path.join(self.output_dir, "integrated_analysis.html")
-        print(f"[DEBUG] About to generate integrated_analysis.html at: {integrated_path}")
-        # 强制重新生成以确保使用最新代码
-        if os.path.exists(integrated_path):
-            print(f"[DEBUG] Removing existing file: {integrated_path}")
-            os.remove(integrated_path)
-        print("[DEBUG] Calling generate_integrated_html...")
-        self.generate_integrated_html(
-            hap_sample_df, effect_results, variant_positions,
-            region_start, region_end, phenotype_col,
-            gene_start, gene_end, None, None, '+', [], [],
-            snp_effects, chrom,
-            variant_info=variant_info,
-            variant_pvalues=variant_pvalues,
-            network_data=network_data
-        )
+        if not os.path.exists(integrated_path):
+            self.generate_integrated_html(
+                hap_sample_df, effect_results, variant_positions,
+                region_start, region_end, phenotype_col,
+                gene_start, gene_end, None, None, '+', [], [], None, chrom,
+                variant_info=variant_info,
+                variant_pvalues=variant_pvalues,
+                network_data=network_data
+            )
         
         # JSON 序列化
         network_nodes_json = json.dumps(network_nodes, cls=NumpyEncoder)
@@ -6862,14 +6733,6 @@ function initNetwork() {{
     networkScale = 1;
     applyNetworkPanelZoom();
     
-    // 滚轮缩放
-    networkSvg.on('wheel', function(e) {{
-        e.preventDefault();
-        var delta = e.deltaY > 0 ? 0.9 : 1.1;
-        networkScale = Math.max(0.45, Math.min(2.5, networkScale * delta));
-        applyNetworkPanelZoom();
-    }});
-    
     networkNodes.forEach(d => {{
         d.x = width / 2 + (Math.random() - 0.5) * 50;
         d.y = height / 2 + (Math.random() - 0.5) * 50;
@@ -6906,12 +6769,7 @@ function initNetwork() {{
     
     const node = networkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
         .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
-        .style('cursor', 'pointer')
-        .call(d3.drag()
-            .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
-            .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }})
-        );
+        .style('cursor', 'default');
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
         .attr('text-anchor', 'middle').attr('dy', d => d.size + 14).attr('font-size', '11px')
@@ -8038,8 +7896,7 @@ class HaplotypePhenotypeAnalyzer:
                     gene_start=start,
                     gene_end=end,
                     chrom=chrom,
-                    variant_pvalues=variant_pvalues,
-                    snp_effects=snp_effects
+                    variant_pvalues=variant_pvalues
                 )
                 logger.info("  - 多图整合面板生成成功")
             except Exception as e:

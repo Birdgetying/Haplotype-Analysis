@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manhattan Plot - Region Chr1B:665,829,528-665,838,191</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px;
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;
+                  padding: 20px 30px; border-radius: 10px 10px 0 0; }
+        .header h1 { font-size: 22px; margin-bottom: 8px; }
+        .header-info { font-size: 13px; opacity: 0.9; }
+        .plot-container { padding: 30px; }
+        #manhattan { width: 100%; height: 450px; }
+        .tooltip { position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px;
+                   border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; }
+        .axis text { font-size: 11px; }
+        .axis-label { font-size: 13px; font-weight: 600; }
+        .threshold-line { stroke-dasharray: 5,5; }
+        .legend { display: flex; gap: 20px; padding: 15px 30px; border-top: 1px solid #eee; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Manhattan Plot</h1>
+        <div class="header-info">Region: Chr1B:665,829,528 - 665,838,191 | Variants: 99</div>
+    </div>
+    
+    <div class="plot-container">
+        <div id="manhattan"></div>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#3498db;"></div>Variants</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e74c3c;"></div>P &lt; 0.05</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8B0000;"></div>P &lt; 0.01</div>
+        <div class="legend-item"><span style="color:#e74c3c;">---</span> P = 0.05</div>
+        <div class="legend-item"><span style="color:#8B0000;">---</span> P = 0.01</div>
+    </div>
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<script>
+const data = [{"pos": 665821501, "pvalue": 0.016980555698920343, "logp": 1.770048101310811, "type": "variant"}, {"pos": 665830153, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830164, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830192, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830214, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830218, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830223, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830224, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830245, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830247, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830258, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830261, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830282, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830293, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830311, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665830365, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830374, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830382, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830399, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830466, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830536, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830644, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665830826, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830896, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830913, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830925, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830928, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665830969, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665831146, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665831296, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665831712, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665831848, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665831905, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665832042, "pvalue": 1.1784613064564263e-05, "logp": 4.928684672510327, "type": "variant"}, {"pos": 665832450, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665832499, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665832716, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665832985, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665833392, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665833403, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665833586, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665833673, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665833748, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665834359, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665834456, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665834580, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665834858, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665835105, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665835244, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665835245, "pvalue": 0.1507457914881013, "logp": 0.8217548036256729, "type": "variant"}, {"pos": 665835269, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665835366, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665835418, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665835468, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665835927, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665835962, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665835965, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836083, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836086, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836174, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836188, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665836193, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836199, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836202, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665836205, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665836348, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665836350, "pvalue": 0.35149395485411805, "logp": 0.4540821397652806, "type": "variant"}, {"pos": 665836398, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836710, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665836790, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836891, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665836917, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665836945, "pvalue": 2.2472667023766876e-06, "logp": 5.64834538307837, "type": "variant"}, {"pos": 665836946, "pvalue": 0.8699310914472487, "logp": 0.06051514713937028, "type": "variant"}, {"pos": 665836956, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837011, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837055, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837072, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837166, "pvalue": 0.0036006930196131976, "logp": 2.4436139032249473, "type": "variant"}, {"pos": 665837257, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837265, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837341, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665837390, "pvalue": 7.089489515545352e-06, "logp": 5.149385035418263, "type": "variant"}, {"pos": 665837392, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837417, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837439, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837475, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665837719, "pvalue": 3.704746296439669e-06, "logp": 5.431241527449532, "type": "variant"}, {"pos": 665837853, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837865, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665837866, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837875, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837894, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837916, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837921, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837926, "pvalue": 0.8413438693560992, "logp": 0.07502646550901859, "type": "variant"}, {"pos": 665837942, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}, {"pos": 665837963, "pvalue": 2.7006396339871827e-06, "logp": 5.568533363021793, "type": "variant"}, {"pos": 665838024, "pvalue": 4.708997051274447e-06, "logp": 5.3270715815079335, "type": "variant"}];
+const margin = {top: 30, right: 40, bottom: 60, left: 70};
+const container = document.getElementById('manhattan');
+const width = container.clientWidth - margin.left - margin.right;
+const height = 450 - margin.top - margin.bottom;
+
+const svg = d3.select('#manhattan')
+    .append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+// 比例尺
+const xScale = d3.scaleLinear()
+    .domain([665829528, 665838191])
+    .range([0, width]);
+
+const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp)) * 1.1 : 5;
+const yScale = d3.scaleLinear()
+    .domain([0, Math.max(maxLogP, 3)])
+    .range([height, 0]);
+
+// 坐标轴
+svg.append('g')
+    .attr('transform', `translate(0,${height})`)
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => (d/1000000).toFixed(2) + 'M'));
+
+svg.append('g')
+    .call(d3.axisLeft(yScale));
+
+// 坐标轴标签
+svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('x', width / 2)
+    .attr('y', height + 45)
+    .attr('text-anchor', 'middle')
+    .text('Position (Mb)');
+
+svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -height / 2)
+    .attr('y', -50)
+    .attr('text-anchor', 'middle')
+    .text('-log10(P-value)');
+
+// 阈值线
+const thresholds = [
+    {value: -Math.log10(0.05), color: '#e74c3c', label: 'P=0.05'},
+    {value: -Math.log10(0.01), color: '#8B0000', label: 'P=0.01'}
+];
+
+thresholds.forEach(t => {
+    if (t.value <= maxLogP) {
+        svg.append('line')
+            .attr('class', 'threshold-line')
+            .attr('x1', 0)
+            .attr('x2', width)
+            .attr('y1', yScale(t.value))
+            .attr('y2', yScale(t.value))
+            .attr('stroke', t.color)
+            .attr('stroke-width', 1.5);
+    }
+});
+
+// 绘制点
+const tooltip = d3.select('#tooltip');
+
+svg.selectAll('circle')
+    .data(data)
+    .enter()
+    .append('circle')
+    .attr('cx', d => xScale(d.pos))
+    .attr('cy', d => yScale(d.logp))
+    .attr('r', 5)
+    .attr('fill', d => {
+        if (d.pvalue < 0.01) return '#8B0000';
+        if (d.pvalue < 0.05) return '#e74c3c';
+        return '#3498db';
+    })
+    .attr('opacity', 0.7)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(event, d) {
+        d3.select(this).attr('r', 8).attr('opacity', 1);
+        tooltip.style('display', 'block')
+            .html(`<strong>Position:</strong> ${d.pos.toLocaleString()}<br>
+                   <strong>P-value:</strong> ${d.pvalue.toExponential(2)}<br>
+                   <strong>-log10(P):</strong> ${d.logp.toFixed(2)}`);
+    })
+    .on('mousemove', function(event) {
+        tooltip.style('left', (event.pageX + 15) + 'px')
+               .style('top', (event.pageY - 10) + 'px');
+    })
+    .on('mouseout', function() {
+        d3.select(this).attr('r', 5).attr('opacity', 0.7);
+        tooltip.style('display', 'none');
+    });
+</script>
+</body>
+</html>

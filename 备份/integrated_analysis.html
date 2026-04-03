@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Haplotype-Phenotype Association Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 15px; }
+        .container { margin: 0 auto; background: white; border-radius: 10px; 
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color: white; 
+                  padding: 18px 25px; border-radius: 10px 10px 0 0; }
+        .header h1 { font-size: 18px; margin-bottom: 5px; }
+        .header-info { display: flex; gap: 20px; font-size: 11px; opacity: 0.9; flex-wrap: wrap; }
+        
+        /* 过滤控制面板 */
+        .filter-panel { display: flex; align-items: center; gap: 20px; padding: 12px 20px; 
+                        background: #f8f9fa; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label { font-size: 12px; color: #555; font-weight: 500; }
+        .filter-group input[type="range"] { width: 100px; }
+        .filter-group select { padding: 4px 8px; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .filter-value { font-size: 11px; color: #3498db; min-width: 40px; }
+        .filter-btn { padding: 6px 14px; background: #3498db; color: white; border: none;
+                      border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .filter-btn:hover { background: #2980b9; }
+        .filter-reset { background: #95a5a6; }
+        .filter-reset:hover { background: #7f8c8d; }
+        
+        /* 缩放控制栏 */
+        .zoom-controls { display: flex; align-items: center; gap: 10px; padding: 10px 20px; 
+                         background: #f8f9fa; border-bottom: 1px solid #e8e8e8; }
+        .zoom-controls label { font-size: 12px; color: #555; }
+        .zoom-controls button { padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px;
+                                background: white; cursor: pointer; font-size: 14px; }
+        .zoom-controls button:hover { background: #e8e8e8; }
+        .zoom-controls input[type="range"] { width: 150px; }
+        .zoom-controls span { font-size: 12px; color: #333; min-width: 45px; }
+        
+        /* 可缩放内容区 */
+        .content-wrapper { overflow: auto; max-height: calc(100vh - 200px); }
+        .content { padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }
+        
+        /* 整合布局 */
+        .integrated-view { display: flex; flex-direction: column; gap: 10px; }
+        .top-section { display: flex; gap: 15px; position: relative; height: 180px; }
+        .network-panel { width: 350px; min-width: 350px; height: 280px; 
+                         border: 1px solid #e0e0e0; border-radius: 6px; 
+                         background: #fafafa; position: absolute; left: 0; top: 0; }
+        .network-panel-title { position: absolute; top: 8px; left: 10px; 
+                               font-size: 12px; font-weight: 600; color: #2c3e50; 
+                               background: rgba(255,255,255,0.9); padding: 2px 6px; 
+                               border-radius: 3px; z-index: 10; }
+        .gene-gwas-panel { flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
+                           border-radius: 6px; background: #fafafa; position: relative; }
+        .gene-gwas-title { position: absolute; top: 8px; left: 10px; 
+                           font-size: 12px; font-weight: 600; color: #2c3e50; 
+                           background: rgba(255,255,255,0.9); padding: 2px 6px; 
+                           border-radius: 3px; z-index: 10; }
+        .footer { background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
+                  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+                  border-radius: 0 0 10px 10px; }
+        .base-legend { display: flex; gap: 12px; }
+        .base-legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+        .base-box { width: 18px; height: 18px; border-radius: 3px; display: flex;
+                    align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 11px; }
+        /* 表格样式 */
+        .data-table { border-collapse: collapse; margin-top: 0; table-layout: fixed; }
+        .data-table th { background: #34495e; color: white; padding: 0; font-size: 10px; font-weight: 500; vertical-align: top; }
+        .data-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid #eee; }
+        .data-table tr:hover { background: #f8f9fa; }
+        .data-table tr.ref-row { background: #fffbeb; }
+        .hap-cell { width: 90px; min-width: 90px; max-width: 90px; text-align: left !important; padding-left: 10px !important; font-weight: 600; font-size: 12px; }
+        .ref-tag { background: #e74c3c; color: white; font-size: 8px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }
+        .base { font-family: Consolas, monospace; font-weight: 700; font-size: 13px; }
+        .effect-cell { width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }
+        .box-cell { width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }
+        .bar-container { position: relative; height: 20px; background: #f8f9fa; border-radius: 3px; overflow: hidden; }
+        .bar-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #333; border-left: 1px dashed #333; }
+        /* 森林图样式 */
+        .forest-ci { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); }
+        .forest-point { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; border-radius: 50%; }
+        /* 箱线图样式 */
+        .bar-whisker { position: absolute; top: 50%; height: 2px; background: #7f8c8d; transform: translateY(-50%); }
+        .bar-box { position: absolute; top: 3px; height: 14px; border-radius: 2px; border: 2px solid #3498db; background: rgba(52,152,219,0.2); }
+        .bar-median { position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }
+        .data-dot { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }
+        .n-cell { font-size: 11px; color: #666; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Haplotype-Phenotype Association Analysis</h1>
+        <div class="header-info">
+            <span>Region: chr1:100-200</span>
+            <span>Length: 0.1 kb</span>
+            <span>Variants: 0</span>
+            <span>Haplotypes: 1</span>
+            <span>Samples: 1</span>
+            <span>Grand Mean: 0.000</span>
+        </div>
+    </div>
+    
+    <!-- 过滤控制面板 -->
+    <div class="filter-panel">
+        <div class="filter-group">
+            <label>MAF ≥</label>
+            <input type="range" id="mafSlider" min="0" max="0.5" step="0.01" value="0" oninput="updateFilterDisplay('maf', this.value)">
+            <span class="filter-value" id="mafValue">0</span>
+        </div>
+        <div class="filter-group">
+            <label>Missing Rate ≤</label>
+            <input type="range" id="missingSlider" min="0" max="1" step="0.05" value="1" oninput="updateFilterDisplay('missing', this.value)">
+            <span class="filter-value" id="missingValue">1.0</span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">Annotation (多选):</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="ann-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
+                <label><input type="checkbox" class="ann-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
+                <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
+                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                <label><input type="checkbox" class="ann-cb" value="indel" checked onchange="applyFilters()"> Indel</label>
+                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
+                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
+            </span>
+        </div>
+        <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
+        <button class="filter-btn" onclick="applyFilters()">Apply Filter</button>
+    </div>
+    
+    <div class="zoom-controls">
+        <label>Zoom:</label>
+        <button onclick="zoomOut()">-</button>
+        <input type="range" id="zoomSlider" min="20" max="150" value="100" oninput="setZoom(this.value)">
+        <button onclick="zoomIn()">+</button>
+        <span id="zoomLevel">100%</span>
+        <button onclick="resetZoom()" style="margin-left:10px;">Reset</button>
+        <button onclick="fitToWindow()" style="margin-left:5px;">Fit</button>
+        <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
+        <label>Sort:</label>
+        <button id="sortBtn" onclick="toggleSort()" style="min-width:80px;">By Count</button>
+    </div>
+    
+    <div class="content-wrapper">
+    <div class="content" id="zoomContent">
+        <div class="integrated-view">
+            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
+            <div class="top-section">
+                <div class="network-panel">
+                    <div class="network-panel-title">Haplotype Network</div>
+                    <div id="network-viz" style="width:100%;height:100%;"></div>
+                </div>
+                <div class="gene-gwas-panel">
+                    <div class="gene-gwas-title">GWAS P-values</div>
+                    <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
+                </div>
+            </div>
+            
+            <!-- 下方区域：原有的效应图、箱线图、单倍型序列 -->
+            <div class="main-data-section">
+<svg width="550" height="200" style="display:block;margin-bottom:0;">
+<defs>
+            <pattern id="utrPattern" patternUnits="userSpaceOnUse" width="6" height="6">
+                <line x1="0" y1="6" x2="6" y2="0" stroke="#9b59b6" stroke-width="1" opacity="0.5"/>
+            </pattern>
+        </defs>
+<text x="450.0" y="13" font-size="11" fill="#2c3e50" text-anchor="middle" font-weight="600">Relative Position (kb)</text>
+<line x1="450" y1="28" x2="450" y2="28" stroke="#333" stroke-width="1.2"/>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.0</text>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.0</text>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.1</text>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.1</text>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.1</text>
+<line x1="450.0" y1="57" x2="450.0" y2="57" stroke="#2c3e50" stroke-width="2"/>
+<rect x="450.0" y="48" width="0.0" height="18" fill="#3498db" stroke="#2980b9" stroke-width="1" rx="1"/>
+<line x1="450.0" y1="57" x2="458.0" y2="57" stroke="#2c3e50" stroke-width="2"/>
+<polygon points="468.0,57 458.0,52 458.0,62" fill="#2c3e50"/>
+<text x="465" y="28" font-size="8.5" fill="#333" font-weight="600">Gene Structure</text>
+<rect x="465" y="36" width="14" height="10" fill="#f39c12" opacity="0.35" stroke="#e67e22" stroke-width="1" stroke-dasharray="2,1" rx="1"/>
+<text x="483" y="44" font-size="7.5" fill="#333">Promoter</text>
+<line x1="465" y1="55" x2="479" y2="55" stroke="#2c3e50" stroke-width="2"/>
+<text x="483" y="58" font-size="7.5" fill="#333">Intron</text>
+<rect x="465" y="64" width="14" height="10" fill="white" stroke="#3498db" stroke-width="1.5" rx="1"/>
+<text x="483" y="72" font-size="7.5" fill="#333">5'/3' UTR</text>
+<rect x="465" y="78" width="14" height="10" fill="#3498db" rx="1"/>
+<text x="483" y="86" font-size="7.5" fill="#333">CDS</text>
+<text x="465" y="98" font-size="8.5" fill="#333" font-weight="600">Variant Type</text>
+</svg>
+<table class="data-table" style="width:550px;">
+<thead><tr>
+    <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;height:60px;">Haplotype</th>
+    <th class="effect-cell" style="vertical-align:middle;height:60px;">Effect (vs Grand Mean)</th>
+    <th class="box-cell" style="vertical-align:middle;height:60px;">Phenotype</th>
+<th style="width:40px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>
+<tr class="ref-row" data-hap="Hap1">
+    <td class="hap-cell">Hap1<span class="ref-tag">Ref</span></td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:27.5%;width:45.0%;background:#95a5a6;"></div>
+            <div class="forest-point" style="left:50.0%;background:#95a5a6;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:0.0%;width:1%;"></div>
+                    <div class="bar-box" style="left:0.0%;width:2%;"></div>
+                    <div class="bar-median" style="left:0.0%;"></div>
+                    <div class="data-dot" style="left:0.0%;top:60%;"></div>
+                </div>
+    </td>
+<td class="n-cell">1</td></tr>
+<tr style="height:30px;"><td style="border:none;"></td><td style="border:none;position:relative;"><div style="position:relative;height:25px;"><div style="position:absolute;bottom:10px;left:0;right:0;height:1px;background:#bdc3c7;"></div><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+0.00</span><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+0.00</span><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+0.00</span><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+0.00</span><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+0.00</span></div></td>
+<td style="border:none;position:relative;"><div style="position:relative;height:25px;"><div style="position:absolute;bottom:10px;left:0;right:0;height:1px;background:#bdc3c7;"></div><div style="position:absolute;bottom:6px;left:0.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:0.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">1.00</span><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">1.50</span><div style="position:absolute;bottom:6px;left:100.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:100.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">2.00</span></div></td>
+<td colspan="1" style="border:none;"></td>
+</tr>
+</tbody></table>
+            </div><!-- main-data-section -->
+        </div><!-- integrated-view -->
+    </div>
+    </div>
+    
+    <div class="footer">
+        <div class="base-legend">
+            <div class="base-legend-item"><div class="base-box" style="background:#9b59b6;">A</div>Adenine</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#27AE60;">T</div>Thymine</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#3498DB;">C</div>Cytosine</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#F1C40F;">G</div>Guanine</div>
+            <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
+            <div class="base-legend-item"><div class="base-box" style="background:#e74c3c;">+</div>Insertion (+nbp)</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#3498db;">-</div>Deletion (-nbp)</div>
+            <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#95a5a6;"></div>Reference</div>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#8B0000;"></div>P &lt; 0.01</div>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#e74c3c;"></div>P &lt; 0.05</div>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#3498db;"></div>Not sig.</div>
+        </div>
+        <div style="font-size:10px;color:#7f8c8d;">Effect: point = estimate, line = 95% CI</div>
+    </div>
+</div>
+<!-- tooltip 平面容器 -->
+<div id="d3-tooltip" style="position:fixed;pointer-events:none;background:rgba(44,62,80,0.92);color:#fff;padding:7px 11px;border-radius:5px;font-size:11px;display:none;z-index:9999;"></div>
+
+<script>
+// ==================== 缩放功能 ====================
+var zc = document.getElementById('zoomContent');
+var zs = document.getElementById('zoomSlider');
+var zl = document.getElementById('zoomLevel');
+var cz = 100;
+function applyZoom() {
+    if (zc) { zc.style.transform = 'scale(' + (cz/100) + ')'; zc.style.transformOrigin = 'top left'; }
+    if (zs) zs.value = cz;
+    if (zl) zl.innerText = cz + '%';
+}
+function zoomIn()  { cz = Math.min(150, cz + 10); applyZoom(); }
+function zoomOut() { cz = Math.max(20,  cz - 10); applyZoom(); }
+function resetZoom() { cz = 100; applyZoom(); }
+function setZoom(v)  { cz = parseInt(v); applyZoom(); }
+function fitToWindow() {
+    var w = document.querySelector('.content-wrapper');
+    if (zc && w) { cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100))); applyZoom(); }
+}
+applyZoom();
+
+// ==================== 排序功能 ====================
+var countOrder   = ["Hap1"];
+var clusterOrder = ["Hap1"];
+var currentSort  = 'count';
+function toggleSort() {
+    var tbody = document.querySelector('.data-table tbody');
+    var rows  = Array.from(tbody.querySelectorAll('tr[data-hap]'));
+    var btn   = document.getElementById('sortBtn');
+    if (currentSort === 'count') {
+        currentSort = 'cluster'; btn.innerText = 'By Cluster';
+        var om = {}; clusterOrder.forEach(function(h,i){ om[h]=i; });
+        rows.sort(function(a,b){ return (om[a.getAttribute('data-hap')]||999)-(om[b.getAttribute('data-hap')]||999); });
+    } else {
+        currentSort = 'count'; btn.innerText = 'By Count';
+        var om = {}; countOrder.forEach(function(h,i){ om[h]=i; });
+        rows.sort(function(a,b){ return (om[a.getAttribute('data-hap')]||999)-(om[b.getAttribute('data-hap')]||999); });
+    }
+    rows.forEach(function(r){ tbody.appendChild(r); });
+}
+
+// ==================== D3 数据 ====================
+var gwasData     = [];
+var networkNodes = [{"id": "Hap1", "count": 1, "size": 21.0, "color": "#3498db", "phenoMean": 0}];
+var networkEdges = [];
+var regionStart  = 100;
+var regionEnd    = 200;
+var geneStart    = 100;
+var geneEnd      = 200;
+var svgTotalWidth = 185;  // 与基因结构图相同的总宽度
+var gwasPlotWidth = 100;  // GWAS图绘图区域宽度（基因区域+图例）
+var gwasLeftMargin = 85;  // GWAS图左边距（与基因结构图基因区域起始对齐）
+var leadVariantPos = null;
+var exonRegions = [];
+var geneLabelText = "chr1";
+
+// ==================== 过滤功能 ====================
+var currentFilter = { maf: 0, missingRate: 1.0 };
+
+function annNorm(d) {
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    return a;
+}
+
+function annAllowed(d) {
+    var a = annNorm(d);
+    var cb = document.querySelector('.ann-cb[value="' + a + '"]');
+    if (cb) return cb.checked;
+    var o = document.querySelector('.ann-cb[value="other"]');
+    return o ? o.checked : true;
+}
+
+function updateFilterDisplay(type, value) {
+    if (type === 'maf') {
+        currentFilter.maf = parseFloat(value);
+        document.getElementById('mafValue').textContent = parseFloat(value).toFixed(2);
+    } else if (type === 'missing') {
+        currentFilter.missingRate = parseFloat(value);
+        document.getElementById('missingValue').textContent = parseFloat(value).toFixed(2);
+    }
+}
+
+function resetFilters() {
+    document.getElementById('mafSlider').value     = 0;
+    document.getElementById('missingSlider').value = 1;
+    currentFilter = { maf: 0, missingRate: 1.0 };
+    document.getElementById('mafValue').textContent    = '0';
+    document.getElementById('missingValue').textContent = '1.0';
+    document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
+    applyFilters();
+}
+
+window.addEventListener('message', function(ev) {
+    if (!ev.data || ev.data.type !== 'filter' || !ev.data.filters) return;
+    var f = ev.data.filters;
+    if (f.maf !== undefined) {
+        currentFilter.maf = f.maf;
+        var ms = document.getElementById('mafSlider');
+        if (ms) { ms.value = f.maf; document.getElementById('mafValue').textContent = parseFloat(f.maf).toFixed(2); }
+    }
+    if (f.missingRate !== undefined) {
+        currentFilter.missingRate = f.missingRate;
+        var mx = document.getElementById('missingSlider');
+        if (mx) { mx.value = f.missingRate; document.getElementById('missingValue').textContent = parseFloat(f.missingRate).toFixed(2); }
+    }
+    if (f.annotationEnabled) {
+        Object.keys(f.annotationEnabled).forEach(function(k) {
+            var cb = document.querySelector('.ann-cb[value="' + k + '"]');
+            if (cb) cb.checked = f.annotationEnabled[k];
+        });
+    }
+    applyFilters();
+});
+
+function applyFilters() {
+    var filtered = gwasData.filter(function(d) {
+        return d.maf >= currentFilter.maf
+            && d.missing_rate <= currentFilter.missingRate
+            && annAllowed(d);
+    });
+    drawGWASPlot(filtered);
+    var posSet = {};
+    filtered.forEach(function(d){ posSet[d.pos] = true; });
+    
+    // 更新表格表头
+    document.querySelectorAll('.data-table th').forEach(function(th, idx) {
+        if (idx >= 3) {
+            var pos = parseInt(th.textContent.trim().replace(/,/g,''));
+            th.style.background = posSet[pos] ? '#2c3e50' : '#95a5a6';
+            th.style.opacity    = posSet[pos] ? '1' : '0.4';
+        }
+    });
+    
+    // 更新表格单元格
+    document.querySelectorAll('.data-table td[data-pos]').forEach(function(td) {
+        var pos = parseInt(td.getAttribute('data-pos'));
+        td.style.opacity = (pos && !posSet[pos]) ? '0.25' : '1';
+    });
+    
+    // 更新基因结构图上的变异元素（竖线、圆圈、斜线）
+    document.querySelectorAll('.var-line, .var-circle, .var-connector').forEach(function(el) {
+        var pos = parseInt(el.getAttribute('data-pos'));
+        var maf = parseFloat(el.getAttribute('data-maf') || 0);
+        var missing = parseFloat(el.getAttribute('data-missing') || 0);
+        var ann = el.getAttribute('data-ann') || 'other';
+        
+        // 检查是否通过过滤条件
+        var passed = posSet[pos] !== undefined && 
+                     maf >= currentFilter.maf && 
+                     missing <= currentFilter.missingRate;
+        
+        // 设置显示/隐藏
+        el.style.display = passed ? 'block' : 'none';
+        el.style.opacity = passed ? '1' : '0.1';
+    });
+}
+
+// ==================== 单倍型网络图（固定视口、无平移/缩放/拖拽；整体缩放用页面 Zoom 控件） ====================
+function drawNetworkPlot() {
+    var container = document.getElementById('network-viz');
+    if (!container || networkNodes.length === 0) return;
+    var W = 350, H = 280;
+    var pad = 6;
+    d3.select('#network-viz').selectAll('*').remove();
+
+    var svg = d3.select('#network-viz').append('svg')
+        .attr('width', W).attr('height', H)
+        .style('display','block').style('overflow','hidden');
+
+    svg.append('defs').append('clipPath').attr('id','network-clip-integrated')
+        .append('rect').attr('x',0).attr('y',0).attr('width',W).attr('height',H);
+    var g = svg.append('g').attr('clip-path','url(#network-clip-integrated)');
+
+    var nodes = networkNodes.map(function(d) { return Object.assign({}, d); });
+    nodes.forEach(function(d) {
+        d.x = W / 2 + (Math.random() - 0.5) * 28;
+        d.y = H / 2 + (Math.random() - 0.5) * 28;
+    });
+    var nodeById = {};
+    nodes.forEach(function(d) { nodeById[d.id] = d; });
+
+    var links = networkEdges
+        .filter(function(e) { return nodeById[e.source] && nodeById[e.target]; })
+        .map(function(e) { return { source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }; });
+
+    if (links.length === 0 && nodes.length > 1) {
+        for (var i = 0; i < nodes.length - 1; i++) {
+            links.push({ source: nodes[i], target: nodes[i+1], distance: 1 });
+        }
+    }
+
+    var linkForce = d3.forceLink(links).distance(function(d) { return Math.min(95, 36 + d.distance * 16); }).strength(0.55);
+    var sim = d3.forceSimulation(nodes)
+        .force('link', linkForce)
+        .force('charge', d3.forceManyBody().strength(-90))
+        .force('center', d3.forceCenter(W / 2, H / 2))
+        .force('x', d3.forceX(W / 2).strength(0.14))
+        .force('y', d3.forceY(H / 2).strength(0.14))
+        .force('collision', d3.forceCollide().radius(function(d) { return d.size * 0.5 + 7; }));
+
+    var linkSel = g.append('g').selectAll('line').data(links).join('line')
+        .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
+        .attr('stroke-width', function(d) { return Math.max(1, 3.5 - d.distance * 0.4); });
+
+    var linkLabelSel = g.append('g').selectAll('text').data(links).join('text')
+        .attr('font-size','8px').attr('fill','#778899').attr('text-anchor','middle')
+        .text(function(d) { return d.distance > 1 ? d.distance : ''; });
+
+    var nodeG = g.append('g').selectAll('g').data(nodes).join('g')
+        .style('cursor','default');
+
+    nodeG.append('circle')
+        .attr('r',      function(d) { return d.size * 0.5; })
+        .attr('fill',   function(d) { return d.color; })
+        .attr('stroke', '#fff').attr('stroke-width', 2.5);
+
+    nodeG.append('text')
+        .attr('text-anchor','middle').attr('dy','0.35em')
+        .attr('font-size', function(d) { return Math.min(11, Math.max(7, d.size * 0.28)) + 'px'; })
+        .attr('fill','#fff').attr('font-weight','bold').attr('pointer-events','none')
+        .text(function(d) { return d.id.replace('Hap','H'); });
+
+    nodeG.append('text')
+        .attr('text-anchor','middle').attr('dy', function(d) { return d.size * 0.5 + 13; })
+        .attr('font-size','9px').attr('fill','#445566').attr('pointer-events','none')
+        .text(function(d) { return 'n='+d.count; });
+
+    var tip = document.getElementById('d3-tooltip');
+    nodeG.on('mouseover', function(e,d) {
+        d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
+        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean;
+        tip.style.display = 'block';
+    }).on('mousemove', function(e) {
+        tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY-10)+'px';
+    }).on('mouseout', function(e) {
+        d3.select(this).select('circle').attr('stroke','#fff').attr('stroke-width',2.5);
+        tip.style.display = 'none';
+    });
+
+    sim.on('tick', function() {
+        nodes.forEach(function(d) {
+            var r = (d.size || 20) * 0.5 + 4;
+            d.x = Math.max(pad + r, Math.min(W - pad - r, d.x));
+            d.y = Math.max(pad + r, Math.min(H - pad - r, d.y));
+        });
+        linkSel
+            .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
+            .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
+        linkLabelSel
+            .attr('x', function(d) { return (d.source.x + d.target.x)/2; })
+            .attr('y', function(d) { return (d.source.y + d.target.y)/2 - 3; });
+        nodeG.attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; });
+    });
+}
+
+// ==================== GWAS -log10(P) 散点图（仅P值图，基因结构在下方SVG中） ====================
+function drawGWASPlot(data) {
+    var container = document.getElementById('gwas-gene-viz');
+    if (!container) return;
+    // GWAS图SVG宽度与基因结构图总宽度相同
+    // 基因结构图: svg_width = 450 + gene_area_width + 100
+    // GWAS图使用相同的总宽度，但绘图区域从gene_area_start(450)开始
+    var W = svgTotalWidth || (container.clientWidth || 680);
+    var H = 180;  // 减小高度，只显示P值图
+    // 左边距 = gene_area_start = 450，与基因结构图的基因区域起始对齐
+    var ml = gwasLeftMargin || 54;
+    var mr = 102, mt = 26, mb = 34;
+    var iW = W - ml - mr, iH = H - mt - mb;
+
+    d3.select('#gwas-gene-viz').selectAll('*').remove();
+
+    var svg = d3.select('#gwas-gene-viz').append('svg')
+        .attr('width', W).attr('height', H).style('display','block');
+    var g = svg.append('g').attr('transform','translate('+ml+','+mt+')');
+
+    var xSc = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, iW]);
+
+    // 只使用全部高度显示P值图
+    var gwasH = iH;
+
+    var maxLogP = data.length > 0 ? Math.max(1.4, d3.max(data, function(d){ return d.logp; })) : 1.4;
+    var ySc = d3.scaleLinear().domain([0, maxLogP * 1.1]).range([gwasH, 0]);
+
+    var colorR2 = d3.scaleSequential(function(t) { return d3.interpolateRdBu(1 - t); }).domain([0, 1]);
+
+    if (leadVariantPos != null && !isNaN(+leadVariantPos)) {
+        g.append('line')
+            .attr('x1', xSc(+leadVariantPos)).attr('x2', xSc(+leadVariantPos))
+            .attr('y1', 0).attr('y2', gwasH)
+            .attr('stroke', '#c0392b').attr('stroke-width', 1.5).attr('stroke-dasharray', '5,4')
+            .attr('opacity', 0.88).attr('pointer-events', 'none');
+    }
+
+    var symTypes = { SNP: d3.symbolCircle, indel: d3.symbolSquare, SV: d3.symbolTriangle };
+    var symSize = { SNP: 38, indel: 42, SV: 46 };
+
+    var tip = document.getElementById('d3-tooltip');
+    g.append('g').attr('class', 'gwas-scatter-layer').selectAll('path.gwas-pt')
+        .data(data).join('path').attr('class', 'gwas-pt')
+        .attr('d', function(d) {
+            var isLead = (leadVariantPos != null && +d.pos === +leadVariantPos);
+            var vt = (d.vtype || 'SNP');
+            var ty = isLead ? d3.symbolDiamond : (symTypes[vt] || d3.symbolCircle);
+            var sz = isLead ? 88 : (symSize[vt] || 38);
+            return d3.symbol().type(ty).size(sz)();
+        })
+        .attr('transform', function(d) {
+            return 'translate(' + xSc(d.pos) + ',' + ySc(d.logp) + ')';
+        })
+        .attr('fill', function(d) {
+            if (leadVariantPos != null && +d.pos === +leadVariantPos) return '#c0392b';
+            var r = (d.r2 !== undefined && d.r2 !== null) ? +d.r2 : 0;
+            return colorR2(Math.max(0, Math.min(1, r)));
+        })
+        .attr('stroke', '#fff').attr('stroke-width', 0.65)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(e, d) {
+            d3.select(this).attr('stroke', '#2c3e50').attr('stroke-width', 1.3);
+            tip.innerHTML = '<b>Pos: ' + d.pos.toLocaleString() + '</b><br/>'
+                + 'P = ' + d.pvalue.toExponential(2) + '<br/>'
+                + '-log<sub>10</sub>(P) = ' + d.logp.toFixed(2) + '<br/>'
+                + 'r<sup>2</sup> to lead = ' + (d.r2 != null ? (+d.r2).toFixed(3) : 'NA') + '<br/>'
+                + 'Type: ' + (d.vtype || 'SNP') + ' &nbsp;|&nbsp; ' + (d.annotation || '');
+            tip.style.display = 'block';
+        })
+        .on('mousemove', function(e) {
+            tip.style.left = (e.clientX + 14) + 'px';
+            tip.style.top = (e.clientY - 10) + 'px';
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('stroke', '#fff').attr('stroke-width', 0.65);
+            tip.style.display = 'none';
+        });
+
+    g.append('g').call(d3.axisLeft(ySc).ticks(6).tickFormat(function(d) { return d.toFixed(1); }))
+        .selectAll('text').attr('font-size', '9px');
+    g.append('text').attr('transform', 'rotate(-90)').attr('y', -40).attr('x', -gwasH / 2)
+        .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
+        .text('-log10(P)');
+
+    var sigY = ySc(-Math.log10(0.05));
+    if (sigY > 0 && sigY < gwasH) {
+        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY).attr('y2', sigY)
+            .attr('stroke', '#e67e22').attr('stroke-dasharray', '4,3').attr('opacity', 0.75);
+        g.append('text').attr('x', iW - 2).attr('y', sigY - 3).attr('text-anchor', 'end')
+            .attr('font-size', '8px').attr('fill', '#e67e22').text('p=0.05');
+    }
+
+    g.append('g').attr('transform', 'translate(0,' + iH + ')')
+        .call(d3.axisBottom(xSc).ticks(6).tickFormat(function(d) { return (d / 1e6).toFixed(3) + ' Mb'; }))
+        .selectAll('text').attr('font-size', '9px').attr('transform', 'rotate(-18)').attr('text-anchor', 'end');
+
+    var leg = g.append('g').attr('transform', 'translate(' + (iW + 6) + ',0)');
+    leg.append('text').attr('x', 0).attr('y', -2).attr('font-size', '9px').attr('fill', '#333').text('r² to lead');
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient').attr('id', 'r2-grad-int').attr('x1', '0%').attr('x2', '100%');
+    grad.append('stop').attr('offset', '0%').attr('stop-color', d3.interpolateRdBu(1));
+    grad.append('stop').attr('offset', '100%').attr('stop-color', d3.interpolateRdBu(0));
+    leg.append('rect').attr('x', 0).attr('y', 4).attr('width', 72).attr('height', 10).attr('fill', 'url(#r2-grad-int)').attr('rx', 2);
+    leg.append('text').attr('x', 0).attr('y', 22).attr('font-size', '7px').attr('fill', '#666').text('0');
+    leg.append('text').attr('x', 72).attr('y', 22).attr('font-size', '7px').attr('fill', '#666').attr('text-anchor', 'end').text('1');
+
+    var ly = 34;
+    [['SNP', d3.symbolCircle], ['InDel', d3.symbolSquare], ['SV', d3.symbolTriangle]].forEach(function(item, i) {
+        leg.append('path')
+            .attr('d', d3.symbol().type(item[1]).size(36)())
+            .attr('transform', 'translate(8,' + (ly + i * 16) + ')')
+            .attr('fill', '#555').attr('stroke', '#fff').attr('stroke-width', 0.5);
+        leg.append('text').attr('x', 18).attr('y', ly + i * 16 + 4).attr('font-size', '8px').attr('fill', '#444').text(item[0]);
+    });
+}
+
+// ==================== 页面初始化 ====================
+document.addEventListener('DOMContentLoaded', function() {
+    drawNetworkPlot();
+    drawGWASPlot(gwasData);
+});
+</script>
+</body>
+</html>

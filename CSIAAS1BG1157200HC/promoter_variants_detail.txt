@@ -1,0 +1,42 @@
+Gene: CSIAAS1BG1157200HC
+Promoter: Chr1B:665,836,192-665,838,191
+Total variants: 38
+
+665,836,193	SNP	ref:A	alt:G	len_diff:0
+665,836,199	indel	ref:G	alt:GGGGGGTCGGCGCGC	len_diff:14
+665,836,202	indel	ref:C	alt:CGGG	len_diff:3
+665,836,205	SNP	ref:C	alt:G	len_diff:0
+665,836,348	SV	ref:TAC	alt:TTTGGCTCCACATTCTTCCG...	len_diff:466
+665,836,350	SNP	ref:C	alt:T	len_diff:0
+665,836,398	SNP	ref:G	alt:T	len_diff:0
+665,836,710	SNP	ref:G	alt:T	len_diff:0
+665,836,790	SNP	ref:T	alt:A	len_diff:0
+665,836,891	indel	ref:TTA	alt:T	len_diff:2
+665,836,917	SNP	ref:G	alt:T	len_diff:0
+665,836,945	SNP	ref:T	alt:C	len_diff:0
+665,836,946	SNP	ref:G	alt:A	len_diff:0
+665,836,956	SNP	ref:G	alt:C	len_diff:0
+665,837,011	SV	ref:AT	alt:ATTGTGTAAATAAATTTTTA...	len_diff:725
+665,837,055	SNP	ref:T	alt:C	len_diff:0
+665,837,072	SNP	ref:A	alt:G	len_diff:0
+665,837,166	indel	ref:A	alt:ATT	len_diff:2
+665,837,257	SNP	ref:C	alt:T	len_diff:0
+665,837,265	SNP	ref:C	alt:T	len_diff:0
+665,837,341	SNP	ref:C	alt:G	len_diff:0
+665,837,390	SNP	ref:T	alt:C	len_diff:0
+665,837,392	SNP	ref:A	alt:G	len_diff:0
+665,837,417	indel	ref:GT	alt:G	len_diff:1
+665,837,439	SNP	ref:T	alt:A	len_diff:0
+665,837,475	SNP	ref:G	alt:A	len_diff:0
+665,837,719	SNP	ref:C	alt:T	len_diff:0
+665,837,853	SNP	ref:C	alt:G	len_diff:0
+665,837,865	SNP	ref:G	alt:A	len_diff:0
+665,837,866	indel	ref:AG	alt:A	len_diff:1
+665,837,875	SNP	ref:C	alt:T	len_diff:0
+665,837,894	SNP	ref:A	alt:G	len_diff:0
+665,837,916	SNP	ref:G	alt:A	len_diff:0
+665,837,921	SNP	ref:T	alt:C	len_diff:0
+665,837,926	SNP	ref:T	alt:C	len_diff:0
+665,837,942	SNP	ref:T	alt:C	len_diff:0
+665,837,963	SNP	ref:C	alt:T	len_diff:0
+665,838,024	SNP	ref:T	alt:G	len_diff:0
