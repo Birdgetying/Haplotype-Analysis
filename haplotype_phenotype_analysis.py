@@ -5351,8 +5351,7 @@ const svg = d3.select('#network')
     .append('svg')
     .attr('width', width)
     .attr('height', height)
-    .style('display', 'block')
-    .style('pointer-events', 'all');
+    .style('display', 'block');
 
 // 添加clipPath限制显示范围
 svg.append('defs').append('clipPath')
@@ -5369,19 +5368,16 @@ const zoomG = g.append('g').attr('class', 'zoom-group');
 let currentScale = 1;
 let minScale = 0.5, maxScale = 2.5;
 
-// 滚轮缩放（以容器中心为基准）- 使用原生事件确保兼容性
-container.addEventListener('wheel', function(e) {{
+// 滚轮缩放内部节点（容器边界不变）
+svg.on('wheel', function(e) {{
     e.preventDefault();
-    e.stopPropagation();
-    console.log('wheel event', e.deltaY);
     var delta = e.deltaY > 0 ? 0.9 : 1.1;
     var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
     if (newScale !== currentScale) {{
         currentScale = newScale;
         zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
-        console.log('zoom to', currentScale);
     }}
-}}, {{ passive: false }});
+}});
 
 // 深拷贝节点
 const simNodes = nodes.map(d => Object.assign({{}}, d));
