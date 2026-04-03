@@ -3812,13 +3812,17 @@ class ReportGenerator:
         
         def get_var_color(pos):
             """snp_effects 优先，无则回退到位置分类"""
-            # DEBUG
-            if pos == display_positions[0] if display_positions else None:
-                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects type={type(snp_effects)}, snp_effects is None={snp_effects is None}")
-                if snp_effects:
-                    print(f"[DEBUG] pos in snp_effects: {pos in snp_effects}")
-            if snp_effects and pos in snp_effects:
-                return var_type_colors.get(snp_effects[pos], '#95a5a6'), snp_effects[pos]
+            # DEBUG - 打印所有位置的信息
+            if snp_effects:
+                if pos in snp_effects:
+                    ann = snp_effects[pos]
+                    color = var_type_colors.get(ann, '#95a5a6')
+                    print(f"[DEBUG] get_var_color: pos={pos}, found in snp_effects, ann={ann}, color={color}")
+                    return color, ann
+                else:
+                    print(f"[DEBUG] get_var_color: pos={pos}, NOT in snp_effects, keys sample={list(snp_effects.keys())[:3]}")
+            else:
+                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects is None or empty")
             # 位置回退：简单分为 UTR / other
             in_exon = any(es <= pos <= ee for es, ee in exons)
             in_cds_b = any(cs <= pos <= ce for cs, ce in cds)
