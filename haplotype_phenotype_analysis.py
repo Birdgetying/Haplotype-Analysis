@@ -4081,7 +4081,7 @@ class ReportGenerator:
         .zoom-controls span {{ font-size: 12px; color: #333; min-width: 45px; }}
         
         /* 可缩放内容区 */
-        .content-wrapper {{ overflow: auto; max-height: calc(100vh - 200px); }}
+        .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
         .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
         
         /* 整合布局 */
