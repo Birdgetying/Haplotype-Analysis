@@ -6484,11 +6484,11 @@ if (promoterStart < promoterEnd) {{
         self.generate_integrated_html(
             hap_sample_df, effect_results, variant_positions,
             region_start, region_end, phenotype_col,
-            gene_start, gene_end, None, None, '+', [], [], None, chrom,
+            gene_start, gene_end, None, None, '+', [], [],
+            snp_effects, chrom,
             variant_info=variant_info,
             variant_pvalues=variant_pvalues,
-            network_data=network_data,
-            snp_effects=snp_effects
+            network_data=network_data
         )
         
         # JSON 序列化
