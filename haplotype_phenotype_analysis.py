@@ -5251,7 +5251,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .tooltip h4 {{ margin-bottom: 8px; font-size: 15px; color: #ffd700; }}
         .tooltip p {{ margin: 4px 0; }}
         .legend {{ position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95);
-                  padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                  padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); pointer-events: none; }}
         .legend h4 {{ margin-bottom: 10px; font-size: 13px; color: #333; }}
         .legend-item {{ display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }}
         .legend-circle {{ width: 12px; height: 12px; border-radius: 50%; }}
@@ -5458,6 +5458,7 @@ const labels = g.append('g')
 const tooltip = d3.select('#tooltip');
 
 node.on('mouseover', function(event, d) {{
+    event.stopPropagation();
     tooltip.style('display', 'block')
         .html(`<h4>${{d.id}}</h4>
                <p><strong>Sample Count:</strong> ${{d.count}}</p>
@@ -5466,10 +5467,12 @@ node.on('mouseover', function(event, d) {{
     d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
 }})
 .on('mousemove', function(event) {{
+    event.stopPropagation();
     tooltip.style('left', (event.pageX + 15) + 'px')
            .style('top', (event.pageY - 10) + 'px');
 }})
-.on('mouseout', function() {{
+.on('mouseout', function(event) {{
+    event.stopPropagation();
     tooltip.style('display', 'none');
     d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
 }});
