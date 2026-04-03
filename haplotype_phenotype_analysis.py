@@ -3724,6 +3724,11 @@ class ReportGenerator:
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
         
+        # DEBUG: 检查 snp_effects
+        print(f"[DEBUG] generate_integrated_html: snp_effects type={type(snp_effects)}, len={len(snp_effects) if snp_effects else 0}")
+        if snp_effects:
+            print(f"[DEBUG] snp_effects sample: {list(snp_effects.items())[:3]}")
+        
         # 获取所有单倍型及其序列（用于聚类）
         hap_seqs = {}
         if 'Haplotype_Seq' in hap_sample_df.columns:
@@ -3807,6 +3812,11 @@ class ReportGenerator:
         
         def get_var_color(pos):
             """snp_effects 优先，无则回退到位置分类"""
+            # DEBUG
+            if pos == display_positions[0] if display_positions else None:
+                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects type={type(snp_effects)}, snp_effects is None={snp_effects is None}")
+                if snp_effects:
+                    print(f"[DEBUG] pos in snp_effects: {pos in snp_effects}")
             if snp_effects and pos in snp_effects:
                 return var_type_colors.get(snp_effects[pos], '#95a5a6'), snp_effects[pos]
             # 位置回退：简单分为 UTR / other
