@@ -6317,7 +6317,8 @@ if (promoterStart < promoterEnd) {{
                                    chrom: str = None,
                                    variant_pvalues: dict = None,
                                    gwas_results: pd.DataFrame = None,
-                                   variant_info: dict = None) -> str:
+                                   variant_info: dict = None,
+                                   snp_effects: dict = None) -> str:
         """
         生成多图整合面板（Association Analysis为主面板，整合网络图、曼哈顿图、PCA）
         
@@ -6482,7 +6483,8 @@ if (promoterStart < promoterEnd) {{
             gene_start, gene_end, None, None, '+', [], [], None, chrom,
             variant_info=variant_info,
             variant_pvalues=variant_pvalues,
-            network_data=network_data
+            network_data=network_data,
+            snp_effects=snp_effects
         )
         
         # JSON 序列化
@@ -7978,7 +7980,8 @@ class HaplotypePhenotypeAnalyzer:
                     gene_start=start,
                     gene_end=end,
                     chrom=chrom,
-                    variant_pvalues=variant_pvalues
+                    variant_pvalues=variant_pvalues,
+                    snp_effects=snp_effects
                 )
                 logger.info("  - 多图整合面板生成成功")
             except Exception as e:
