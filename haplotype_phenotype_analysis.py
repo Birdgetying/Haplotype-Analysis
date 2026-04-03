@@ -5312,7 +5312,7 @@ const height = 700;
 let currentLayout = 'force';
 let currentSizeMode = 'count';
 
-// 创建SVG（固定视口；画布内不平移；缩放仅整体作用在 g 上）
+// 创建SVG（支持缩放和拖动，但可视范围固定）
 const svg = d3.select('#network')
     .append('svg')
     .attr('width', '100%')
@@ -5329,11 +5329,62 @@ nodes.forEach(d => {{
     d.y = height / 2 + (Math.random() - 0.5) * 40;
 }});
 
+// 缩放和拖动状态
 let netScale = 1;
-const cx = width / 2, cy = height / 2;
+let netTranslateX = 0;
+let netTranslateY = 0;
+let isDragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+
 function applyNetZoom() {{
-    g.attr('transform', 'translate(' + cx + ',' + cy + ') scale(' + netScale + ') translate(' + (-cx) + ',' + (-cy) + ')');
+    g.attr('transform', 'translate(' + netTranslateX + ',' + netTranslateY + ') scale(' + netScale + ')');
 }}
+
+// 鼠标滚轮缩放（以鼠标位置为中心）
+svg.on('wheel', function(event) {{
+    event.preventDefault();
+    const rect = svg.node().getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.3, Math.min(3, netScale * scaleFactor));
+    
+    if (newScale !== netScale) {{
+        // 以鼠标位置为中心缩放
+        netTranslateX = mouseX - (mouseX - netTranslateX) * (newScale / netScale);
+        netTranslateY = mouseY - (mouseY - netTranslateY) * (newScale / netScale);
+        netScale = newScale;
+        applyNetZoom();
+    }}
+}});
+
+// 画布拖动
+svg.on('mousedown', function(event) {{
+    isDragging = true;
+    dragStartX = event.clientX - netTranslateX;
+    dragStartY = event.clientY - netTranslateY;
+    svg.style('cursor', 'grabbing');
+}});
+
+svg.on('mousemove', function(event) {{
+    if (isDragging) {{
+        netTranslateX = event.clientX - dragStartX;
+        netTranslateY = event.clientY - dragStartY;
+        applyNetZoom();
+    }}
+}});
+
+svg.on('mouseup', function() {{
+    isDragging = false;
+    svg.style('cursor', 'default');
+}});
+
+svg.on('mouseleave', function() {{
+    isDragging = false;
+    svg.style('cursor', 'default');
+}});
 
 // 力导向模拟
 const simulation = d3.forceSimulation(nodes)
@@ -5465,19 +5516,33 @@ simulation.on('tick', () => {{
           .attr('y', d => d.y);
 }});
 
-// 缩放控制（仅整体缩放绘图内容，不平移）
+// 缩放控制（支持独立缩放和重置）
 function zoomIn() {{
-    netScale = Math.min(2.5, netScale * 1.2);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const newScale = Math.min(3, netScale * 1.2);
+    // 以画布中心为基准缩放
+    netTranslateX = centerX - (centerX - netTranslateX) * (newScale / netScale);
+    netTranslateY = centerY - (centerY - netTranslateY) * (newScale / netScale);
+    netScale = newScale;
     applyNetZoom();
 }}
 
 function zoomOut() {{
-    netScale = Math.max(0.45, netScale / 1.2);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const newScale = Math.max(0.3, netScale / 1.2);
+    // 以画布中心为基准缩放
+    netTranslateX = centerX - (centerX - netTranslateX) * (newScale / netScale);
+    netTranslateY = centerY - (centerY - netTranslateY) * (newScale / netScale);
+    netScale = newScale;
     applyNetZoom();
 }}
 
 function resetZoom() {{
     netScale = 1;
+    netTranslateX = 0;
+    netTranslateY = 0;
     applyNetZoom();
 }}
 
