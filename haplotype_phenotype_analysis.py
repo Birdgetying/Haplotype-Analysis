@@ -5366,11 +5366,13 @@ let minScale = 0.5, maxScale = 2.5;
 // 滚轮缩放（以容器中心为基准）
 svg.on('wheel', function(e) {{
     e.preventDefault();
+    console.log('wheel event', e.deltaY);
     var delta = e.deltaY > 0 ? 0.9 : 1.1;
     var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
     if (newScale !== currentScale) {{
         currentScale = newScale;
         zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
+        console.log('zoom to', currentScale);
     }}
 }});
 
@@ -5402,13 +5404,23 @@ const linkSel = zoomG.append('g').selectAll('line').data(simLinks).join('line')
 const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
     .style('cursor', 'pointer')
     .call(d3.drag()
-        .on('start', function(e, d) {{ if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
+        .on('start', function(e, d) {{ 
+            console.log('drag start', d.id);
+            if (!e.active) sim.alphaTarget(0.3).restart(); 
+            d.fx = d.x; 
+            d.fy = d.y; 
+        }})
         .on('drag', function(e, d) {{ 
             var r = d.size * 0.5 + 5;
             d.fx = Math.max(r, Math.min(width - r, e.x));
             d.fy = Math.max(r, Math.min(height - r, e.y));
         }})
-        .on('end', function(e, d) {{ if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }})
+        .on('end', function(e, d) {{ 
+            console.log('drag end', d.id);
+            if (!e.active) sim.alphaTarget(0); 
+            d.fx = null; 
+            d.fy = null; 
+        }})
     );
 
 // 节点圆形
@@ -5473,12 +5485,20 @@ function resetZoom() {{
     zoomG.attr('transform', null);
     sim.alpha(1).restart();
 }}
-.on('mouseout', function(event) {{
+
+// Tooltip
+const tooltip = d3.select('#tooltip');
+nodeG.on('mouseover', function(event, d) {{
+    d3.select(this).select('circle').attr('stroke', '#f39c12').attr('stroke-width', 3.5);
+    tooltip.style('display', 'block')
+        .html('<h4>' + d.id + '</h4><p>Count: ' + d.count + '</p><p>Variants: ' + d.snp_count + '</p>');
+}}).on('mousemove', function(event) {{
+    tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY - 10) + 'px');
+}}).on('mouseout', function(event) {{
+    d3.select(this).select('circle').attr('stroke', '#fff').attr('stroke-width', 2.5);
     tooltip.style('display', 'none');
-    d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
-}})
-.on('mousedown', function(event) {{
-    // 阻止节点上的mousedown冒泡，避免触发画布拖拽
+}}).on('mousedown', function(event) {{
+    // 阻止节点上的mousedown冒泡
     event.stopPropagation();
 }});
 
