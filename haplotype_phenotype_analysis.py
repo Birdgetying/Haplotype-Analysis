@@ -4885,6 +4885,31 @@ function drawNetworkPlot() {
         .attr('font-size','9px').attr('fill','#445566').attr('pointer-events','none')
         .text(function(d) { return 'n='+d.count; });
 
+    // 添加颜色图例（表型高低）
+    var legendG = svg.append('g').attr('class', 'pheno-legend')
+        .attr('transform', 'translate(' + (W - 75) + ', 10)');
+    // 渐变条
+    var gradId = 'pheno-grad-' + Math.random().toString(36).substr(2, 9);
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient').attr('id', gradId)
+        .attr('x1', '0%').attr('y1', '100%').attr('x2', '0%').attr('y2', '0%');
+    grad.append('stop').attr('offset', '0%').attr('stop-color', 'rgb(0, 100, 255)');
+    grad.append('stop').attr('offset', '50%').attr('stop-color', 'rgb(128, 100, 128)');
+    grad.append('stop').attr('offset', '100%').attr('stop-color', 'rgb(255, 100, 0)');
+    legendG.append('rect').attr('width', 12).attr('height', 60)
+        .attr('fill', 'url(#' + gradId + ')').attr('rx', 2);
+    // 标签
+    legendG.append('text').attr('x', 16).attr('y', 10)
+        .attr('font-size', '9px').attr('fill', '#333').attr('font-weight', 'bold')
+        .text('High');
+    legendG.append('text').attr('x', 16).attr('y', 58)
+        .attr('font-size', '9px').attr('fill', '#333').attr('font-weight', 'bold')
+        .text('Low');
+    legendG.append('text').attr('x', 6).attr('y', -5)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '9px').attr('fill', '#555')
+        .text('Mean');
+
     var tip = document.getElementById('d3-tooltip');
     nodeG.on('mouseover', function(e,d) {
         d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
@@ -4938,12 +4963,45 @@ function drawGWASPlot(data) {
 
     var colorR2 = d3.scaleSequential(function(t) { return d3.interpolateRdBu(1 - t); }).domain([0, 1]);
 
+    // 显著性阈值线（p=0.05和p=0.01）用更醒目的样式
+    var sigY05 = ySc(-Math.log10(0.05));
+    if (sigY05 > 0 && sigY05 < gwasH) {
+        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY05).attr('y2', sigY05)
+            .attr('stroke', '#e74c3c').attr('stroke-width', 2).attr('stroke-dasharray', '6,4')
+            .attr('opacity', 0.9);
+        g.append('text').attr('x', iW - 4).attr('y', sigY05 - 5).attr('text-anchor', 'end')
+            .attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', '#e74c3c').text('p=0.05');
+    }
+    var sigY01 = ySc(-Math.log10(0.01));
+    if (sigY01 > 0 && sigY01 < gwasH) {
+        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY01).attr('y2', sigY01)
+            .attr('stroke', '#c0392b').attr('stroke-width', 2.5).attr('stroke-dasharray', '8,4')
+            .attr('opacity', 0.95);
+        g.append('text').attr('x', iW - 4).attr('y', sigY01 - 5).attr('text-anchor', 'end')
+            .attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', '#c0392b').text('p=0.01');
+    }
+
+    // Lead Variant标记（加粗红色竖线+标签）
     if (leadVariantPos != null && !isNaN(+leadVariantPos)) {
+        var leadX = xSc(+leadVariantPos);
+        // 背景高亮条
+        g.append('rect')
+            .attr('x', leadX - 8).attr('y', -5)
+            .attr('width', 16).attr('height', gwasH + 10)
+            .attr('fill', '#ffebee').attr('opacity', 0.4).attr('pointer-events', 'none');
+        // 红色虚线
         g.append('line')
-            .attr('x1', xSc(+leadVariantPos)).attr('x2', xSc(+leadVariantPos))
-            .attr('y1', 0).attr('y2', gwasH)
-            .attr('stroke', '#c0392b').attr('stroke-width', 1.5).attr('stroke-dasharray', '5,4')
-            .attr('opacity', 0.88).attr('pointer-events', 'none');
+            .attr('x1', leadX).attr('x2', leadX)
+            .attr('y1', -5).attr('y2', gwasH + 5)
+            .attr('stroke', '#c0392b').attr('stroke-width', 3)
+            .attr('stroke-dasharray', '4,3')
+            .attr('opacity', 1).attr('pointer-events', 'none');
+        // 顶部标签
+        g.append('text')
+            .attr('x', leadX).attr('y', -12)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '11px').attr('font-weight', 'bold').attr('fill', '#c0392b')
+            .text('Lead: ' + (+leadVariantPos).toLocaleString());
     }
 
     var symTypes = { SNP: d3.symbolCircle, indel: d3.symbolSquare, SV: d3.symbolTriangle };
