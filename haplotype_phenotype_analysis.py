@@ -5125,7 +5125,7 @@ function drawGWASPlot(data) {
     });
 }
 
-function exportSVG() {{
+function exportSVG() {
     // 临时移除transform以获取完整内容
     var content = document.getElementById('zoomContent');
     var wrapper = document.querySelector('.content-wrapper');
@@ -5139,12 +5139,12 @@ function exportSVG() {{
     
     // 获取所有SVG元素
     var svgElements = content.querySelectorAll('svg');
-    if (svgElements.length === 0) {{ 
+    if (svgElements.length === 0) { 
         alert('No SVG found'); 
         content.style.transform = originalTransform;
         wrapper.style.overflow = originalOverflow;
         return; 
-    }}
+    }
     
     var svgNS = "http://www.w3.org/2000/svg";
     var combinedSVG = document.createElementNS(svgNS, "svg");
@@ -5153,22 +5153,22 @@ function exportSVG() {{
     var totalWidth = 0, totalHeight = 0;
     var svgData = [];
     
-    for (var i = 0; i < svgElements.length; i++) {{
+    for (var i = 0; i < svgElements.length; i++) {
         var svg = svgElements[i];
         // 使用getBBox获取实际内容尺寸，而非getBoundingClientRect
-        var bbox = {{ width: svg.width.baseVal.value || 800, height: svg.height.baseVal.value || 600 }};
-        try {{
+        var bbox = { width: svg.width.baseVal.value || 800, height: svg.height.baseVal.value || 600 };
+        try {
             var actualBBox = svg.getBBox();
-            if (actualBBox.width > 0 && actualBBox.height > 0) {{
+            if (actualBBox.width > 0 && actualBBox.height > 0) {
                 bbox = actualBBox;
-            }}
-        }} catch(e) {{}}
+            }
+        } catch(e) {}
         
         totalWidth = Math.max(totalWidth, bbox.width);
         totalHeight += bbox.height + 30; // 增加间距
-        svgData.push({{ svg: svg, width: bbox.width, height: bbox.height }});
-    }}
-    
+        svgData.push({ svg: svg, width: bbox.width, height: bbox.height });
+    }
+        
     // 添加边距
     var margin = 40;
     totalWidth += margin * 2;
@@ -5188,7 +5188,7 @@ function exportSVG() {{
     
     // 合并所有SVG内容
     var currentY = margin;
-    for (var j = 0; j < svgData.length; j++) {{
+    for (var j = 0; j < svgData.length; j++) {
         var data = svgData[j];
         var clonedSVG = data.svg.cloneNode(true);
         
@@ -5198,13 +5198,13 @@ function exportSVG() {{
         g.setAttribute("transform", "translate(" + offsetX + "," + currentY + ")");
         
         // 复制所有子元素
-        while (clonedSVG.firstChild) {{
+        while (clonedSVG.firstChild) {
             g.appendChild(clonedSVG.firstChild);
-        }}
+        }
         
         combinedSVG.appendChild(g);
         currentY += data.height + 30;
-    }}
+    }
     
     // 恢复原始样式
     content.style.transform = originalTransform;
@@ -5216,7 +5216,7 @@ function exportSVG() {{
     var svgString = '<?xml version="1.0" standalone="no"?>\n' + 
                     '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
                     serializer.serializeToString(combinedSVG);
-    var blob = new Blob([svgString], {{type: "image/svg+xml;charset=utf-8"}});
+    var blob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
     link.href = url;
