@@ -4122,6 +4122,17 @@ class ReportGenerator:
         .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
         .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
         
+        /* 打印样式优化 */
+        @media print {{
+            .content-wrapper {{ overflow: visible; max-height: none; }}
+            .content {{ transform: none !important; min-width: auto; }}
+            .zoom-controls, .filter-panel {{ display: none; }}
+            .header {{ page-break-after: avoid; }}
+            .main-data-section {{ page-break-before: avoid; }}
+            table {{ page-break-inside: auto; }}
+            tr {{ page-break-inside: avoid; }}
+        }}
+        
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
         .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
@@ -5115,40 +5126,97 @@ function drawGWASPlot(data) {
 }
 
 function exportSVG() {{
+    // 临时移除transform以获取完整内容
     var content = document.getElementById('zoomContent');
+    var wrapper = document.querySelector('.content-wrapper');
+    var originalTransform = content.style.transform;
+    var originalOverflow = wrapper.style.overflow;
+    
+    // 重置样式以获取完整内容
+    content.style.transform = 'none';
+    wrapper.style.overflow = 'visible';
+    wrapper.style.maxHeight = 'none';
+    
+    // 获取所有SVG元素
     var svgElements = content.querySelectorAll('svg');
-    if (svgElements.length === 0) {{ alert('No SVG'); return; }}
+    if (svgElements.length === 0) {{ 
+        alert('No SVG found'); 
+        content.style.transform = originalTransform;
+        wrapper.style.overflow = originalOverflow;
+        return; 
+    }}
+    
     var svgNS = "http://www.w3.org/2000/svg";
     var combinedSVG = document.createElementNS(svgNS, "svg");
+    
+    // 计算总尺寸
     var totalWidth = 0, totalHeight = 0;
+    var svgData = [];
+    
     for (var i = 0; i < svgElements.length; i++) {{
-        var rect = svgElements[i].getBoundingClientRect();
-        totalWidth = Math.max(totalWidth, rect.width);
-        totalHeight += rect.height + 20;
+        var svg = svgElements[i];
+        // 使用getBBox获取实际内容尺寸，而非getBoundingClientRect
+        var bbox = {{ width: svg.width.baseVal.value || 800, height: svg.height.baseVal.value || 600 }};
+        try {{
+            var actualBBox = svg.getBBox();
+            if (actualBBox.width > 0 && actualBBox.height > 0) {{
+                bbox = actualBBox;
+            }}
+        }} catch(e) {{}}
+        
+        totalWidth = Math.max(totalWidth, bbox.width);
+        totalHeight += bbox.height + 30; // 增加间距
+        svgData.push({{ svg: svg, width: bbox.width, height: bbox.height }});
     }}
+    
+    // 添加边距
+    var margin = 40;
+    totalWidth += margin * 2;
+    totalHeight += margin * 2;
+    
     combinedSVG.setAttribute("width", totalWidth);
     combinedSVG.setAttribute("height", totalHeight);
+    combinedSVG.setAttribute("viewBox", "0 0 " + totalWidth + " " + totalHeight);
     combinedSVG.setAttribute("xmlns", svgNS);
+    
+    // 白色背景
     var bg = document.createElementNS(svgNS, "rect");
     bg.setAttribute("width", "100%");
     bg.setAttribute("height", "100%");
     bg.setAttribute("fill", "white");
     combinedSVG.appendChild(bg);
-    var currentY = 0;
-    for (var j = 0; j < svgElements.length; j++) {{
-        var rect = svgElements[j].getBoundingClientRect();
-        var clonedSVG = svgElements[j].cloneNode(true);
+    
+    // 合并所有SVG内容
+    var currentY = margin;
+    for (var j = 0; j < svgData.length; j++) {{
+        var data = svgData[j];
+        var clonedSVG = data.svg.cloneNode(true);
+        
+        // 创建组并定位
         var g = document.createElementNS(svgNS, "g");
-        g.setAttribute("transform", "translate(0," + currentY + ")");
+        var offsetX = margin + (totalWidth - margin * 2 - data.width) / 2; // 水平居中
+        g.setAttribute("transform", "translate(" + offsetX + "," + currentY + ")");
+        
+        // 复制所有子元素
         while (clonedSVG.firstChild) {{
             g.appendChild(clonedSVG.firstChild);
         }}
+        
         combinedSVG.appendChild(g);
-        currentY += rect.height + 20;
+        currentY += data.height + 30;
     }}
+    
+    // 恢复原始样式
+    content.style.transform = originalTransform;
+    wrapper.style.overflow = originalOverflow;
+    wrapper.style.maxHeight = '';
+    
+    // 导出
     var serializer = new XMLSerializer();
-    var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
-    var blob = new Blob([svgString], {{type: "image/svg+xml"}});
+    var svgString = '<?xml version="1.0" standalone="no"?>\n' + 
+                    '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+                    serializer.serializeToString(combinedSVG);
+    var blob = new Blob([svgString], {{type: "image/svg+xml;charset=utf-8"}});
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
     link.href = url;
