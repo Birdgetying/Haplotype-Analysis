@@ -3972,11 +3972,28 @@ class ReportGenerator:
             row["vtype"] = variant_plot_class(info, row["annotation"])
         
         # 准备网络图数据
+        # 先计算lead_haplotype（在两种情况下都需要）
+        hap_names_list = list(top_haps)
+        
+        # 找到lead variant对应的haplotype（与lead variant最显著关联的haplotype）
+        lead_haplotype = None
+        if lead_pos is not None and effect_results:
+            # 从effect_results中找到P值最小的haplotype（最显著）
+            min_p_value = 1.0
+            for hap, eff in effect_results.items():
+                if hap != 'Reference':
+                    p_val = eff.get('p_value', 1.0)
+                    if p_val < min_p_value:
+                        min_p_value = p_val
+                        lead_haplotype = hap
+            print(f"[DEBUG] Lead haplotype: {lead_haplotype}, min p-value: {min_p_value}")
+            print(f"[DEBUG] effect_results keys: {list(effect_results.keys())}")
+            print(f"[DEBUG] hap_names_list: {hap_names_list}")
+        
         if network_data is None:
             # 如果没有提供网络数据，则计算
             network_nodes = []
             network_edges = []
-            hap_names_list = list(top_haps)
             
             # 表型均值用于着色
             hap_pheno_means = {}
@@ -3991,18 +4008,6 @@ class ReportGenerator:
                 if hap_pheno_means:
                     pheno_min = min(hap_pheno_means.values())
                     pheno_max = max(hap_pheno_means.values())
-            
-        # 找到lead variant对应的haplotype（与lead variant最显著关联的haplotype）
-        lead_haplotype = None
-        if lead_pos is not None and effect_results:
-            # 从effect_results中找到P值最小的haplotype（最显著）
-            min_p_value = 1.0
-            for hap, eff in effect_results.items():
-                if hap != 'Reference' and hap in hap_names_list:
-                    p_val = eff.get('p_value', 1.0)
-                    if p_val < min_p_value:
-                        min_p_value = p_val
-                        lead_haplotype = hap
         
         for hap in hap_names_list:
             count = hap_counts.get(hap, 1)
