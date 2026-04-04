@@ -3978,16 +3978,18 @@ class ReportGenerator:
         # 找到lead variant对应的haplotype（与lead variant最显著关联的haplotype）
         lead_haplotype = None
         if lead_pos is not None and effect_results:
-            # 从effect_results中找到P值最小的haplotype（最显著）
+            # 从effect_results['haplotype_effects']中找到P值最小的haplotype（最显著）
+            hap_effects = effect_results.get('haplotype_effects', [])
             min_p_value = 1.0
-            for hap, eff in effect_results.items():
-                if hap != 'Reference':
+            for eff in hap_effects:
+                hap_name = eff.get('haplotype', '')
+                if hap_name and not eff.get('is_reference', False):
                     p_val = eff.get('p_value', 1.0)
                     if p_val < min_p_value:
                         min_p_value = p_val
-                        lead_haplotype = hap
+                        lead_haplotype = hap_name
             print(f"[DEBUG] Lead haplotype: {lead_haplotype}, min p-value: {min_p_value}")
-            print(f"[DEBUG] effect_results keys: {list(effect_results.keys())}")
+            print(f"[DEBUG] hap_effects count: {len(hap_effects)}")
             print(f"[DEBUG] hap_names_list: {hap_names_list}")
         
         if network_data is None:
