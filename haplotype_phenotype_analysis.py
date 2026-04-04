@@ -4019,7 +4019,7 @@ class ReportGenerator:
                     seq2 = hap_seqs.get(hap_names_list[j], '')
                     if seq1 and seq2 and len(seq1) == len(seq2):
                         diff_count = sum(1 for a, b in zip(seq1, seq2) if a != b)
-                        if 0 < diff_count <= max(1, len(seq1) * 0.4):
+                        if diff_count > 0:
                             network_edges.append({
                                 'source': hap_names_list[i],
                                 'target': hap_names_list[j],
@@ -4087,20 +4087,20 @@ class ReportGenerator:
         .zoom-controls span {{ font-size: 12px; color: #333; min-width: 45px; }}
         
         /* 可缩放内容区 */
-        .content-wrapper {{ overflow: auto; max-height: calc(100vh - 200px); }}
-        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
+        .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
+        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; }}
-        .network-panel {{ width: 100%; height: 350px; 
-                         border: none; border-radius: 6px; 
-                         background: #fafafa; position: relative; overflow: hidden; }}
+        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        .network-panel {{ width: 350px; min-width: 350px; height: 280px; 
+                         border: 1px solid #e0e0e0; border-radius: 6px; 
+                         background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px; 
                                font-size: 12px; font-weight: 600; color: #2c3e50; 
                                background: rgba(255,255,255,0.9); padding: 2px 6px; 
                                border-radius: 3px; z-index: 10; }}
-        .gene-gwas-panel {{ flex: 1; height: 180px; border: 1px solid #e0e0e0; 
+        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px; 
                            font-size: 12px; font-weight: 600; color: #2c3e50; 
@@ -4200,11 +4200,15 @@ class ReportGenerator:
     <div class="content-wrapper">
     <div class="content" id="zoomContent">
         <div class="integrated-view">
-            <!-- 顶部区域：单倍型网络图 -->
+            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
             <div class="top-section">
                 <div class="network-panel">
                     <div class="network-panel-title">Haplotype Network</div>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
+                </div>
+                <div class="gene-gwas-panel">
+                    <div class="gene-gwas-title">GWAS P-values</div>
+                    <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
                 </div>
             </div>
             
@@ -5069,6 +5073,7 @@ function exportSVG() {{
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
     drawNetworkPlot();
+    drawGWASPlot(gwasData);
 });
 </script>
 </body>
@@ -6445,7 +6450,7 @@ if (promoterStart < promoterEnd) {{
                         if c1 != c2:
                             diff_positions.append(idx)
                     dist = len(diff_positions)
-                    if dist <= max(1, len(seq1) * 0.4) and dist > 0:
+                    if dist > 0:
                         network_edges.append({
                             'source': hap_names[i],
                             'target': hap_names[j],
