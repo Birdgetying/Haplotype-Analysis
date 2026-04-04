@@ -3992,28 +3992,17 @@ class ReportGenerator:
                     pheno_min = min(hap_pheno_means.values())
                     pheno_max = max(hap_pheno_means.values())
             
-        # 找到lead variant对应的haplotype（在该位置有特定等位基因的样本最多的haplotype）
+        # 找到lead variant对应的haplotype（与lead variant最显著关联的haplotype）
         lead_haplotype = None
-        if lead_pos is not None and display_positions:
-            lead_idx = list(display_positions).index(lead_pos) if lead_pos in display_positions else -1
-            if lead_idx >= 0 and 'Haplotype_Seq' in hap_sample_df.columns:
-                hap_alleles = {}
-                for hap in hap_names_list:
-                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
-                    if len(hap_rows) > 0:
-                        seq = hap_rows['Haplotype_Seq'].iloc[0]
-                        allele = seq.split('|')[lead_idx] if '|' in seq and lead_idx < len(seq.split('|')) else seq[lead_idx] if lead_idx < len(seq) else 'N'
-                        hap_alleles[hap] = allele
-                # 找到最常见的等位基因对应的haplotype
-                if hap_alleles:
-                    allele_counts = {}
-                    for hap, allele in hap_alleles.items():
-                        cnt = hap_counts.get(hap, 0)
-                        allele_counts[allele] = allele_counts.get(allele, 0) + cnt
-                    lead_allele = max(allele_counts, key=allele_counts.get)
-                    # 找到有这个等位基因且样本数最多的haplotype
-                    lead_haplotype = max([h for h, a in hap_alleles.items() if a == lead_allele], 
-                                         key=lambda h: hap_counts.get(h, 0), default=None)
+        if lead_pos is not None and effect_results:
+            # 从effect_results中找到P值最小的haplotype（最显著）
+            min_p_value = 1.0
+            for hap, eff in effect_results.items():
+                if hap != 'Reference' and hap in hap_names_list:
+                    p_val = eff.get('p_value', 1.0)
+                    if p_val < min_p_value:
+                        min_p_value = p_val
+                        lead_haplotype = hap
         
         for hap in hap_names_list:
             count = hap_counts.get(hap, 1)
@@ -4022,11 +4011,22 @@ class ReportGenerator:
             
             if hap in hap_pheno_means and pheno_max > pheno_min:
                 norm_val = (hap_pheno_means[hap] - pheno_min) / (pheno_max - pheno_min)
-                r = int(255 * norm_val)
-                b = int(255 * (1 - norm_val))
-                color = f'rgb({r}, 100, {b})'
+                # 蓝(#3498db) -> 紫(#9b59b6) -> 红(#e74c3c) 渐变
+                if norm_val < 0.5:
+                    # 低值：蓝到紫
+                    t = norm_val * 2  # 0-1
+                    r = int(52 + (155 - 52) * t)   # 52->155
+                    g = int(152 + (89 - 152) * t)  # 152->89
+                    b = int(219 + (182 - 219) * t) # 219->182
+                else:
+                    # 高值：紫到红
+                    t = (norm_val - 0.5) * 2  # 0-1
+                    r = int(155 + (231 - 155) * t)  # 155->231
+                    g = int(89 + (76 - 89) * t)     # 89->76
+                    b = int(182 + (60 - 182) * t)   # 182->60
+                color = f'rgb({r}, {g}, {b})'
             else:
-                color = '#3498db'
+                color = '#9b59b6'  # 默认紫色
             
             network_nodes.append({
                 'id': hap,
