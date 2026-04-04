@@ -5216,7 +5216,7 @@ function exportSVG() {
     var svgString = '<?xml version="1.0" standalone="no"?>\n' + 
                     '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
                     serializer.serializeToString(combinedSVG);
-    var blob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+    var blob = new Blob([svgString], {{type: "image/svg+xml;charset=utf-8"}});
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
     link.href = url;
