@@ -3992,25 +3992,50 @@ class ReportGenerator:
                     pheno_min = min(hap_pheno_means.values())
                     pheno_max = max(hap_pheno_means.values())
             
-            for hap in hap_names_list:
-                count = hap_counts.get(hap, 1)
-                size = max(15, min(60, 15 + np.sqrt(count) * 6))
-                
-                if hap in hap_pheno_means and pheno_max > pheno_min:
-                    norm_val = (hap_pheno_means[hap] - pheno_min) / (pheno_max - pheno_min)
-                    r = int(255 * norm_val)
-                    b = int(255 * (1 - norm_val))
-                    color = f'rgb({r}, 100, {b})'
-                else:
-                    color = '#3498db'
-                
-                network_nodes.append({
-                    'id': hap,
-                    'count': count,
-                    'size': size,
-                    'color': color,
-                    'phenoMean': round(hap_pheno_means.get(hap, 0), 3)
-                })
+        # 找到lead variant对应的haplotype（在该位置有特定等位基因的样本最多的haplotype）
+        lead_haplotype = None
+        if lead_pos is not None and display_positions:
+            lead_idx = list(display_positions).index(lead_pos) if lead_pos in display_positions else -1
+            if lead_idx >= 0 and 'Haplotype_Seq' in hap_sample_df.columns:
+                hap_alleles = {}
+                for hap in hap_names_list:
+                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
+                    if len(hap_rows) > 0:
+                        seq = hap_rows['Haplotype_Seq'].iloc[0]
+                        allele = seq.split('|')[lead_idx] if '|' in seq and lead_idx < len(seq.split('|')) else seq[lead_idx] if lead_idx < len(seq) else 'N'
+                        hap_alleles[hap] = allele
+                # 找到最常见的等位基因对应的haplotype
+                if hap_alleles:
+                    allele_counts = {}
+                    for hap, allele in hap_alleles.items():
+                        cnt = hap_counts.get(hap, 0)
+                        allele_counts[allele] = allele_counts.get(allele, 0) + cnt
+                    lead_allele = max(allele_counts, key=allele_counts.get)
+                    # 找到有这个等位基因且样本数最多的haplotype
+                    lead_haplotype = max([h for h, a in hap_alleles.items() if a == lead_allele], 
+                                         key=lambda h: hap_counts.get(h, 0), default=None)
+        
+        for hap in hap_names_list:
+            count = hap_counts.get(hap, 1)
+            size = max(15, min(60, 15 + np.sqrt(count) * 6))
+            is_lead_hap = (hap == lead_haplotype)
+            
+            if hap in hap_pheno_means and pheno_max > pheno_min:
+                norm_val = (hap_pheno_means[hap] - pheno_min) / (pheno_max - pheno_min)
+                r = int(255 * norm_val)
+                b = int(255 * (1 - norm_val))
+                color = f'rgb({r}, 100, {b})'
+            else:
+                color = '#3498db'
+            
+            network_nodes.append({
+                'id': hap,
+                'count': count,
+                'size': size,
+                'color': color,
+                'phenoMean': round(hap_pheno_means.get(hap, 0), 3),
+                'isLead': is_lead_hap
+            })
             
             # 计算边（Hamming距离）
             for i in range(len(hap_names_list)):
@@ -4446,8 +4471,10 @@ class ReportGenerator:
             row = rows.iloc[0]
             cnt = len(rows)
             is_ref = (i == 0)
+            is_lead = (hap == lead_haplotype)
             row_class = 'ref-row' if is_ref else ''
             ref_tag = '<span class="ref-tag">Ref</span>' if is_ref else ''
+            lead_tag = '<span class="ref-tag" style="background:#c0392b;margin-left:4px;">Lead</span>' if is_lead else ''
             
             # 效应数据（森林图样式）
             eff = effect_data.get(hap, {})
@@ -4498,7 +4525,7 @@ class ReportGenerator:
                 box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
             
             html += f'''<tr class="{row_class}" data-hap="{hap}">
-    <td class="hap-cell">{hap}{ref_tag}</td>
+    <td class="hap-cell">{hap}{ref_tag}{lead_tag}</td>
     <td class="effect-cell">
         <div class="bar-container">
             <div class="bar-center"></div>
@@ -4885,30 +4912,35 @@ function drawNetworkPlot() {
         .attr('font-size','9px').attr('fill','#445566').attr('pointer-events','none')
         .text(function(d) { return 'n='+d.count; });
 
-    // 添加颜色图例（表型高低）
+    // 添加颜色图例（表型高低）- 美观设计，放在左上角
     var legendG = svg.append('g').attr('class', 'pheno-legend')
-        .attr('transform', 'translate(' + (W - 75) + ', 10)');
-    // 渐变条
+        .attr('transform', 'translate(15, 15)');
+    // 背景框
+    legendG.append('rect').attr('x', -5).attr('y', -5)
+        .attr('width', 50).attr('height', 75)
+        .attr('fill', 'rgba(255,255,255,0.9)').attr('rx', 4)
+        .attr('stroke', '#ddd').attr('stroke-width', 0.5);
+    // 渐变条 - 使用更美观的配色（蓝到红的渐变）
     var gradId = 'pheno-grad-' + Math.random().toString(36).substr(2, 9);
     var defs = svg.append('defs');
     var grad = defs.append('linearGradient').attr('id', gradId)
         .attr('x1', '0%').attr('y1', '100%').attr('x2', '0%').attr('y2', '0%');
-    grad.append('stop').attr('offset', '0%').attr('stop-color', 'rgb(0, 100, 255)');
-    grad.append('stop').attr('offset', '50%').attr('stop-color', 'rgb(128, 100, 128)');
-    grad.append('stop').attr('offset', '100%').attr('stop-color', 'rgb(255, 100, 0)');
-    legendG.append('rect').attr('width', 12).attr('height', 60)
+    grad.append('stop').attr('offset', '0%').attr('stop-color', '#3498db');  // 蓝色-低
+    grad.append('stop').attr('offset', '50%').attr('stop-color', '#9b59b6'); // 紫色-中
+    grad.append('stop').attr('offset', '100%').attr('stop-color', '#e74c3c'); // 红色-高
+    legendG.append('rect').attr('width', 10).attr('height', 50).attr('x', 5).attr('y', 12)
         .attr('fill', 'url(#' + gradId + ')').attr('rx', 2);
+    // 标题
+    legendG.append('text').attr('x', 5).attr('y', 8)
+        .attr('font-size', '9px').attr('fill', '#2c3e50').attr('font-weight', 'bold')
+        .text('Pheno');
     // 标签
-    legendG.append('text').attr('x', 16).attr('y', 10)
-        .attr('font-size', '9px').attr('fill', '#333').attr('font-weight', 'bold')
+    legendG.append('text').attr('x', 20).attr('y', 22)
+        .attr('font-size', '8px').attr('fill', '#e74c3c').attr('font-weight', '600')
         .text('High');
-    legendG.append('text').attr('x', 16).attr('y', 58)
-        .attr('font-size', '9px').attr('fill', '#333').attr('font-weight', 'bold')
+    legendG.append('text').attr('x', 20).attr('y', 60)
+        .attr('font-size', '8px').attr('fill', '#3498db').attr('font-weight', '600')
         .text('Low');
-    legendG.append('text').attr('x', 6).attr('y', -5)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '9px').attr('fill', '#555')
-        .text('Mean');
 
     var tip = document.getElementById('d3-tooltip');
     nodeG.on('mouseover', function(e,d) {
@@ -5050,14 +5082,6 @@ function drawGWASPlot(data) {
     g.append('text').attr('transform', 'rotate(-90)').attr('y', -40).attr('x', -gwasH / 2)
         .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
         .text('-log10(P)');
-
-    var sigY = ySc(-Math.log10(0.05));
-    if (sigY > 0 && sigY < gwasH) {
-        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY).attr('y2', sigY)
-            .attr('stroke', '#e67e22').attr('stroke-dasharray', '4,3').attr('opacity', 0.75);
-        g.append('text').attr('x', iW - 2).attr('y', sigY - 3).attr('text-anchor', 'end')
-            .attr('font-size', '8px').attr('fill', '#e67e22').text('p=0.05');
-    }
 
     g.append('g').attr('transform', 'translate(0,' + iH + ')')
         .call(d3.axisBottom(xSc).ticks(6).tickFormat(function(d) { return (d / 1e6).toFixed(3) + ' Mb'; }))
