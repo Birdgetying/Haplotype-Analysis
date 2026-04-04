@@ -58,6 +58,167 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return super().default(obj)
 
+
+# ============================================================================
+# BED文件解析器（用户自定义关注区域）
+# ============================================================================
+
+class BEDParser:
+    """BED文件解析器，支持用户指定关注的基因组区域"""
+    
+    def __init__(self, bed_file: str = None):
+        """
+        Args:
+            bed_file: BED文件路径（可选）
+        """
+        self.bed_file = bed_file
+        self.regions = []  # [(chrom, start, end, name), ...]
+        
+        if bed_file and os.path.exists(bed_file):
+            self._parse_bed()
+    
+    def _parse_bed(self):
+        """解析BED文件（支持BED3/BED4/BED6格式）"""
+        with open(self.bed_file, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#') or line.startswith('track') or line.startswith('browser'):
+                    continue
+                
+                parts = line.split('\t')
+                if len(parts) < 3:
+                    print(f"[WARNING] BED文件第{line_num}行格式错误，跳过: {line}")
+                    continue
+                
+                try:
+                    chrom = parts[0]
+                    start = int(parts[1])
+                    end = int(parts[2])
+                    name = parts[3] if len(parts) > 3 else f"Region_{line_num}"
+                    
+                    if start >= end:
+                        print(f"[WARNING] BED文件第{line_num}行start>=end，跳过: {line}")
+                        continue
+                    
+                    self.regions.append((chrom, start, end, name))
+                except ValueError as e:
+                    print(f"[WARNING] BED文件第{line_num}行解析错误: {e}")
+        
+        print(f"[INFO] 从BED文件加载了 {len(self.regions)} 个关注区域")
+    
+    def is_in_regions(self, chrom: str, pos: int) -> tuple:
+        """
+        检查位置是否在BED区域内
+        
+        Args:
+            chrom: 染色体
+            pos: 位置
+            
+        Returns:
+            (is_in_region, region_name) 如果在区域内返回(True, name)，否则返回(False, None)
+        """
+        for region_chrom, start, end, name in self.regions:
+            if chrom == region_chrom and start <= pos < end:
+                return (True, name)
+        return (False, None)
+    
+    def get_regions(self) -> list:
+        """获取所有区域"""
+        return self.regions
+    
+    def has_regions(self) -> bool:
+        """是否有定义的区域"""
+        return len(self.regions) > 0
+
+
+# ============================================================================
+# Indel处理策略配置
+# ============================================================================
+
+class IndelPolicy:
+    """Indel处理策略，支持多种填充选项"""
+    
+    # 策略类型
+    POLICY_ERROR = 'error'      # 直接报错（默认）
+    POLICY_FILL_N = 'fill_n'    # 用N填充
+    POLICY_CUSTOM = 'custom'    # 自定义填充字符
+    
+    def __init__(self, policy: str = 'error', fill_char: str = 'N', max_len: int = 5):
+        """
+        Args:
+            policy: 处理策略 ('error', 'fill_n', 'custom')
+            fill_char: 自定义填充字符（仅policy='custom'时有效）
+            max_len: 最大允许长度，超过此长度的Indel将触发策略
+        """
+        self.policy = policy
+        self.fill_char = fill_char
+        self.max_len = max_len
+        
+        # 验证策略
+        if policy not in [self.POLICY_ERROR, self.POLICY_FILL_N, self.POLICY_CUSTOM]:
+            raise ValueError(f"未知的Indel处理策略: {policy}")
+        
+        # 验证填充字符
+        if policy == self.POLICY_CUSTOM:
+            if len(fill_char) != 1:
+                raise ValueError("自定义填充字符必须是单个字符")
+            if fill_char not in 'ATCGNatcgn':
+                raise ValueError("自定义填充字符必须是有效的碱基字符(A/T/C/G/N)")
+    
+    def process_indel(self, ref: str, alt: str, pos: int) -> str:
+        """
+        处理Indel，返回处理后的等位基因表示
+        
+        Args:
+            ref: 参考序列
+            alt: 替代序列
+            pos: 变异位置
+            
+        Returns:
+            处理后的等位基因字符串
+            
+        Raises:
+            ValueError: 当策略为'error'且Indel长度超过限制时
+        """
+        ref_len = len(ref)
+        alt_len = len(alt)
+        
+        # 判断是否为Indel
+        is_indel = ref_len != alt_len or ref == '-' or alt == '-'
+        
+        if not is_indel:
+            return alt  # SNP，直接返回
+        
+        # 计算Indel长度差异
+        len_diff = abs(ref_len - alt_len)
+        
+        # 如果长度在允许范围内，直接返回
+        if len_diff <= self.max_len and self.policy == self.POLICY_ERROR:
+            return alt
+        
+        if self.policy == self.POLICY_ERROR:
+            raise ValueError(f"检测到长度>{self.max_len}bp的Indel at pos {pos}: ref={ref}, alt={alt}")
+        
+        elif self.policy == self.POLICY_FILL_N:
+            # 用N填充
+            if ref_len > alt_len:  # Deletion
+                return alt + 'N' * (ref_len - alt_len)
+            else:  # Insertion
+                return alt[:self.max_len] + 'N' * (alt_len - self.max_len) if alt_len > self.max_len else alt
+        
+        elif self.policy == self.POLICY_CUSTOM:
+            # 用自定义字符填充
+            if ref_len > alt_len:  # Deletion
+                return alt + self.fill_char * (ref_len - alt_len)
+            else:  # Insertion
+                return alt[:self.max_len] + self.fill_char * (alt_len - self.max_len) if alt_len > self.max_len else alt
+        
+        return alt
+    
+    def __repr__(self):
+        return f"IndelPolicy(policy='{self.policy}', fill_char='{self.fill_char}', max_len={self.max_len})"
+
+
 # ============================================================================
 # 日志配置（带Unix时间戳文件名）
 # ============================================================================
@@ -4122,17 +4283,6 @@ class ReportGenerator:
         .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
         .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
         
-        /* 打印样式优化 */
-        @media print {{
-            .content-wrapper {{ overflow: visible; max-height: none; }}
-            .content {{ transform: none !important; min-width: auto; }}
-            .zoom-controls, .filter-panel {{ display: none; }}
-            .header {{ page-break-after: avoid; }}
-            .main-data-section {{ page-break-before: avoid; }}
-            table {{ page-break-inside: auto; }}
-            tr {{ page-break-inside: avoid; }}
-        }}
-        
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
         .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
@@ -5125,98 +5275,41 @@ function drawGWASPlot(data) {
     });
 }
 
-function exportSVG() {
-    // 临时移除transform以获取完整内容
+function exportSVG() {{
     var content = document.getElementById('zoomContent');
-    var wrapper = document.querySelector('.content-wrapper');
-    var originalTransform = content.style.transform;
-    var originalOverflow = wrapper.style.overflow;
-    
-    // 重置样式以获取完整内容
-    content.style.transform = 'none';
-    wrapper.style.overflow = 'visible';
-    wrapper.style.maxHeight = 'none';
-    
-    // 获取所有SVG元素
     var svgElements = content.querySelectorAll('svg');
-    if (svgElements.length === 0) { 
-        alert('No SVG found'); 
-        content.style.transform = originalTransform;
-        wrapper.style.overflow = originalOverflow;
-        return; 
-    }
-    
+    if (svgElements.length === 0) {{ alert('No SVG'); return; }}
     var svgNS = "http://www.w3.org/2000/svg";
     var combinedSVG = document.createElementNS(svgNS, "svg");
-    
-    // 计算总尺寸
     var totalWidth = 0, totalHeight = 0;
-    var svgData = [];
-    
-    for (var i = 0; i < svgElements.length; i++) {
-        var svg = svgElements[i];
-        // 使用getBBox获取实际内容尺寸，而非getBoundingClientRect
-        var bbox = { width: svg.width.baseVal.value || 800, height: svg.height.baseVal.value || 600 };
-        try {
-            var actualBBox = svg.getBBox();
-            if (actualBBox.width > 0 && actualBBox.height > 0) {
-                bbox = actualBBox;
-            }
-        } catch(e) {}
-        
-        totalWidth = Math.max(totalWidth, bbox.width);
-        totalHeight += bbox.height + 30; // 增加间距
-        svgData.push({ svg: svg, width: bbox.width, height: bbox.height });
-    }
-        
-    // 添加边距
-    var margin = 40;
-    totalWidth += margin * 2;
-    totalHeight += margin * 2;
-    
+    for (var i = 0; i < svgElements.length; i++) {{
+        var rect = svgElements[i].getBoundingClientRect();
+        totalWidth = Math.max(totalWidth, rect.width);
+        totalHeight += rect.height + 20;
+    }}
     combinedSVG.setAttribute("width", totalWidth);
     combinedSVG.setAttribute("height", totalHeight);
-    combinedSVG.setAttribute("viewBox", "0 0 " + totalWidth + " " + totalHeight);
     combinedSVG.setAttribute("xmlns", svgNS);
-    
-    // 白色背景
     var bg = document.createElementNS(svgNS, "rect");
     bg.setAttribute("width", "100%");
     bg.setAttribute("height", "100%");
     bg.setAttribute("fill", "white");
     combinedSVG.appendChild(bg);
-    
-    // 合并所有SVG内容
-    var currentY = margin;
-    for (var j = 0; j < svgData.length; j++) {
-        var data = svgData[j];
-        var clonedSVG = data.svg.cloneNode(true);
-        
-        // 创建组并定位
+    var currentY = 0;
+    for (var j = 0; j < svgElements.length; j++) {{
+        var rect = svgElements[j].getBoundingClientRect();
+        var clonedSVG = svgElements[j].cloneNode(true);
         var g = document.createElementNS(svgNS, "g");
-        var offsetX = margin + (totalWidth - margin * 2 - data.width) / 2; // 水平居中
-        g.setAttribute("transform", "translate(" + offsetX + "," + currentY + ")");
-        
-        // 复制所有子元素
-        while (clonedSVG.firstChild) {
+        g.setAttribute("transform", "translate(0," + currentY + ")");
+        while (clonedSVG.firstChild) {{
             g.appendChild(clonedSVG.firstChild);
-        }
-        
+        }}
         combinedSVG.appendChild(g);
-        currentY += data.height + 30;
-    }
-    
-    // 恢复原始样式
-    content.style.transform = originalTransform;
-    wrapper.style.overflow = originalOverflow;
-    wrapper.style.maxHeight = '';
-    
-    // 导出
+        currentY += rect.height + 20;
+    }}
     var serializer = new XMLSerializer();
-    var svgString = '<?xml version="1.0" standalone="no"?>\n' + 
-                    '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
-                    serializer.serializeToString(combinedSVG);
-    var blob = new Blob([svgString], {{type: "image/svg+xml;charset=utf-8"}});
+    var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
+    var blob = new Blob([svgString], {{type: "image/svg+xml"}});
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
     link.href = url;
