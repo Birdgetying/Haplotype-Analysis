@@ -4087,8 +4087,8 @@ class ReportGenerator:
         .zoom-controls span {{ font-size: 12px; color: #333; min-width: 45px; }}
         
         /* 可缩放内容区 */
-        .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
-        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
+        .content-wrapper {{ overflow: auto; max-height: calc(100vh - 200px); }}
+        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
@@ -4200,15 +4200,11 @@ class ReportGenerator:
     <div class="content-wrapper">
     <div class="content" id="zoomContent">
         <div class="integrated-view">
-            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
+            <!-- 顶部区域：单倍型网络图 -->
             <div class="top-section">
                 <div class="network-panel">
                     <div class="network-panel-title">Haplotype Network</div>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
-                </div>
-                <div class="gene-gwas-panel">
-                    <div class="gene-gwas-title">GWAS P-values</div>
-                    <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
                 </div>
             </div>
             
@@ -4809,9 +4805,10 @@ function drawNetworkPlot() {
     var currentScale = 1;
     var minScale = 0.5, maxScale = 2.5;
     
-    // 滚轮缩放内部节点（容器边界不变）
-    svg.on('wheel', function(e) {
+    // 滚轮缩放内部节点（容器边界不变）— 使用passive:false确保preventDefault生效
+    svg.node().addEventListener('wheel', function(e) {
         e.preventDefault();
+        e.stopPropagation();
         var delta = e.deltaY > 0 ? 0.9 : 1.1;  // 缩放因子
         var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
         if (newScale !== currentScale) {
@@ -4819,7 +4816,7 @@ function drawNetworkPlot() {
             // 以容器中心为基准缩放
             zoomG.attr('transform', 'translate('+W/2+','+H/2+') scale('+currentScale+') translate('+-W/2+','+-H/2+')');
         }
-    });
+    }, {passive: false});
 
     // 深拷贝节点
     var nodes = networkNodes.map(function(d) { return Object.assign({}, d); });
@@ -5072,7 +5069,6 @@ function exportSVG() {{
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
     drawNetworkPlot();
-    drawGWASPlot(gwasData);
 });
 </script>
 </body>
