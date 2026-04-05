@@ -4962,9 +4962,6 @@ function updateConnectorLines() {
     var svgRect = svg.getBoundingClientRect();
     var tableRect = table.getBoundingClientRect();
     
-    // 计算SVG底部到表格顶部的距离
-    var gap = tableRect.top - svgRect.bottom;
-    
     // 获取所有需要动态计算的连线
     var connectors = document.querySelectorAll('.js-connector');
     
@@ -4981,9 +4978,10 @@ function updateConnectorLines() {
         if (th) {
             var thRect = th.getBoundingClientRect();
             // 计算列中心相对于SVG的坐标
-            var tableX = thRect.left + thRect.width / 2 - svgRect.left;
-            // 终点纵坐标：SVG底部 + 间隙 + 表格头部高度的一半（让线延伸到表头中间）
-            var tableY = svgRect.height + gap + thRect.height / 2;
+            // 减去3px偏移量，修正表格边框导致的偏移
+            var tableX = thRect.left + thRect.width / 2 - svgRect.left - 3;
+            // 终点纵坐标：表格顶部相对于SVG + 表头高度（让线延伸到表头底部）
+            var tableY = thRect.top - svgRect.top + thRect.height;
             
             // 更新连线坐标
             line.setAttribute('x1', geneX);
