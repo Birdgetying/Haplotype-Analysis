@@ -4002,11 +4002,15 @@ class ReportGenerator:
                 vinfo = variant_info[pos]
                 ref = vinfo.get('ref', '')
                 alt = vinfo.get('alt', '')
+                print(f"[DEBUG] variant_info fallback: pos={pos}, ref={ref}, alt={alt}, ref_len={len(ref)}, alt_len={len(alt)}")
                 if len(alt) > len(ref):
+                    print(f"[DEBUG] -> INS color")
                     return var_type_colors['INS'], 'INS'
                 elif len(ref) > len(alt):
+                    print(f"[DEBUG] -> DEL color")
                     return var_type_colors['DEL'], 'DEL'
                 elif abs(len(ref) - len(alt)) >= 50:
+                    print(f"[DEBUG] -> SV color")
                     return var_type_colors['SV'], 'SV'
             
             if snp_effects:
@@ -4609,7 +4613,7 @@ class ReportGenerator:
             html += f'<line class="var-connector js-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" data-idx="{idx}" data-gene-x="{gene_x}" data-gene-y="{gene_y+gene_h}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>\n'
                 
         # ==== 图例（右侧，根据实际变异类型动态生成）====
-        leg_x = gene_area_start + gene_area_width + 15
+        leg_x = gene_area_start + gene_area_width + 40  # 往右移，避免和连线重叠
         html += f'<text x="{leg_x}" y="{axis_y}" font-size="8.5" fill="#333" font-weight="600">Gene Structure</text>\n'
         
         # 基因结构图例（与实际绘制一致）
@@ -5004,11 +5008,11 @@ function updateConnectorLines() {
         // 获取对应th的纵坐标
         var thIndex = 4 + idx;
         var th = table.querySelector('thead th:nth-child(' + thIndex + ')');
-        var tableY = svgRect.height - 5;  // 默认延伸到SVG底部附近（不要超出太多）
+        var tableY = svgRect.height - 15;  // 再往上一点，避免超出SVG
         if (th) {
             var thRect = th.getBoundingClientRect();
-            // 连线终点：表头顶部相对于SVG的位置 + 表头高度的一半（中间位置）
-            tableY = thRect.top - svgRect.top + thRect.height / 2;
+            // 连线终点：表头顶部相对于SVG的位置 + 表头高度的1/3（偏上位置）
+            tableY = thRect.top - svgRect.top + thRect.height / 3;
         }
         
         // 更新连线坐标
