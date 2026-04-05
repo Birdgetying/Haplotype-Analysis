@@ -5232,6 +5232,7 @@ function drawGWASPlot(data) {
             tip.innerHTML = '<b>Pos: ' + d.pos.toLocaleString() + '</b><br/>'
                 + 'P = ' + d.pvalue.toExponential(2) + '<br/>'
                 + '-log<sub>10</sub>(P) = ' + d.logp.toFixed(2) + '<br/>'
+                + 'Beta = ' + (d.beta != null ? (+d.beta).toFixed(3) : 'NA') + '<br/>'
                 + 'r<sup>2</sup> to lead = ' + (d.r2 != null ? (+d.r2).toFixed(3) : 'NA') + '<br/>'
                 + 'Type: ' + (d.vtype || 'SNP') + ' &nbsp;|&nbsp; ' + (d.annotation || '');
             tip.style.display = 'block';
