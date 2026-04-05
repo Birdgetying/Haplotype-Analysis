@@ -4438,7 +4438,7 @@ class ReportGenerator:
         var_top_y = axis_y - 8   # 变异小竖线顶部 y
         line_end_y = svg_height - 2  # 斜线终点 y（再往下一点，与表格更好地对齐）
                 
-        html += f'<svg width="{svg_width}" height="{svg_height}" style="display:block;margin-bottom:0;">\n'
+        html += f'<svg id="gene-structure-svg" width="{svg_width}" height="{svg_height}" style="display:block;margin-bottom:0;">\n'
         
         # ==== SVG 定义（UTR 旜线填充图案）====
         html += '''<defs>
@@ -4587,11 +4587,12 @@ class ReportGenerator:
             
             # 变异竖线：从圆圈顶部一直延伸到断线上端 (gene_y+gene_h)
             # 添加class和data-pos属性用于过滤控制
-            html += f'<line class="var-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y+3}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{var_color}" stroke-width="1.2"/>\n'
-            html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5"/>\n'
+            html += f'<line class="var-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y+3}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{var_color}" stroke-width="1.2" data-idx="{idx}"/>\n'
+            html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5" data-idx="{idx}"/>\n'
             
-            # 斜线：从真实位置下导到序列列中心
-            html += f'<line class="var-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{gene_y+gene_h}" x2="{table_x}" y2="{line_end_y}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2"/>\n'
+            # 斜线：由JavaScript动态计算表格列位置后绘制
+            # 这里只添加占位，实际连线在JS中生成
+            html += f'<line class="var-connector js-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" data-idx="{idx}" data-gene-x="{gene_x}" data-gene-y="{gene_y+gene_h}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>\n'
                 
         # ==== 图例（右侧，根据实际变异类型动态生成）====
         leg_x = gene_area_start + gene_area_width + 15
@@ -4950,6 +4951,54 @@ window.addEventListener('message', function(ev) {
     }
     applyFilters();
 });
+
+// ==================== 动态计算基因结构到表格的连线 ====================
+function updateConnectorLines() {
+    // 获取SVG和表格的相对位置
+    var svg = document.querySelector('#gene-structure-svg');
+    var table = document.querySelector('.data-table');
+    if (!svg || !table) return;
+    
+    var svgRect = svg.getBoundingClientRect();
+    var tableRect = table.getBoundingClientRect();
+    
+    // 计算SVG底部到表格顶部的距离
+    var gap = tableRect.top - svgRect.bottom;
+    
+    // 获取所有需要动态计算的连线
+    var connectors = document.querySelectorAll('.js-connector');
+    
+    connectors.forEach(function(line) {
+        var idx = parseInt(line.getAttribute('data-idx'));
+        var geneX = parseFloat(line.getAttribute('data-gene-x'));
+        var geneY = parseFloat(line.getAttribute('data-gene-y'));
+        
+        // 获取表格中对应的列位置
+        // 表格列：0=Haplotype, 1=Effect, 2=Phenotype, 3=第一个变异, ...
+        var thIndex = 3 + idx;  // 第3列开始是变异列
+        var th = table.querySelector('thead th:nth-child(' + (thIndex + 1) + ')');
+        
+        if (th) {
+            var thRect = th.getBoundingClientRect();
+            // 计算列中心相对于SVG的坐标
+            var tableX = thRect.left + thRect.width / 2 - svgRect.left;
+            // 终点纵坐标：SVG底部 + 间隙 + 表格头部高度的一半（让线延伸到表头中间）
+            var tableY = svgRect.height + gap + thRect.height / 2;
+            
+            // 更新连线坐标
+            line.setAttribute('x1', geneX);
+            line.setAttribute('y1', geneY);
+            line.setAttribute('x2', tableX);
+            line.setAttribute('y2', tableY);
+            line.style.display = 'block';
+        }
+    });
+}
+
+// 页面加载完成后计算连线
+window.addEventListener('load', updateConnectorLines);
+// 窗口大小改变时重新计算
+window.addEventListener('resize', updateConnectorLines);
 
 function applyFilters() {
     var filtered = gwasData.filter(function(d) {
