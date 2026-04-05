@@ -4960,36 +4960,48 @@ function updateConnectorLines() {
     if (!svg || !table) return;
     
     var svgRect = svg.getBoundingClientRect();
-    var tableRect = table.getBoundingClientRect();
     
     // 获取所有需要动态计算的连线
     var connectors = document.querySelectorAll('.js-connector');
     
-    connectors.forEach(function(line) {
-        var idx = parseInt(line.getAttribute('data-idx'));
+    // 获取第一个和最后一个变异列的实际位置，用于计算比例
+    var firstTh = table.querySelector('thead th:nth-child(4)');  // 第一个变异列
+    var lastTh = table.querySelector('thead th:nth-last-child(2)');  // 最后一个变异列（n列之前）
+    
+    if (!firstTh || !lastTh) return;
+    
+    var firstRect = firstTh.getBoundingClientRect();
+    var lastRect = lastTh.getBoundingClientRect();
+    
+    // 计算实际列宽和起始位置
+    var firstColCenter = firstRect.left + firstRect.width / 2;
+    var lastColCenter = lastRect.left + lastRect.width / 2;
+    var colSpan = lastColCenter - firstColCenter;
+    var nCols = connectors.length;
+    
+    connectors.forEach(function(line, idx) {
         var geneX = parseFloat(line.getAttribute('data-gene-x'));
         var geneY = parseFloat(line.getAttribute('data-gene-y'));
         
-        // 获取表格中对应的列位置
-        // 表格列：0=Haplotype, 1=Effect, 2=Phenotype, 3=第一个变异, ...
-        var thIndex = 3 + idx;  // 第3列开始是变异列
-        var th = table.querySelector('thead th:nth-child(' + (thIndex + 1) + ')');
+        // 根据索引比例计算实际列中心位置
+        var ratio = (nCols <= 1) ? 0 : idx / (nCols - 1);
+        var tableX = firstColCenter + colSpan * ratio - svgRect.left;
         
+        // 获取对应th的纵坐标
+        var thIndex = 4 + idx;
+        var th = table.querySelector('thead th:nth-child(' + thIndex + ')');
+        var tableY = svgRect.height + 10;  // 默认延伸到SVG底部下方
         if (th) {
             var thRect = th.getBoundingClientRect();
-            // 计算列中心相对于SVG的坐标
-            // 减去3px偏移量，修正表格边框导致的偏移
-            var tableX = thRect.left + thRect.width / 2 - svgRect.left - 3;
-            // 终点纵坐标：表格顶部相对于SVG + 表头高度（让线延伸到表头底部）
-            var tableY = thRect.top - svgRect.top + thRect.height;
-            
-            // 更新连线坐标
-            line.setAttribute('x1', geneX);
-            line.setAttribute('y1', geneY);
-            line.setAttribute('x2', tableX);
-            line.setAttribute('y2', tableY);
-            line.style.display = 'block';
+            tableY = thRect.top - svgRect.top + thRect.height;
         }
+        
+        // 更新连线坐标
+        line.setAttribute('x1', geneX);
+        line.setAttribute('y1', geneY);
+        line.setAttribute('x2', tableX);
+        line.setAttribute('y2', tableY);
+        line.style.display = 'block';
     });
 }
 
