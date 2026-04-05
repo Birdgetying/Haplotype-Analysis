@@ -3988,7 +3988,7 @@ class ReportGenerator:
         }
         
         def get_var_color(pos):
-            """snp_effects 优先，无则回退到位置分类"""
+            """snp_effects 优先，无则回退到variant_info，最后回退到位置分类"""
             # DEBUG - 打印所有位置的信息
             if snp_effects:
                 if pos in snp_effects:
@@ -3996,10 +3996,24 @@ class ReportGenerator:
                     color = var_type_colors.get(ann, '#95a5a6')
                     print(f"[DEBUG] get_var_color: pos={pos}, found in snp_effects, ann={ann}, color={color}")
                     return color, ann
-                else:
-                    print(f"[DEBUG] get_var_color: pos={pos}, NOT in snp_effects, keys sample={list(snp_effects.keys())[:3]}")
+            
+            # 回退到variant_info（VCF解析的数据）
+            if variant_info and pos in variant_info:
+                vinfo = variant_info[pos]
+                ref = vinfo.get('ref', '')
+                alt = vinfo.get('alt', '')
+                if len(alt) > len(ref):
+                    return var_type_colors['INS'], 'INS'
+                elif len(ref) > len(alt):
+                    return var_type_colors['DEL'], 'DEL'
+                elif abs(len(ref) - len(alt)) >= 50:
+                    return var_type_colors['SV'], 'SV'
+            
+            if snp_effects:
+                print(f"[DEBUG] get_var_color: pos={pos}, NOT in snp_effects, keys sample={list(snp_effects.keys())[:3]}")
             else:
                 print(f"[DEBUG] get_var_color: pos={pos}, snp_effects is None or empty")
+            
             # 位置回退：简单分为 UTR / other
             in_exon = any(es <= pos <= ee for es, ee in exons)
             in_cds_b = any(cs <= pos <= ce for cs, ce in cds)
@@ -4990,10 +5004,11 @@ function updateConnectorLines() {
         // 获取对应th的纵坐标
         var thIndex = 4 + idx;
         var th = table.querySelector('thead th:nth-child(' + thIndex + ')');
-        var tableY = svgRect.height + 10;  // 默认延伸到SVG底部下方
+        var tableY = svgRect.height - 5;  // 默认延伸到SVG底部附近（不要超出太多）
         if (th) {
             var thRect = th.getBoundingClientRect();
-            tableY = thRect.top - svgRect.top + thRect.height;
+            // 连线终点：表头顶部相对于SVG的位置 + 表头高度的一半（中间位置）
+            tableY = thRect.top - svgRect.top + thRect.height / 2;
         }
         
         // 更新连线坐标
