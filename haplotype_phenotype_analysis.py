@@ -4557,6 +4557,9 @@ class ReportGenerator:
             gene_x = gene_area_start + rel_pct * gene_area_width  # 真实物理位置
             table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2  # 列中心
             
+            # 确保gene_x在有效范围内，避免最左端多出线条
+            gene_x = max(gene_area_start, min(gene_x, gene_area_start + gene_area_width))
+            
             # 判断变异类型并获取颜色
             var_color, var_type = get_var_color(pos)
             var_types_found.add(var_type)
