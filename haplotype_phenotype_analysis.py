@@ -4595,7 +4595,16 @@ class ReportGenerator:
                 continue
             
             # 判断变异类型并获取颜色
+            # DEBUG: 第一列特殊调试
+            if idx == 0:
+                print(f"[DEBUG-FIRST-COL] pos={pos}, snp_effects keys sample: {list(snp_effects.keys())[:5] if snp_effects else 'None'}")
+                print(f"[DEBUG-FIRST-COL] variant_info has pos: {pos in variant_info if variant_info else 'No variant_info'}")
+                if variant_info and pos in variant_info:
+                    vinfo = variant_info[pos]
+                    print(f"[DEBUG-FIRST-COL] variant_info: ref={vinfo.get('ref')}, alt={vinfo.get('alt')}")
             var_color, var_type = get_var_color(pos)
+            if idx == 0:
+                print(f"[DEBUG-FIRST-COL] result: var_type={var_type}, var_color={var_color}")
             var_types_found.add(var_type)
             
             # 获取该位置的变异信息（用于过滤）
@@ -4613,7 +4622,7 @@ class ReportGenerator:
             html += f'<line class="var-connector js-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" data-idx="{idx}" data-gene-x="{gene_x}" data-gene-y="{gene_y+gene_h}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>\n'
                 
         # ==== 图例（右侧，根据实际变异类型动态生成）====
-        leg_x = gene_area_start + gene_area_width + 40  # 往右移，避免和连线重叠
+        leg_x = gene_area_start + gene_area_width + 80  # 往右移，避免和连线重叠
         html += f'<text x="{leg_x}" y="{axis_y}" font-size="8.5" fill="#333" font-weight="600">Gene Structure</text>\n'
         
         # 基因结构图例（与实际绘制一致）
@@ -5012,7 +5021,7 @@ function updateConnectorLines() {
         if (th) {
             var thRect = th.getBoundingClientRect();
             // 连线终点：表头顶部相对于SVG的位置 + 表头高度的1/3（偏上位置）
-            tableY = thRect.top - svgRect.top + thRect.height / 3;
+            tableY = thRect.top - svgRect.top;
         }
         
         // 更新连线坐标
