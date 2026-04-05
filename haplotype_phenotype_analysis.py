@@ -4568,12 +4568,13 @@ class ReportGenerator:
             
             # 计算表格中序列列的实际位置
             # 表格前3列：hap-cell(90) + effect-cell(180) + box-cell(180) = 450px
-            # 但表格有border-collapse，需要考虑边框影响
-            # 每个序列列20px，从第idx列开始
-            table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2 + 1  # +1px微调对齐
+            # 但由于表格border-collapse和浏览器渲染，需要额外偏移
+            # 通过观察调整：增加3px偏移量使连线与表格列对齐
+            table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2 + 3  # +3px调整对齐
             
-            # 确保gene_x在有效范围内，避免最左端多出线条
-            gene_x = max(gene_area_start, min(gene_x, gene_area_start + gene_area_width))
+            # 跳过超出范围的变异位点，避免画出界线条
+            if gene_x < gene_area_start or gene_x > gene_area_start + gene_area_width:
+                continue
             
             # 判断变异类型并获取颜色
             var_color, var_type = get_var_color(pos)
