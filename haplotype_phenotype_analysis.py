@@ -958,12 +958,16 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
     
     # 定义变异类型判断函数
     def classify_variant(ref, alt):
-        """根据ref/alt长度判断变异类型: SNP, indel, SV"""
+        """根据ref/alt长度判断变异类型: SNP, indel, SV, INS, DEL"""
         len_diff = abs(len(ref) - len(alt))
         if len(ref) == 1 and len(alt) == 1:
             return 'SNP'
         elif len_diff >= 50:  # 长度差>=50bp认为是SV
             return 'SV'
+        elif len(alt) > len(ref):  # 插入
+            return 'INS'
+        elif len(ref) > len(alt):  # 缺失
+            return 'DEL'
         else:  # 长度不同但差值<50bp是indel
             return 'indel'
 
@@ -1020,6 +1024,8 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         # 先判断SV/indel（不区分位置，统一标记）
                         if var_type == 'SV':
                             effects[pos] = 'SV'
+                        elif var_type in ('INS', 'DEL'):
+                            effects[pos] = var_type  # 直接使用INS或DEL
                         elif var_type == 'indel':
                             effects[pos] = 'indel'
                         elif not in_exon:
@@ -1081,6 +1087,8 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                     # 先判断SV/indel（不区分位置，统一标记）
                     if var_type == 'SV':
                         effects[pos] = 'SV'
+                    elif var_type in ('INS', 'DEL'):
+                        effects[pos] = var_type  # 直接使用INS或DEL
                     elif var_type == 'indel':
                         effects[pos] = 'indel'
                     elif not in_exon:
@@ -3961,6 +3969,8 @@ class ReportGenerator:
             'UTR': '#9b59b6',  # 紫色
             'promoter': '#2ecc71',  # 绿色 - 新增（启动子变异）
             'indel': '#3498db',  # 蓝色 - 新增
+            'INS': '#e74c3c',  # 红色 - 插入
+            'DEL': '#3498db',  # 蓝色 - 缺失
             'SV': '#e91e63',  # 深粉色 - 新增（结构变异）
             'other': '#95a5a6',  # 灰色
         }
@@ -4426,7 +4436,7 @@ class ReportGenerator:
         gene_y = 48       # 基因结构图上框 y
         gene_h = 18       # 基因结构高度
         var_top_y = axis_y - 8   # 变异小竖线顶部 y
-        line_end_y = svg_height - 5  # 斜线终点 y
+        line_end_y = svg_height - 2  # 斜线终点 y（再往下一点，与表格更好地对齐）
                 
         html += f'<svg width="{svg_width}" height="{svg_height}" style="display:block;margin-bottom:0;">\n'
         
@@ -4555,7 +4565,12 @@ class ReportGenerator:
         for idx, pos in enumerate(display_positions):
             rel_pct = (pos - region_start) / (region_end - region_start)
             gene_x = gene_area_start + rel_pct * gene_area_width  # 真实物理位置
-            table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2  # 列中心
+            
+            # 计算表格中序列列的实际位置
+            # 表格前3列：hap-cell(90) + effect-cell(180) + box-cell(180) = 450px
+            # 但表格有border-collapse，需要考虑边框影响
+            # 每个序列列20px，从第idx列开始
+            table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2 + 1  # +1px微调对齐
             
             # 确保gene_x在有效范围内，避免最左端多出线条
             gene_x = max(gene_area_start, min(gene_x, gene_area_start + gene_area_width))
