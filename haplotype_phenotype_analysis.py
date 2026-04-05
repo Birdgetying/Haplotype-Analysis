@@ -968,8 +968,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
             return 'INS'
         elif len(ref) > len(alt):  # 缺失
             return 'DEL'
-        else:  # 长度不同但差值<50bp是indel
-            return 'indel'
+        elif len(alt) != len(ref):  # 长度不同但差值<50bp，根据长度判断
+            return 'INS' if len(alt) > len(ref) else 'DEL'
+        else:
+            return 'SNP'  # 长度相同视为SNP
 
     if not cds_intervals and not exon_intervals:
         return effects
@@ -4622,7 +4624,7 @@ class ReportGenerator:
             html += f'<line class="var-connector js-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" data-idx="{idx}" data-gene-x="{gene_x}" data-gene-y="{gene_y+gene_h}" stroke="{var_color}" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>\n'
                 
         # ==== 图例（右侧，根据实际变异类型动态生成）====
-        leg_x = gene_area_start + gene_area_width + 80  # 往右移，避免和连线重叠
+        leg_x = gene_area_start + gene_area_width + 50  # 往右移，避免和连线重叠
         html += f'<text x="{leg_x}" y="{axis_y}" font-size="8.5" fill="#333" font-weight="600">Gene Structure</text>\n'
         
         # 基因结构图例（与实际绘制一致）
