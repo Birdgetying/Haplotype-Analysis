@@ -86,6 +86,120 @@ except ImportError:
 
 
 # ============================================================================
+# VCF 工具函数
+# ============================================================================
+
+def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int, 
+                      output_vcf: str, sample_ids: list = None):
+    """
+    从原始VCF中提取指定区域和样本的子集VCF（纯Python实现，不依赖pysam）
+    
+    Args:
+        input_vcf: 输入VCF文件路径
+        chrom: 染色体
+        start: 起始位置
+        end: 结束位置
+        output_vcf: 输出VCF文件路径
+        sample_ids: 要保留的样本ID列表（None表示保留所有样本）
+    """
+    import gzip
+    
+    print(f"[DEBUG] 开始提取VCF子集: {chrom}:{start}-{end}")
+    
+    # 打开输入VCF
+    if input_vcf.endswith('.gz'):
+        f_in = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
+    else:
+        f_in = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
+    
+    # 读取头部
+    header_lines = []
+    sample_line = None
+    all_samples = []
+    
+    for line in f_in:
+        if line.startswith('##'):
+            header_lines.append(line.rstrip('\n'))
+        elif line.startswith('#CHROM'):
+            sample_line = line.rstrip('\n')
+            parts = line.rstrip('\n').split('\t')
+            all_samples = parts[9:] if len(parts) > 9 else []
+            break
+    
+    # 确定要保留的样本
+    if sample_ids:
+        available_samples = set(all_samples)
+        filtered_samples = [s for s in sample_ids if s in available_samples]
+        if len(filtered_samples) != len(sample_ids):
+            missing = set(sample_ids) - available_samples
+            print(f"[WARNING] 以下样本在VCF中不存在: {missing}")
+    else:
+        filtered_samples = all_samples
+    
+    # 如果需要过滤样本，重新构建样本行
+    if sample_ids and filtered_samples != all_samples:
+        # 找到样本在原始样本列表中的索引
+        sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
+        # 重新构建样本行
+        parts = sample_line.split('\t')[:9]  # 前9个字段
+        sample_fields = filtered_samples
+        new_sample_line = '\t'.join(parts + sample_fields)
+    else:
+        new_sample_line = sample_line
+        sample_indices = list(range(len(all_samples)))
+    
+    # 打开输出VCF
+    if output_vcf.endswith('.gz'):
+        f_out = gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6)
+    else:
+        f_out = open(output_vcf, 'w', encoding='utf-8')
+    
+    # 写入头部
+    for line in header_lines:
+        f_out.write(line + '\n')
+    f_out.write(new_sample_line + '\n')
+    
+    # 提取指定区域的记录
+    record_count = 0
+    for line in f_in:
+        if line.startswith('#'):
+            continue
+        
+        parts = line.rstrip('\n').split('\t')
+        if len(parts) < 8:
+            continue
+        
+        rec_chrom = parts[0]
+        rec_pos = int(parts[1])
+        
+        # 检查染色体
+        if rec_chrom != chrom and rec_chrom != chrom.replace('chr', ''):
+            continue
+        
+        # 检查位置
+        if rec_pos < start:
+            continue
+        if rec_pos > end:
+            break  # 超出区域，停止（假设文件按位置排序）
+        
+        # 如果需要过滤样本
+        if sample_ids and sample_indices != list(range(len(all_samples))):
+            # 保留前9个字段 + 指定样本的数据
+            selected_parts = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
+            f_out.write('\t'.join(selected_parts) + '\n')
+        else:
+            # 保留所有样本
+            f_out.write(line)
+        
+        record_count += 1
+    
+    f_in.close()
+    f_out.close()
+    
+    print(f"[INFO] 子集VCF创建完成: {record_count} 个变异, {len(filtered_samples)} 个样本")
+
+
+# ============================================================================
 # 内置单倍型提取器（当主模块不可用时使用）
 # ============================================================================
 
@@ -251,20 +365,36 @@ else:
 
 class ScanConfig:
     """扫描配置"""
-    # 数据路径 (CS-IAAS T2T v1.1)
-    VCF_FILE = "/storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz"
-    GFF_FILE = "/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_HC.gff3"
-    PHENO_FILE = "/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
-    FASTA_FILE = "/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
+    # ========== 原有数据路径（CS-IAAS T2T v1.1）备份 ==========
+    # VCF_FILE = "/storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz"
+    # GFF_FILE = "/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_HC.gff3"
+    # PHENO_FILE = "/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
+    # FASTA_FILE = "/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
+    
+    # ========== 新数据路径（大麦 Barley Morex_v3）==========
+    VCF_FILE = "/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/00.Rawdata/chrALL.impute.vcf.gz"
+    GFF_FILE = "/home/qinz/data/genomes/Morex_v3/gene_annotation/Hv_Morex.pgsb.Jul2020.gff3"
+    PHENO_FILE = "/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/04.Gemma/00.pheno/K.rep1.SA.gemma"
+    FASTA_FILE = "/home/qinz/data/genomes/Morex_v3/MorexV3_MtPt.fasta"
+    GWAS_DIR = "/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt"
+    GWAS_RESULT_FILE = "/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/04.Gemma/04.Gemma/output/K.rep1.SA.assoc.txt"
     
     # 输出路径
     DATABASE_DIR = "./database"           # 数据库文件夹（存放提取的数据）
     RESULTS_DIR = "./results"             # 结果文件夹（存放HTML图）
     
-    # 指定要分析的基因列表（只处理这两个基因）
+    # 指定要分析的基因列表（大麦 GWAS 及 SV 筛选基因）
     TARGET_GENES = [
-        "CSIAAS1BG1157200HC",  # di19基因
-        "CSIAAS4BG0701800HC"   # hox基因
+        "HORVU.MOREX.r3.4HG0405190",  # myosin-like protein XIF
+        "HORVU.MOREX.r3.4HG0405240",  # Jasmonate ZIM domain protein
+        "HORVU.MOREX.r3.4HG0405310",  # Protein ROOT PRIMORDIUM DEFECTIVE 1
+        "HORVU.MOREX.r3.4HG0405230",  # Jasmonate ZIM domain protein
+        "HORVU.MOREX.r3.5HG0426750",  # Cation/H(+) antiporter
+        "HORVU.MOREX.r3.3HG0281790",  # Laccase
+        "HORVU.MOREX.r3.3HG0282160",  # Serine/threonine-protein kinase
+        "HORVU.MOREX.r3.3HG0282170",  # Methyltransferase
+        "HORVU.MOREX.r3.4HG0387570",  # 70 kDa heat shock protein
+        "HORVU.MOREX.r3.7HG0634850"   # Acyl-coenzyme A oxidase
     ]
     
     # 启动子区域参数
@@ -275,7 +405,7 @@ class ScanConfig:
     
     # 过滤参数
     MIN_VARIANTS = 1  # 最小变异数
-    MIN_SAMPLES = 5   # 最小样本数
+    MIN_SAMPLES = 1   # 最小样本数（保留所有单倍型，不过滤）
     
     # 分析参数
     PVALUE_THRESHOLD = 0.05  # P值显著性阈值
@@ -346,6 +476,20 @@ def parse_gff3_genes(gff_file: str) -> pd.DataFrame:
     df = pd.DataFrame(genes)
     print(f"[INFO] 解析完成: {len(df)} 个基因 ({elapsed:.1f}s)")
     
+    # 记录数据格式信息
+    if len(df) > 0:
+        print("\n" + "=" * 60)
+        print("[DATA FORMAT] GFF3 基因格式")
+        print("=" * 60)
+        print(f"  基因ID示例 (前10个):")
+        for i, gene_id in enumerate(df['gene_id'].head(10)):
+            print(f"    [{i+1}] {gene_id}")
+        print(f"\n  染色体列表 (前10个): {list(df['chrom'].unique()[:10])}")
+        print(f"  总染色体数: {df['chrom'].nunique()}")
+        print(f"  基因数量: {len(df)}")
+        print(f"  ID格式特征: 长度范围={df['gene_id'].str.len().min()}-{df['gene_id'].str.len().max()}, 前缀示例={df['gene_id'].iloc[0][:5] if len(df) > 0 else 'N/A'}")
+        print("=" * 60 + "\n")
+    
     return df
 
 
@@ -353,9 +497,80 @@ def parse_gff3_genes(gff_file: str) -> pd.DataFrame:
 # 单基因处理函数（用于并行）
 # ============================================================================
 
+def parse_gtf_for_gene(gtf_file: str, target_gene_id: str) -> dict:
+    """
+    从 GTF/GFF3 文件解析目标基因的外显子和 CDS 位置
+    简化版，用于数据库建立时保存基因结构信息
+    """
+    if not gtf_file or not os.path.exists(gtf_file):
+        return {'exons': [], 'cds': [], 'strand': '+', 'chrom': None, 'gene_start': None, 'gene_end': None}
+    
+    exons = []
+    cds = []
+    strand = '+'
+    chrom = None
+    gene_start = None
+    gene_end = None
+    
+    open_func = gzip.open if gtf_file.endswith('.gz') else open
+    is_gff3 = gtf_file.endswith('.gff3') or gtf_file.endswith('.gff')
+    
+    try:
+        with open_func(gtf_file, 'rt') as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                parts = line.strip().split('\t')
+                if len(parts) < 9:
+                    continue
+                
+                feature_type = parts[2]
+                start = int(parts[3])
+                end = int(parts[4])
+                strand = parts[6]
+                chrom = parts[0]
+                attr = parts[8]
+                
+                # 检查是否匹配目标基因
+                gene_match = False
+                if is_gff3:
+                    # GFF3: ID=GENEID 或 Parent=GENEID
+                    if f'ID={target_gene_id}' in attr or f'Parent={target_gene_id}' in attr:
+                        gene_match = True
+                else:
+                    # GTF: gene_id "GENEID"
+                    if f'gene_id "{target_gene_id}"' in attr:
+                        gene_match = True
+                
+                if not gene_match:
+                    continue
+                
+                # 记录基因坐标
+                if feature_type == 'gene':
+                    gene_start = start
+                    gene_end = end
+                elif feature_type == 'exon':
+                    exons.append((start, end))
+                elif feature_type == 'CDS':
+                    cds.append((start, end))
+        
+        return {
+            'exons': sorted(exons),
+            'cds': sorted(cds),
+            'strand': strand,
+            'chrom': chrom,
+            'gene_start': gene_start,
+            'gene_end': gene_end
+        }
+    except Exception as e:
+        print(f"[WARNING] 解析GTF失败: {e}")
+        return {'exons': [], 'cds': [], 'strand': '+', 'chrom': None, 'gene_start': None, 'gene_end': None}
+
+
 def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame, 
                         database_dir: str, results_dir: str = None,
-                        min_samples: int = 5, test_region_length: int = 0) -> dict:
+                        min_samples: int = 5, test_region_length: int = 0,
+                        gff_file: str = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
@@ -426,6 +641,9 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             chrom, start, end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
         )
         
+        # 解析GTF获取基因结构信息
+        gtf_data = parse_gtf_for_gene(gff_file, gene_id) if gff_file else {'exons': [], 'cds': [], 'strand': strand}
+        
         # 保存基因基本信息
         gene_info_dict = {
             'gene_id': gene_id,
@@ -438,7 +656,9 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'length': end - start + 1,
             'promoter_length': promoter_length,
             'vcf_file': vcf_file,
-            'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'exons': gtf_data.get('exons', []),
+            'cds': gtf_data.get('cds', [])
         }
         with open(os.path.join(gene_data_dir, 'gene_info.json'), 'w') as f:
             json.dump(gene_info_dict, f, indent=2)
@@ -453,17 +673,177 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         # 保存单倍型数据
         hap_df.to_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'), index=False)
         
+        # [DATA FORMAT LOG] 单倍型数据格式
+        print(f"\n[DATA FORMAT] haplotype_data.csv")
+        print(f"  行数: {len(hap_df)}, 列数: {len(hap_df.columns)}")
+        print(f"  列名: {list(hap_df.columns)}")
+        print(f"  列数据类型: {dict(hap_df.dtypes)}")
+        print(f"  示例数据 (前3行):")
+        print(hap_df.head(3).to_string(index=False))
+        print()
+        
+        # 保存变异注释信息（从extractor获取）
+        if hasattr(extractor, 'variant_info') and extractor.variant_info:
+            variant_info_df = pd.DataFrame([
+                {
+                    'position': pos,
+                    'ref': info.get('ref', ''),
+                    'alt': info.get('alt', ''),
+                    'len_diff': info.get('len_diff', 0),
+                    'is_sv': info.get('is_sv', False),
+                    'maf': info.get('maf', 0.5),
+                    'missing_rate': info.get('missing_rate', 0.0)
+                }
+                for pos, info in extractor.variant_info.items()
+            ])
+            variant_info_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
+            print(f"[INFO] 变异注释信息已保存: {len(variant_info_df)} 个位点")
+        
+        # **新增**: 分析并保存启动子区域变异信息
+        # 计算启动子区域（基因体外的上游区域）
+        if strand == '+':
+            promoter_start = max(1, gene_start - promoter_length)
+            promoter_end = gene_start - 1
+        else:
+            promoter_start = gene_end + 1
+            promoter_end = gene_end + promoter_length
+        
+        # 提取启动子区域的变异
+        promoter_variants = []
+        if positions:
+            for pos in positions:
+                if promoter_start <= pos <= promoter_end:
+                    info = extractor.variant_info.get(pos, {}) if hasattr(extractor, 'variant_info') else {}
+                    promoter_variants.append({
+                        'position': pos,
+                        'ref': info.get('ref', ''),
+                        'alt': info.get('alt', ''),
+                        'distance_to_tss': abs(pos - gene_start) if strand == '+' else abs(pos - gene_end),
+                        'is_sv': info.get('is_sv', False),
+                        'maf': info.get('maf', 0.5)
+                    })
+        
+        # 保存启动子变异信息
+        if promoter_variants:
+            promoter_df = pd.DataFrame(promoter_variants)
+            promoter_df.to_csv(os.path.join(gene_data_dir, 'promoter_variants.csv'), index=False)
+            print(f"[INFO] 启动子变异信息已保存: {len(promoter_df)} 个变异")
+            
+            # 同时保存详细文本报告
+            with open(os.path.join(gene_data_dir, 'promoter_variants_detail.txt'), 'w') as f:
+                f.write(f"启动子区域变异分析报告\n")
+                f.write(f"=" * 60 + "\n")
+                f.write(f"基因: {gene_id}\n")
+                f.write(f"染色体: {chrom}\n")
+                f.write(f"链方向: {strand}\n")
+                f.write(f"启动子区域: {promoter_start:,}-{promoter_end:,}\n")
+                f.write(f"TSS位置: {gene_start:,} (正链) 或 {gene_end:,} (负链)\n")
+                f.write(f"变异总数: {len(promoter_variants)}\n")
+                f.write(f"\n变异详情:\n")
+                f.write(f"-" * 60 + "\n")
+                for v in promoter_variants:
+                    sv_marker = " [SV]" if v['is_sv'] else ""
+                    f.write(f"  位置: {v['position']:,} | 距离TSS: {v['distance_to_tss']:,}bp | "
+                           f"REF: {v['ref']} | ALT: {v['alt']} | MAF: {v['maf']:.3f}{sv_marker}\n")
+        else:
+            print(f"[INFO] 启动子区域未发现变异")
+        
         # 合并表型数据
+        print(f"\n[DATA FORMAT] 样本-单倍型映射表 (hap_sample_df)")
+        print(f"  行数: {len(hap_sample_df)}, 列数: {len(hap_sample_df.columns)}")
+        print(f"  列名: {list(hap_sample_df.columns)}")
+        if len(hap_sample_df) > 0:
+            print(f"  SampleID列数据类型: {hap_sample_df.iloc[:, 0].dtype if 'SampleID' in hap_sample_df.columns else 'N/A'}")
+            print(f"  SampleID示例 (前5个): {hap_sample_df.iloc[:5, 0].tolist() if 'SampleID' in hap_sample_df.columns else hap_sample_df.iloc[:5, 0].tolist()}")
+        print()
+        
+        print(f"[DATA FORMAT] 表型数据 (pheno_df)")
+        print(f"  行数: {len(pheno_df)}, 列数: {len(pheno_df.columns)}")
+        print(f"  列名: {list(pheno_df.columns)}")
+        if len(pheno_df) > 0:
+            print(f"  SampleID列数据类型: {pheno_df['SampleID'].dtype if 'SampleID' in pheno_df.columns else 'N/A'}")
+            print(f"  SampleID示例 (前5个): {pheno_df['SampleID'].head(5).tolist() if 'SampleID' in pheno_df.columns else 'N/A'}")
+        print()
+        
         if 'SampleID' not in hap_sample_df.columns:
+            print(f"[ERROR] hap_sample_df 缺少 'SampleID' 列！")
+            print(f"[ERROR] 实际列名: {list(hap_sample_df.columns)}")
             result_summary['status'] = 'no_sample_id'
             return result_summary
         
         # 保存样本-单倍型对应表
         hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
         
+        # **新增**: 保存子集VCF文件（与原始数据完全一致）
+        # 注意：在合并表型数据之前保存，确保包含所有VCF样本
+        try:
+            subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
+            # 获取所有在hap_sample_df中的样本（这些样本在VCF中有基因型数据）
+            vcf_sample_ids = hap_sample_df['SampleID'].tolist()
+            print(f"[DEBUG] 准备保存VCF: {subset_vcf_path}, 样本数: {len(vcf_sample_ids)}")
+            print(f"[DEBUG] VCF区域: {chrom}:{start}-{end}")
+            
+            # 关键修复：如果 sample_ids 为空或提取失败，保存所有样本
+            if not vcf_sample_ids:
+                print(f"[WARNING] 样本ID列表为空，保存所有样本")
+                create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, sample_ids=None)
+            else:
+                create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, 
+                                sample_ids=vcf_sample_ids)
+            
+            # 验证 VCF 文件是否为空
+            vcf_size = os.path.getsize(subset_vcf_path)
+            if vcf_size == 0:
+                print(f"[ERROR] 生成的 VCF 文件为空！重新提取所有样本...")
+                create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, sample_ids=None)
+                vcf_size = os.path.getsize(subset_vcf_path)
+            
+            print(f"[INFO] 子集VCF已保存: {subset_vcf_path} ({vcf_size/1024:.1f} KB)")
+        except Exception as e:
+            import traceback
+            print(f"[WARNING] 保存子集VCF失败: {e}")
+            print(f"[WARNING] 错误详情: {traceback.format_exc()}")
+        
         merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
         
+        print(f"[DATA FORMAT] 合并后的表型数据 (merged)")
+        print(f"  行数: {len(merged)} (hap_sample_df: {len(hap_sample_df)}, pheno_df: {len(pheno_df)})")
+        print(f"  列数: {len(merged.columns)}")
+        print(f"  列名: {list(merged.columns)}")
+        if len(merged) > 0:
+            print(f"  合并成功！样本匹配率: {len(merged)/len(hap_sample_df)*100:.1f}%")
+            print(f"  示例数据 (前3行):")
+            print(merged.head(3).to_string(index=False))
+        else:
+            print(f"[WARNING] 合并后为空！检查 SampleID 匹配情况：")
+            hap_samples = set(hap_sample_df['SampleID'].astype(str))
+            pheno_samples = set(pheno_df['SampleID'].astype(str))
+            print(f"  hap_sample_df 样本数: {len(hap_samples)}")
+            print(f"  pheno_df 样本数: {len(pheno_samples)}")
+            print(f"  交集样本数: {len(hap_samples & pheno_samples)}")
+            if len(hap_samples & pheno_samples) == 0:
+                print(f"  [ERROR] 完全没有匹配的样本！")
+                print(f"  hap_sample_df SampleID 示例: {list(hap_samples)[:5]}")
+                print(f"  pheno_df SampleID 示例: {list(pheno_samples)[:5]}")
+        print()
+        
         if len(merged) == 0:
+            print(f"[WARNING] 表型数据匹配失败，保存已有数据后退出")
+            # 即使表型不匹配，也保存单倍型统计（不含表型）
+            hap_stats_list = []
+            hap_sample_counts = hap_sample_df['Hap_Name'].value_counts()
+            for hap_name, count in hap_sample_counts.items():
+                hap_stats_list.append({
+                    'haplotype_name': hap_name,
+                    'haplotype_count': count,
+                    'haplotype_freq': round(count / len(hap_sample_df), 4),
+                    'phenotype_mean': None,
+                    'phenotype_sd': None
+                })
+            hap_stats_df = pd.DataFrame(hap_stats_list)
+            hap_stats_df.to_csv(os.path.join(gene_data_dir, 'haplotype_stats.csv'), index=False)
+            print(f"[INFO] 已保存 haplotype_stats.csv（无表型数据）")
+            
             result_summary['status'] = 'no_phenotype_match'
             return result_summary
         
@@ -794,14 +1174,120 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     
     # 2. 加载表型数据
     perf.step_start("load_phenotype")
-    pheno_df = pd.read_csv(pheno_file, sep='\t')
-    # 标准化列名
-    if 'SampleID' not in pheno_df.columns:
-        if pheno_df.columns[0] not in ['SampleID', 'sample_id', 'ID']:
-            pheno_df.columns = ['SampleID'] + list(pheno_df.columns[1:])
+    
+    # 自动检测表型文件格式
+    print("\n[INFO] 检测表型文件格式...")
+    with open(pheno_file, 'r') as f:
+        first_line = f.readline().strip()
+        second_line = f.readline().strip()
+    
+    # 检测分隔符
+    if '\t' in first_line:
+        separator = '\t'
+        sep_name = '制表符(\\t)'
+    elif ',' in first_line:
+        separator = ','
+        sep_name = '逗号(,)'
+    elif ' ' in first_line:
+        separator = r'\s+'
+        sep_name = '空格'
+    else:
+        separator = '\t'  # 默认
+        sep_name = '制表符(\\t)（默认）'
+    
+    print(f"  检测到分隔符: {sep_name}")
+    
+    # 尝试读取表型文件
+    try:
+        pheno_df = pd.read_csv(pheno_file, sep=separator)
+        print(f"  列数: {len(pheno_df.columns)}")
+        print(f"  行数: {len(pheno_df)}")
+        print(f"  列名: {list(pheno_df.columns)}")
+        
+        # 检测第一列是否为样本 ID
+        first_col = pheno_df.columns[0]
+        first_col_sample = pheno_df[first_col].iloc[0]
+        
+        # 判断第一列是字符串（样本ID）还是数值（表型值）
+        try:
+            float(first_col_sample)
+            is_numeric = True
+        except (ValueError, TypeError):
+            is_numeric = False
+        
+        if is_numeric:
+            # 第一列是数值，说明没有样本 ID 列，需要自动生成
+            print(f"\n  ⚠️  检测到表型文件无样本ID列（第一列为数值）")
+            print(f"  第一列示例值: {first_col_sample}")
+            print(f"  自动添加样本ID列: Sample_001, Sample_002, ...")
+            
+            # 重新读取，所有列都作为表型数据
+            pheno_df = pd.read_csv(pheno_file, sep=separator, header=None)
+            
+            # 如果第一行是列名（尝试转换为浮点数失败）
+            try:
+                float(pheno_df.iloc[0, 0])
+                # 第一行就是数据，没有表头
+                pheno_df.columns = [f'Phenotype_{i+1}' for i in range(len(pheno_df.columns))]
+                print(f"  检测到：无表头，所有列为表型数据")
+            except (ValueError, TypeError):
+                # 第一行是表头
+                pheno_df.columns = pheno_df.iloc[0]
+                pheno_df = pheno_df.iloc[1:].reset_index(drop=True)
+                print(f"  检测到：有表头，列名: {list(pheno_df.columns)}")
+            
+            # 添加样本 ID
+            pheno_df.insert(0, 'SampleID', [f'Sample_{i+1:03d}' for i in range(len(pheno_df))])
+            print(f"  已添加 SampleID 列（格式: Sample_001, Sample_002, ...）")
+            
         else:
-            pheno_df = pheno_df.rename(columns={pheno_df.columns[0]: 'SampleID'})
-    print(f"[INFO] 表型样本数: {len(pheno_df)}, 列: {list(pheno_df.columns)}")
+            # 第一列是字符串，可能是样本 ID
+            print(f"\n  ✓ 检测到样本ID列: '{first_col}'")
+            print(f"  样本ID示例: {first_col_sample}")
+            
+            # 标准化列名
+            if 'SampleID' not in pheno_df.columns:
+                if pheno_df.columns[0] not in ['SampleID', 'sample_id', 'ID']:
+                    pheno_df.columns = ['SampleID'] + list(pheno_df.columns[1:])
+                    print(f"  已将第一列重命名为 'SampleID'")
+                else:
+                    pheno_df = pheno_df.rename(columns={pheno_df.columns[0]: 'SampleID'})
+    
+    except Exception as e:
+        print(f"\n  ✗ 表型文件读取失败: {e}")
+        print(f"  尝试使用空白分隔符读取...")
+        pheno_df = pd.read_csv(pheno_file, sep=r'\s+', engine='python')
+        if 'SampleID' not in pheno_df.columns:
+            if pheno_df.columns[0] not in ['SampleID', 'sample_id', 'ID']:
+                pheno_df.columns = ['SampleID'] + list(pheno_df.columns[1:])
+            else:
+                pheno_df = pheno_df.rename(columns={pheno_df.columns[0]: 'SampleID'})
+    
+    print(f"\n[INFO] 表型样本数: {len(pheno_df)}, 列: {list(pheno_df.columns)}")
+    
+    # 记录表型数据格式
+    print("\n" + "=" * 60)
+    print("[DATA FORMAT] 表型数据格式")
+    print("=" * 60)
+    print(f"  样本ID列名: 'SampleID'")
+    print(f"  样本ID示例 (前5个): {list(pheno_df['SampleID'].head(5))}")
+    print(f"  样本ID数据类型: {pheno_df['SampleID'].dtype}")
+    print(f"  表型列: {[c for c in pheno_df.columns if c != 'SampleID']}")
+    print(f"  总样本数: {len(pheno_df)}")
+    
+    # 显示表型列的统计信息
+    for col in pheno_df.columns:
+        if col != 'SampleID':
+            print(f"\n  表型列 '{col}' 详情:")
+            print(f"    数据类型: {pheno_df[col].dtype}")
+            print(f"    缺失值: {pheno_df[col].isna().sum()}")
+            if pheno_df[col].dtype in ['float64', 'int64']:
+                print(f"    范围: {pheno_df[col].min():.4f} - {pheno_df[col].max():.4f}")
+                print(f"    均值: {pheno_df[col].mean():.4f}")
+                print(f"    标准差: {pheno_df[col].std():.4f}")
+            # 显示前5个值作为示例
+            print(f"    示例值 (前5个): {list(pheno_df[col].head(5))}")
+    print("=" * 60 + "\n")
     perf.step_end("load_phenotype")
     
     # 3. 批量处理
@@ -822,13 +1308,183 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     
     # 串行处理（更稳定）
     for i, gene_info in enumerate(gene_list):
+        gene_id = gene_info['gene_id']
+        gene_data_dir = os.path.join(database_dir, gene_id)
+        
+        # 检查数据库缓存是否存在
+        if os.path.exists(gene_data_dir) and os.path.exists(os.path.join(gene_data_dir, 'gene_info.json')):
+            # 检查 VCF 是否被修改
+            vcf_mtime = os.path.getmtime(vcf_file)
+            cached_gene_info_file = os.path.join(gene_data_dir, 'gene_info.json')
+            try:
+                with open(cached_gene_info_file, 'r') as f:
+                    cached_info = json.load(f)
+                cached_vcf_mtime = cached_info.get('vcf_mtime', 0)
+                
+                if vcf_mtime <= cached_vcf_mtime:
+                    print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHED] 从数据库加载")
+                    # 从缓存加载统计信息
+                    hap_stats_file = os.path.join(gene_data_dir, 'haplotype_stats.csv')
+                    if os.path.exists(hap_stats_file):
+                        hap_stats = pd.read_csv(hap_stats_file)
+                        result_summary = {
+                            'gene_id': gene_id,
+                            'chrom': cached_info.get('chrom'),
+                            'start': cached_info.get('start'),
+                            'end': cached_info.get('end'),
+                            'strand': cached_info.get('strand'),
+                            'n_variants': len(pd.read_csv(os.path.join(gene_data_dir, 'variant_info.csv'))) if os.path.exists(os.path.join(gene_data_dir, 'variant_info.csv')) else 0,
+                            'n_haplotypes': len(hap_stats),
+                            'n_samples': int(hap_stats['haplotype_count'].sum()),
+                            'data_folder': gene_id,
+                            'results_folder': gene_id if results_dir else None,
+                            'status': 'success'
+                        }
+                    else:
+                        result_summary = {
+                            'gene_id': gene_id,
+                            'chrom': cached_info.get('chrom'),
+                            'start': cached_info.get('start'),
+                            'end': cached_info.get('end'),
+                            'strand': cached_info.get('strand'),
+                            'n_variants': 0,
+                            'n_haplotypes': 0,
+                            'n_samples': 0,
+                            'data_folder': gene_id,
+                            'results_folder': gene_id if results_dir else None,
+                            'status': 'cached_no_stats'
+                        }
+                    all_results.append(result_summary)
+                    processed += 1
+                    continue
+                else:
+                    print(f"  [{processed+1}/{total_genes}] {gene_id}: VCF已更新，重新扫描")
+            except Exception as e:
+                print(f"  [{processed+1}/{total_genes}] {gene_id}: 缓存检测失败 ({e})，重新扫描")
+        
         result = process_single_gene(gene_info, vcf_file, pheno_df, 
                                      database_dir, results_dir, min_samples,
-                                     test_region_length=test_region_length)
+                                     test_region_length=test_region_length,
+                                     gff_file=gff_file)
         all_results.append(result)
         processed += 1
         
+        # 成功处理后，保存 VCF 修改时间到 gene_info.json
+        if result['status'] == 'success':
+            gene_info_file = os.path.join(database_dir, result['data_folder'], 'gene_info.json')
+            if os.path.exists(gene_info_file):
+                try:
+                    with open(gene_info_file, 'r') as f:
+                        info = json.load(f)
+                    info['vcf_mtime'] = os.path.getmtime(vcf_file)
+                    with open(gene_info_file, 'w') as f:
+                        json.dump(info, f, indent=2)
+                except Exception as e:
+                    print(f"  [WARNING] 保存 VCF 修改时间失败: {e}")
+        
         print(f"  [{processed}/{total_genes}] {result['gene_id']}: {result['status']}")
+        
+        # 记录第一个成功基因的数据格式
+        if result['status'] == 'success' and processed == 1:
+            gene_data_dir = os.path.join(database_dir, result['data_folder'])
+            print("\n" + "=" * 60)
+            print(f"[DATA FORMAT] 单倍型数据库格式 (基因: {result['gene_id']})")
+            print("=" * 60)
+            
+            # 读取并显示 gene_info.json
+            gene_info_file = os.path.join(gene_data_dir, 'gene_info.json')
+            if os.path.exists(gene_info_file):
+                with open(gene_info_file, 'r') as f:
+                    gene_info = json.load(f)
+                print(f"\n  gene_info.json:")
+                print(f"    gene_id: {gene_info.get('gene_id')}")
+                print(f"    chrom: {gene_info.get('chrom')}")
+                print(f"    start: {gene_info.get('start'):,}")
+                print(f"    end: {gene_info.get('end'):,}")
+                print(f"    strand: {gene_info.get('strand')}")
+                print(f"    length: {gene_info.get('length'):,}")
+                print(f"    promoter_length: {gene_info.get('promoter_length')}")
+                print(f"    exons: {len(gene_info.get('exons', []))} 个")
+                print(f"    cds: {len(gene_info.get('cds', []))} 个")
+            
+            # 读取并显示 haplotype_data.csv
+            hap_data_file = os.path.join(gene_data_dir, 'haplotype_data.csv')
+            if os.path.exists(hap_data_file):
+                hap_data = pd.read_csv(hap_data_file)
+                print(f"\n  haplotype_data.csv:")
+                print(f"    列: {list(hap_data.columns)}")
+                print(f"    单倍型数: {len(hap_data)}")
+                if len(hap_data) > 0:
+                    print(f"    示例 (前3行):")
+                    for i, row in hap_data.head(3).iterrows():
+                        hap_name = row.get('Hap_Name', 'N/A')
+                        count = row.get('Count', 'N/A')
+                        print(f"      [{i+1}] {hap_name}: count={count}")
+            
+            # 读取并显示 haplotype_samples.csv
+            hap_samples_file = os.path.join(gene_data_dir, 'haplotype_samples.csv')
+            if os.path.exists(hap_samples_file):
+                hap_samples = pd.read_csv(hap_samples_file)
+                print(f"\n  haplotype_samples.csv:")
+                print(f"    列: {list(hap_samples.columns)}")
+                print(f"    样本数: {len(hap_samples)}")
+                if len(hap_samples) > 0:
+                    print(f"    示例 (前5行):")
+                    for i, row in hap_samples.head(5).iterrows():
+                        sample_id = row.get('SampleID', 'N/A')
+                        hap_name = row.get('Hap_Name', 'N/A')
+                        print(f"      [{i+1}] SampleID={sample_id}, Hap_Name={hap_name}")
+            
+            # 读取并显示 variant_info.csv
+            variant_info_file = os.path.join(gene_data_dir, 'variant_info.csv')
+            if os.path.exists(variant_info_file):
+                variant_info = pd.read_csv(variant_info_file)
+                print(f"\n  variant_info.csv:")
+                print(f"    列: {list(variant_info.columns)}")
+                print(f"    变异数: {len(variant_info)}")
+                if len(variant_info) > 0:
+                    print(f"    示例 (前5行):")
+                    for i, row in variant_info.head(5).iterrows():
+                        pos = row.get('position', 'N/A')
+                        ref = row.get('ref', 'N/A')
+                        alt = row.get('alt', 'N/A')
+                        maf = row.get('maf', 'N/A')
+                        is_sv = row.get('is_sv', 'N/A')
+                        print(f"      [{i+1}] pos={pos}, ref={ref}, alt={alt}, maf={maf}, is_sv={is_sv}")
+            
+            # 读取并显示 phenotype_data.csv
+            pheno_data_file = os.path.join(gene_data_dir, 'phenotype_data.csv')
+            if os.path.exists(pheno_data_file):
+                pheno_data = pd.read_csv(pheno_data_file)
+                print(f"\n  phenotype_data.csv:")
+                print(f"    列: {list(pheno_data.columns)}")
+                print(f"    样本数: {len(pheno_data)}")
+                if len(pheno_data) > 0:
+                    print(f"    示例 (前5行):")
+                    for i, row in pheno_data.head(5).iterrows():
+                        sample_id = row.get('SampleID', 'N/A')
+                        hap_name = row.get('Hap_Name', 'N/A')
+                        pheno_val = row.iloc[-1] if len(row) > 2 else 'N/A'
+                        print(f"      [{i+1}] SampleID={sample_id}, Hap_Name={hap_name}, 表型值={pheno_val}")
+            
+            # 读取并显示 haplotype_stats.csv
+            hap_stats_file = os.path.join(gene_data_dir, 'haplotype_stats.csv')
+            if os.path.exists(hap_stats_file):
+                hap_stats = pd.read_csv(hap_stats_file)
+                print(f"\n  haplotype_stats.csv:")
+                print(f"    列: {list(hap_stats.columns)}")
+                print(f"    单倍型数: {len(hap_stats)}")
+                if len(hap_stats) > 0:
+                    print(f"    完整内容:")
+                    for i, row in hap_stats.iterrows():
+                        hap_name = row.get('haplotype_name', 'N/A')
+                        count = row.get('haplotype_count', 'N/A')
+                        freq = row.get('haplotype_freq', 'N/A')
+                        mean = row.get('phenotype_mean', 'N/A')
+                        sd = row.get('phenotype_sd', 'N/A')
+                        print(f"      [{i+1}] {hap_name}: count={count}, freq={freq}, mean={mean}, sd={sd}")
+            
+            print("=" * 60 + "\n")
         
         if result['status'].startswith('error'):
             errors += 1
@@ -927,16 +1583,42 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                             gtf_file=gff_file
                         )
                         
-                        # 运行分析生成HTML
+                        # 运行分析生成HTML（传入database_dir以使用预计算数据）
                         analyzer.analyze_gene(
                             chrom=result['chrom'],
                             start=result['start'],
                             end=result['end'],
                             gene_id=gene_id,
                             phenotype_cols=[pheno_col],
-                            cluster_haplotypes=cluster_haplotypes
+                            cluster_haplotypes=cluster_haplotypes,
+                            database_dir=database_dir
                         )
                         print(f"  [HTML] {gene_id}: 综合分析图已生成")
+                        
+                        # 保存分析中间数据到数据库，供后续直接使用
+                        # 1. 保存 variant_info
+                        if hasattr(analyzer, 'extractor') and hasattr(analyzer.extractor, 'variant_info'):
+                            variant_info = analyzer.extractor.variant_info
+                            if variant_info:
+                                variant_info_df = pd.DataFrame([
+                                    {
+                                        'position': pos,
+                                        'ref': info.get('ref', ''),
+                                        'alt': info.get('alt', ''),
+                                        'len_diff': info.get('len_diff', 0),
+                                        'is_sv': info.get('is_sv', False),
+                                        'maf': info.get('maf', 0.5),
+                                        'missing_rate': info.get('missing_rate', 0.0)
+                                    }
+                                    for pos, info in variant_info.items()
+                                ])
+                                variant_info_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
+                                print(f"  [DB] {gene_id}: variant_info 已保存")
+                        
+                        # 2. 保存 positions
+                        if hasattr(analyzer, 'positions') and analyzer.positions:
+                            positions_df = pd.DataFrame({'position': analyzer.positions})
+                            positions_df.to_csv(os.path.join(gene_data_dir, 'variant_positions_detailed.csv'), index=False)
                     except Exception as html_e:
                         print(f"  [WARNING] {gene_id} HTML生成失败: {html_e}")
                 
