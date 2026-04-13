@@ -1,6 +1,6 @@
 Haplotype_Seq,Count,Hap_Name,Alleles
-T|A|A|G|A|I|C|C|A,205,Hap1,"['T', 'A', 'A', 'G', 'A', 'I', 'C', 'C', 'A']"
+T|A|A|G|A|+|C|C|A,205,Hap1,"['T', 'A', 'A', 'G', 'A', '+', 'C', 'C', 'A']"
 T|A|C|C|C|G|T|G|G,166,Hap2,"['T', 'A', 'C', 'C', 'C', 'G', 'T', 'G', 'G']"
-G|A|A|G|A|I|C|C|A,144,Hap3,"['G', 'A', 'A', 'G', 'A', 'I', 'C', 'C', 'A']"
+G|A|A|G|A|+|C|C|A,144,Hap3,"['G', 'A', 'A', 'G', 'A', '+', 'C', 'C', 'A']"
 G|A|C|C|C|G|T|G|G,119,Hap4,"['G', 'A', 'C', 'C', 'C', 'G', 'T', 'G', 'G']"
-G|I|A|G|A|I|C|C|A,80,Hap5,"['G', 'I', 'A', 'G', 'A', 'I', 'C', 'C', 'A']"
+G|+|A|G|A|+|C|C|A,80,Hap5,"['G', '+', 'A', 'G', 'A', '+', 'C', 'C', 'A']"

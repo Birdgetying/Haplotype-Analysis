@@ -5260,19 +5260,20 @@ class ReportGenerator:
                     # 获取位置信息
                     pos = display_positions[idx] if idx < len(display_positions) else None
                     
-                    # 对于+/-，根据variant_info的len_diff确定正确的类型和颜色
+                    # **关键修复**：对于+/-，根据variant_info的len_diff显示具体数值
+                    # 例如：+2bp（插入2个碱基）、-1bp（缺失1个碱基）
                     display_base = base
                     actual_type = base  # 实际用于确定颜色的类型
                     if base in ('+', '-') and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         if len_diff > 0:  # 插入: alt比ref长
-                            display_base = f"+{len_diff}bp"
-                            actual_type = 'I'  # 强制为插入类型（红色）
+                            display_base = f"+{len_diff}bp"  # 例如：+2bp
+                            actual_type = '+'  # 强制为插入类型（红色）
                         elif len_diff < 0:  # 缺失: alt比ref短
-                            display_base = f"{len_diff}bp"  # 已经是负数，包含-号
-                            actual_type = 'D'  # 强制为缺失类型（蓝色）
+                            display_base = f"-{abs(len_diff)}bp"  # 例如：-1bp（使用绝对值）
+                            actual_type = '-'  # 强制为缺失类型（蓝色）
                         else:
-                            display_base = "INS" if base == 'I' else "DEL"
+                            display_base = "0bp"  # 理论上不应该出现
                     
                     # 根据实际类型确定颜色（而不是base）
                     color = base_colors.get(actual_type, '#666')
