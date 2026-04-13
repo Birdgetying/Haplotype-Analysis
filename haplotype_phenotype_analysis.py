@@ -5265,6 +5265,7 @@ class ReportGenerator:
                     # 支持两种格式：新格式(+/-)和旧格式(I/D)
                     display_base = base
                     actual_type = base  # 实际用于确定颜色的类型
+                    
                     if base in ('+', '-', 'I', 'D') and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         if len_diff > 0:  # 插入: alt比ref长
@@ -9081,11 +9082,13 @@ class HaplotypePhenotypeAnalyzer:
         
         # 如果数据库中有variant_info，设置到extractor（如果extractor存在）
         # 注意：如果已经从VCF提取了variant_info，这里不再覆盖
-        if self.variant_info is None and 'variant_info' in preloaded_data:
+        if (self.variant_info is None or not self.variant_info) and 'variant_info' in preloaded_data:
             self.variant_info = preloaded_data['variant_info']
             if self.extractor:
                 self.extractor.variant_info = preloaded_data['variant_info']
-            logger.info(f"[数据库] 使用预加载的 variant_info")
+                logger.info(f"[数据库] 使用预加载的 variant_info: {len(self.extractor.variant_info)} 个位点")
+            else:
+                logger.warning(f"[数据库] extractor 不存在，无法设置 variant_info")
         
         step1_time = perf_monitor.step_end("Step_1_Haplotype_Extraction")
         logger.info(f"  - Step 1 耗时：{step1_time:.2f}s")
@@ -9421,7 +9424,7 @@ class HaplotypePhenotypeAnalyzer:
                 chrom=chrom,
                 gene_id=gene_id,
                 cluster_haplotypes=cluster_haplotypes,
-                variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info')) else {},
+                variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info) else (self.variant_info if self.variant_info else {}),
                 variant_pvalues=variant_pvalues,
             )
             
