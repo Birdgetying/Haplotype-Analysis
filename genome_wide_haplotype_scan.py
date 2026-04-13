@@ -384,17 +384,42 @@ class ScanConfig:
     RESULTS_DIR = "./results"             # 结果文件夹（存放HTML图）
     
     # 指定要分析的基因列表（大麦 GWAS 及 SV 筛选基因）
+    # 来源：database/大麦备份/大麦GWAS及SV筛选基因-2026.03.22(1).xlsx
+    # Sheet: K-SNP_Indel_CandidateGene (16个) + K-SV（自己结果）(15个)，去重后共30个
     TARGET_GENES = [
-        "HORVU.MOREX.r3.4HG0405190",  # myosin-like protein XIF
-        "HORVU.MOREX.r3.4HG0405240",  # Jasmonate ZIM domain protein
-        "HORVU.MOREX.r3.4HG0405310",  # Protein ROOT PRIMORDIUM DEFECTIVE 1
-        "HORVU.MOREX.r3.4HG0405230",  # Jasmonate ZIM domain protein
-        "HORVU.MOREX.r3.5HG0426750",  # Cation/H(+) antiporter
-        "HORVU.MOREX.r3.3HG0281790",  # Laccase
-        "HORVU.MOREX.r3.3HG0282160",  # Serine/threonine-protein kinase
-        "HORVU.MOREX.r3.3HG0282170",  # Methyltransferase
-        "HORVU.MOREX.r3.4HG0387570",  # 70 kDa heat shock protein
-        "HORVU.MOREX.r3.7HG0634850"   # Acyl-coenzyme A oxidase
+        # K-SNP_Indel_CandidateGene
+        "HORVU.MOREX.r3.1HG0081480",
+        "HORVU.MOREX.r3.2HG0213430",
+        "HORVU.MOREX.r3.2HG0214000",
+        "HORVU.MOREX.r3.3HG0289370",
+        "HORVU.MOREX.r3.4HG0341890",
+        "HORVU.MOREX.r3.4HG0356420",
+        "HORVU.MOREX.r3.4HG0356370",
+        "HORVU.MOREX.r3.4HG0398010",
+        "HORVU.MOREX.r3.4HG0415770",
+        "HORVU.MOREX.r3.6HG0625930",
+        "HORVU.MOREX.r3.6HG0626440",
+        "HORVU.MOREX.r3.7HG0705960",
+        "HORVU.MOREX.r3.7HG0733200",
+        "HORVU.MOREX.r3.4HG0415690",
+        "HORVU.MOREX.r3.4HG0415780",
+        "HORVU.MOREX.r3.5HG0492640",
+        # K-SV（自己结果）
+        "HORVU.MOREX.r3.6HG0542030",
+        "HORVU.MOREX.r3.6HG0542250",
+        # "HORVU.MOREX.r3.4HG0356420",  # 重复，已在上
+        "HORVU.MOREX.r3.4HG0356430",
+        "HORVU.MOREX.r3.3HG0299830",
+        "HORVU.MOREX.r3.3HG0299890",
+        "HORVU.MOREX.r3.1HG0080620",
+        "HORVU.MOREX.r3.1HG0080220",
+        "HORVU.MOREX.r3.2HG0096990",
+        "HORVU.MOREX.r3.7HG0639230",
+        "HORVU.MOREX.r3.5HG0432290",
+        "HORVU.MOREX.r3.5HG0490420",
+        "HORVU.MOREX.r3.5HG0490030",
+        "HORVU.MOREX.r3.5HG0490190",
+        "HORVU.MOREX.r3.6HG0626350",
     ]
     
     # 启动子区域参数
