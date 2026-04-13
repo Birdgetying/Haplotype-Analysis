@@ -4319,6 +4319,13 @@ class ReportGenerator:
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
         
+        # 构建单倍型到样本的映射字典 {hap_name: [sample1, sample2, ...]}
+        hap_samples_map = {}
+        if 'SampleID' in hap_sample_df.columns:
+            for hap_name in hap_counts.index:
+                samples = hap_sample_df[hap_sample_df[hap_col] == hap_name]['SampleID'].tolist()
+                hap_samples_map[hap_name] = samples
+        
         # DEBUG: 检查 snp_effects
         print(f"[DEBUG] generate_integrated_html: snp_effects type={type(snp_effects)}, len={len(snp_effects) if snp_effects else 0}")
         if snp_effects:
@@ -5165,7 +5172,10 @@ class ReportGenerator:
 <thead><tr>
     <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;height:60px;">Haplotype</th>
     <th class="effect-cell" style="vertical-align:middle;height:60px;">Effect (vs Grand Mean)</th>
-    <th class="box-cell" style="vertical-align:middle;height:60px;">Phenotype</th>\n'''
+    <th class="box-cell" style="vertical-align:middle;height:60px;">Phenotype</th>
+    <th style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;height:60px;">
+        <button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:10px;">Copy All</button>
+    </th>\n'''
         
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
@@ -5297,6 +5307,11 @@ class ReportGenerator:
                     
                     html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
+            # 添加复制样本按钮列
+            samples_for_hap = hap_samples_map.get(hap, [])
+            samples_str = ','.join(samples_for_hap) if samples_for_hap else ''
+            html += f'<td style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:9px;white-space:nowrap;">Copy</button></td>\n'
+            
             html += f'<td class="n-cell">{cnt}</td></tr>\n'
         
         # 表格底部：共用坐标轴行（三列分开对应）
@@ -5336,6 +5351,9 @@ class ReportGenerator:
                 html += f'<span style="position:absolute;bottom:-4px;left:{tick_pct}%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">{tick_label}</span>'
             html += '</div>'
         html += '</td>\n'
+        
+        # 第4列：复制样本列（空）
+        html += '<td style="border:none;"></td>\n'
         
         # 剩余列（序列+n）
         html += f'<td colspan="{len(display_positions)+1}" style="border:none;"></td>\n'
@@ -5407,6 +5425,92 @@ function toggleSort() {
         rows.sort(function(a,b){ return (om[a.getAttribute('data-hap')]||999)-(om[b.getAttribute('data-hap')]||999); });
     }
     rows.forEach(function(r){ tbody.appendChild(r); });
+}
+
+// ==================== 复制样本功能 ====================
+function copySamples(hapName) {
+    // 找到对应的按钮
+    var btn = document.querySelector(`button.copy-samples-btn[onclick="copySamples('${hapName}')"]`);
+    if (!btn) return;
+    
+    var samples = btn.getAttribute('data-samples');
+    if (!samples) {
+        alert('No samples for ' + hapName);
+        return;
+    }
+    
+    // 复制到剪贴板
+    navigator.clipboard.writeText(samples).then(function() {
+        // 成功提示
+        var originalText = btn.innerText;
+        btn.innerText = 'Copied!';
+        btn.style.background = '#27ae60';
+        setTimeout(function() {
+            btn.innerText = originalText;
+            btn.style.background = '#3498db';
+        }, 1500);
+    }).catch(function(err) {
+        // 降级方案：使用传统方法
+        var textArea = document.createElement('textarea');
+        textArea.value = samples;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        var originalText = btn.innerText;
+        btn.innerText = 'Copied!';
+        btn.style.background = '#27ae60';
+        setTimeout(function() {
+            btn.innerText = originalText;
+            btn.style.background = '#3498db';
+        }, 1500);
+    });
+}
+
+function copyAllSamples() {
+    // 获取所有单倍型的样本
+    var allSamples = [];
+    var buttons = document.querySelectorAll('button.copy-samples-btn');
+    buttons.forEach(function(btn) {
+        var samples = btn.getAttribute('data-samples');
+        if (samples) {
+            allSamples.push(samples);
+        }
+    });
+    
+    var allText = allSamples.join(',');
+    if (!allText) {
+        alert('No samples found');
+        return;
+    }
+    
+    navigator.clipboard.writeText(allText).then(function() {
+        var btn = document.getElementById('copyAllBtn');
+        var originalText = btn.innerText;
+        btn.innerText = 'Copied All!';
+        btn.style.background = '#27ae60';
+        setTimeout(function() {
+            btn.innerText = originalText;
+            btn.style.background = '#3498db';
+        }, 1500);
+    }).catch(function(err) {
+        var textArea = document.createElement('textarea');
+        textArea.value = allText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        var btn = document.getElementById('copyAllBtn');
+        var originalText = btn.innerText;
+        btn.innerText = 'Copied All!';
+        btn.style.background = '#27ae60';
+        setTimeout(function() {
+            btn.innerText = originalText;
+            btn.style.background = '#3498db';
+        }, 1500);
+    });
 }
 
 // ==================== D3 数据 ====================
