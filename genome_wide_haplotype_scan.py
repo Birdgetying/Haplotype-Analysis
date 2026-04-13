@@ -594,7 +594,7 @@ def parse_gtf_for_gene(gtf_file: str, target_gene_id: str) -> dict:
 
 def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame, 
                         database_dir: str, results_dir: str = None,
-                        min_samples: int = 5, test_region_length: int = 0,
+                        min_samples: int = 1, test_region_length: int = 0,
                         gff_file: str = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
@@ -1041,7 +1041,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
 
 
 def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
-                            min_samples: int = 5, pvalue_threshold: float = 0.05,
+                            min_samples: int = 1, pvalue_threshold: float = 0.05,
                             gff_file: str = None, results_dir: str = None,
                             cluster_haplotypes: bool = False) -> dict:
     """
@@ -1219,7 +1219,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     database_dir: str, results_dir: str = None,
                     n_workers: int = 1, chrom_filter: str = None, 
                     gene_filter: list = None, batch_size: int = 100, 
-                    min_samples: int = 5, run_analysis: bool = True, 
+                    min_samples: int = 1, run_analysis: bool = True, 
                     pvalue_threshold: float = 0.05,
                     generate_html: bool = True,
                     test_region_length: int = 0,
@@ -1875,8 +1875,8 @@ def main():
                         help="结果(图表)输出目录")
     parser.add_argument("--genes", nargs="+", default=None,
                         help=f"指定基因列表（默认: {ScanConfig.TARGET_GENES})")
-    parser.add_argument("--min-samples", type=int, default=5,
-                        help="最小样本数阈值")
+    parser.add_argument("--min-samples", type=int, default=1,
+                        help="最小样本数阈值（默认1，保留所有单倍型）")
     parser.add_argument("--no-analysis", action="store_true",
                         help="跳过关联分析")
     parser.add_argument("--pvalue-threshold", type=float, default=0.05,
