@@ -1503,17 +1503,17 @@ class HaplotypeExtractor:
         
         对于不同变异类型，统一返回单字符以保证序列格式一致：
         - SNP: 返回实际碱基 (A/T/G/C)
-        - 插入(INS): 返回 '+' (限REF返回小写ref第一字符)
-        - 缺失(DEL): 返回 '-' (限REF返回小写ref第一字符)
+        - 插入(INS): 返回 '+' 
+        - 缺失(DEL): 返回 '-'
         """
         # 判断变异类型，确定如何展示ALT
         if len(ref) == 1 and len(alt0) == 1:
             # SNP: 直接用实际碱基
             alt_repr = alt0.upper()
         elif len(alt0) > len(ref):  # 插入
-            alt_repr = 'I'  # Insertion
+            alt_repr = '+'  # Insertion 使用 + 符号
         else:  # 缺失
-            alt_repr = 'D'  # Deletion
+            alt_repr = '-'  # Deletion 使用 - 符号
         ref_repr = ref[0].upper() if ref else 'N'  # REF统一取第一个字符
         
         try:
@@ -1820,7 +1820,7 @@ class HaplotypeExtractor:
         # 第一次过滤（样本层面）已经删除了真正无变异的位点
         
         # 样本-单倍型对应表
-        hap_seq_to_name = dict(zip(hap_df["Haplotype_Seq"], hap_df["Hap_Name"]))
+        hap_seq_to_name = dict(zip(hap_df["Haplotype_Seq"], hap_df["Hap_Name"])) if len(hap_df) > 0 else {}
         rows = []
         skipped_samples = []  # 记录被跳过的样本
         for sample, hap_seq in sample_to_hap.items():
@@ -1833,7 +1833,13 @@ class HaplotypeExtractor:
                 "Hap_Name": hap_name,
                 "Haplotype_Seq": hap_seq
             })
-        hap_sample_df = pd.DataFrame(rows)
+        
+        # 关键修复：如果没有样本匹配到有效单倍型，返回空 DataFrame
+        if not rows:
+            logger.warning(f"[WARNING] 没有样本匹配到有效单倍型（所有单倍型样本数<{min_samples}）")
+            hap_sample_df = pd.DataFrame(columns=["SampleID", "Hap_Name", "Haplotype_Seq"])
+        else:
+            hap_sample_df = pd.DataFrame(rows)
         
         # [DATA FORMAT LOG] 样本-单倍型映射表
         logger.info(f"\n[DATA FORMAT] hap_sample_df (extract_region返回)")
@@ -1846,7 +1852,7 @@ class HaplotypeExtractor:
         logger.info(f"  被跳过的样本数 (单倍型数量<min_samples): {len(skipped_samples)}")
         if skipped_samples and len(skipped_samples) <= 10:
             logger.info(f"  被跳过的样本ID: {skipped_samples}")
-        logger.info()
+        logger.info("")  # 空行分隔
         
         self.sample_haplotypes = sample_to_hap
         self.variant_info = variant_info  # 保存变异信息
@@ -4338,7 +4344,7 @@ class ReportGenerator:
                 all_seqs = [hap_seqs[hap] for hap in hap_counts.index if hap in hap_seqs]
                 hap_names = [hap for hap in hap_counts.index if hap in hap_seqs]
                 
-                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 4, 'N': 4}
+                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 4, 'N': 4}
                 seq_matrix = [[base_map.get(base.upper(), 4) for base in seq] for seq in all_seqs]
                 
                 distances = pdist(seq_matrix, metric='hamming')
@@ -4566,7 +4572,7 @@ class ReportGenerator:
         
         # 颜色方案：DEL蓝色、INS红色、A紫色
         base_colors = {'A': '#9b59b6', 'T': '#27AE60', 'C': '#3498DB', 'G': '#F1C40F',
-                       'I': '#e74c3c', 'D': '#3498db'}  # I=插入(红色), D=缺失(蓝色), A=紫色
+                       '+': '#e74c3c', '-': '#3498db'}  # +=插入(红色), -=缺失(蓝色), A=紫色
         row_height = 36
         n_haps = len(top_haps)
         
@@ -5249,10 +5255,10 @@ class ReportGenerator:
                     # 获取位置信息
                     pos = display_positions[idx] if idx < len(display_positions) else None
                     
-                    # 对于I/D，根据variant_info的len_diff确定正确的类型和颜色
+                    # 对于+/-，根据variant_info的len_diff确定正确的类型和颜色
                     display_base = base
                     actual_type = base  # 实际用于确定颜色的类型
-                    if base in ('I', 'D') and pos and variant_info and pos in variant_info:
+                    if base in ('+', '-') and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         if len_diff > 0:  # 插入: alt比ref长
                             display_base = f"+{len_diff}bp"
@@ -5327,7 +5333,7 @@ class ReportGenerator:
         html += f'<td colspan="{len(display_positions)+1}" style="border:none;"></td>\n'
         html += '</tr>\n'
         
-        html += '''</tbody></table>
+        html += r'''</tbody></table>
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
     </div>
@@ -6895,7 +6901,7 @@ svg.selectAll('circle')
         sample_groups = []
         
         if 'Haplotype_Seq' in hap_sample_df.columns:
-            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 5, 'N': 6}
+            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': 6}
             
             for _, row in hap_sample_df.iterrows():
                 seq = row['Haplotype_Seq'].replace('|', '')
@@ -7566,7 +7572,7 @@ if (promoterStart < promoterEnd) {{
         if 'Haplotype_Seq' in hap_sample_df.columns and len(hap_sample_df) >= 3:
             try:
                 from sklearn.decomposition import PCA
-                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 5, 'N': 6}
+                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': 6}
                 samples = []
                 sample_haps = []
                 for _, row in hap_sample_df.iterrows():
@@ -8497,7 +8503,7 @@ class HaplotypePhenotypeAnalyzer:
                                 gt_row[f'POS_{pos}'] = 0  # 纯合参考
                             elif allele == alt:
                                 gt_row[f'POS_{pos}'] = 2  # 纯合变异
-                            elif allele in ['I', 'D']:  # 插入/缺失标记
+                            elif allele in ['+', '-']:  # 插入/缺失标记
                                 gt_row[f'POS_{pos}'] = 1  # 杂合（简化处理）
                             else:
                                 gt_row[f'POS_{pos}'] = -1  # 缺失/未知
@@ -8979,32 +8985,52 @@ class HaplotypePhenotypeAnalyzer:
         # **优先使用数据库中的VCF文件**（与原始数据完全一致）
         if 'vcf_file' in preloaded_data and preloaded_data['vcf_file']:
             vcf_path = preloaded_data['vcf_file']
-            logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
-            try:
-                # 使用数据库VCF创建临时extractor
-                temp_extractor = HaplotypeExtractor(vcf_path)
-                self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
-                    chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
-                )
-                # 复制variant_info
-                if hasattr(temp_extractor, 'variant_info'):
-                    preloaded_data['variant_info'] = temp_extractor.variant_info
-                    self.variant_info = temp_extractor.variant_info
-                logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
-            except Exception as e:
-                logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
-                # 回退到CSV数据
-                if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
-                    self.hap_df = preloaded_data['hap_df']
-                    self.hap_sample_df = preloaded_data['hap_sample_df']
-                    if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
-                        self.positions = sorted(preloaded_data['variant_info'].keys())
-                    else:
-                        self.positions = []
-                else:
-                    self.positions, self.hap_df, self.hap_sample_df = self.extractor.extract_region(
+            
+            # 检查 VCF 是否为标记文件（< 1KB）
+            is_marker_file = False
+            if os.path.exists(vcf_path):
+                vcf_size = os.path.getsize(vcf_path)
+                if vcf_size < 1024:  # 小于 1KB 视为标记文件
+                    is_marker_file = True
+                    logger.info(f"[数据库] VCF是标记文件 ({vcf_size} bytes)，直接使用CSV数据")
+            
+            if not is_marker_file:
+                logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
+                try:
+                    # 使用数据库VCF创建临时extractor
+                    temp_extractor = HaplotypeExtractor(vcf_path)
+                    self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
                         chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
                     )
+                    # 复制variant_info
+                    if hasattr(temp_extractor, 'variant_info'):
+                        preloaded_data['variant_info'] = temp_extractor.variant_info
+                        self.variant_info = temp_extractor.variant_info
+                    logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
+                except Exception as e:
+                    logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
+                    # 回退到CSV数据
+                    if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
+                        self.hap_df = preloaded_data['hap_df']
+                        self.hap_sample_df = preloaded_data['hap_sample_df']
+                        if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
+                            self.positions = sorted(preloaded_data['variant_info'].keys())
+                        else:
+                            self.positions = []
+                    else:
+                        self.positions, self.hap_df, self.hap_sample_df = self.extractor.extract_region(
+                            chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
+                        )
+            elif 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
+                # VCF是标记文件，直接使用CSV数据
+                logger.info(f"[数据库] 使用CSV数据: {len(preloaded_data['hap_df'])} 个单倍型, {len(preloaded_data['hap_sample_df'])} 个样本")
+                self.hap_df = preloaded_data['hap_df']
+                self.hap_sample_df = preloaded_data['hap_sample_df']
+                if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
+                    self.positions = sorted(preloaded_data['variant_info'].keys())
+                    logger.info(f"[数据库] 加载 {len(self.positions)} 个变异位点")
+                else:
+                    self.positions = []
         elif 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
             # 回退：使用数据库中的CSV数据
             self.hap_df = preloaded_data['hap_df']

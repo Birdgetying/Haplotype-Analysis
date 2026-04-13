@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Haplotype Network - Interactive D3.js Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
+                  padding: 20px 30px; border-radius: 10px 10px 0 0; }
+        .header h1 { font-size: 22px; margin-bottom: 8px; }
+        .header-info { display: flex; gap: 25px; font-size: 13px; opacity: 0.9; }
+        .controls { background: #fff; padding: 15px 20px; border-bottom: 1px solid #e0e0e0;
+                    display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        .controls label { font-size: 13px; color: #555; }
+        .controls button { padding: 8px 16px; border: 1px solid #ddd; border-radius: 5px;
+                          background: white; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .controls button:hover { background: #f0f0f0; }
+        .controls button.active { background: #667eea; color: white; border-color: #667eea; }
+        .network-container { background: white; border-radius: 0 0 10px 10px; padding: 0;
+                             box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden;
+                             position: relative; }
+        #network { width: 100%; height: 700px; user-select: none; touch-action: pan-y; }
+        .tooltip { position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px 16px;
+                   border-radius: 8px; font-size: 13px; pointer-events: none; z-index: 1000;
+                   box-shadow: 0 4px 15px rgba(0,0,0,0.3); max-width: 250px; }
+        .tooltip h4 { margin-bottom: 8px; font-size: 15px; color: #ffd700; }
+        .tooltip p { margin: 4px 0; }
+        .legend { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95);
+                  padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); pointer-events: none; }
+        .legend h4 { margin-bottom: 10px; font-size: 13px; color: #333; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }
+        .legend-circle { width: 12px; height: 12px; border-radius: 50%; }
+        .node { cursor: pointer; transition: all 0.3s; }
+        .node:hover { filter: brightness(1.2); }
+        .link { stroke: #999; stroke-opacity: 0.6; }
+        .node-label { font-size: 11px; font-weight: 600; fill: #333; pointer-events: none; }
+        .diff-marker-legend { display: flex; align-items: center; gap: 5px; margin: 5px 0; font-size: 11px; }
+        .diff-marker-line { width: 15px; height: 3px; background: #e74c3c; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Haplotype Network Visualization</h1>
+        <div class="header-info">
+            <span>Haplotypes: 20</span>
+            <span>Connections: 190</span>
+            <span>Total Samples: 560</span>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <label>Zoom:</label>
+        <button onclick="zoomIn()">+ Zoom In</button>
+        <button onclick="zoomOut()">- Zoom Out</button>
+        <button onclick="resetZoom()">Reset</button>
+        <span style="margin-left:20px; border-left:1px solid #ddd; padding-left:20px;"></span>
+        <label>Layout:</label>
+        <button id="forceBtn" class="active" onclick="setLayout('force')">Force</button>
+        <button id="radialBtn" onclick="setLayout('radial')">Radial</button>
+        <span style="margin-left:20px; border-left:1px solid #ddd; padding-left:20px;"></span>
+        <label>Node Size:</label>
+        <button onclick="toggleSizeMode('count')" id="sizeCountBtn" class="active">By Sample Count</button>
+    </div>
+    
+    <div class="network-container" style="position: relative;">
+        <div id="network"></div>
+        <div class="legend" id="legend">
+            <h4>Legend</h4>
+            <div class="diff-marker-legend">
+                <div class="diff-marker-line"></div>
+                <span>SNP difference (vertical ticks on lines)</span>
+            </div>
+        </div>
+        <div class="tooltip" id="tooltip" style="display:none;"></div>
+    </div>
+</div>
+
+<script>
+// 数据
+const nodes = [{"id": "Hap1", "count": 271, "size": 50, "color": "rgb(99, 100, 155)", "snp_count": 50}, {"id": "Hap10", "count": 14, "size": 28.708286933869708, "color": "rgb(95, 100, 159)", "snp_count": 50}, {"id": "Hap11", "count": 9, "size": 25.0, "color": "rgb(74, 100, 180)", "snp_count": 50}, {"id": "Hap12", "count": 9, "size": 25.0, "color": "rgb(57, 100, 197)", "snp_count": 50}, {"id": "Hap13", "count": 7, "size": 23.228756555322953, "color": "rgb(35, 100, 219)", "snp_count": 50}, {"id": "Hap14", "count": 6, "size": 22.24744871391589, "color": "rgb(82, 100, 172)", "snp_count": 50}, {"id": "Hap15", "count": 6, "size": 22.24744871391589, "color": "rgb(75, 100, 179)", "snp_count": 50}, {"id": "Hap16", "count": 6, "size": 22.24744871391589, "color": "rgb(73, 100, 181)", "snp_count": 50}, {"id": "Hap17", "count": 5, "size": 21.18033988749895, "color": "rgb(86, 100, 168)", "snp_count": 50}, {"id": "Hap18", "count": 5, "size": 21.18033988749895, "color": "rgb(66, 100, 188)", "snp_count": 50}, {"id": "Hap19", "count": 5, "size": 21.18033988749895, "color": "rgb(73, 100, 181)", "snp_count": 50}, {"id": "Hap2", "count": 33, "size": 38.72281323269014, "color": "rgb(78, 100, 176)", "snp_count": 50}, {"id": "Hap20", "count": 5, "size": 21.18033988749895, "color": "rgb(63, 100, 191)", "snp_count": 50}, {"id": "Hap3", "count": 33, "size": 38.72281323269014, "color": "rgb(107, 100, 147)", "snp_count": 50}, {"id": "Hap4", "count": 32, "size": 38.2842712474619, "color": "rgb(94, 100, 160)", "snp_count": 50}, {"id": "Hap5", "count": 32, "size": 38.2842712474619, "color": "rgb(122, 100, 132)", "snp_count": 50}, {"id": "Hap6", "count": 28, "size": 36.457513110645905, "color": "rgb(81, 100, 173)", "snp_count": 50}, {"id": "Hap7", "count": 20, "size": 32.3606797749979, "color": "rgb(76, 100, 178)", "snp_count": 50}, {"id": "Hap8", "count": 18, "size": 31.213203435596423, "color": "rgb(75, 100, 179)", "snp_count": 50}, {"id": "Hap9", "count": 16, "size": 30.0, "color": "rgb(70, 100, 184)", "snp_count": 50}];
+const links = [{"source": "Hap1", "target": "Hap10", "distance": 5, "diff_positions": [16, 19, 32, 33, 39]}, {"source": "Hap1", "target": "Hap11", "distance": 14, "diff_positions": [19, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap1", "target": "Hap12", "distance": 5, "diff_positions": [2, 3, 8, 12, 19]}, {"source": "Hap1", "target": "Hap13", "distance": 8, "diff_positions": [2, 3, 8, 12, 19, 24, 25, 27]}, {"source": "Hap1", "target": "Hap14", "distance": 2, "diff_positions": [2, 19]}, {"source": "Hap1", "target": "Hap15", "distance": 2, "diff_positions": [13, 19]}, {"source": "Hap1", "target": "Hap16", "distance": 17, "diff_positions": [0, 17, 19, 22, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap1", "target": "Hap17", "distance": 9, "diff_positions": [2, 3, 5, 8, 11, 12, 18, 19, 43]}, {"source": "Hap1", "target": "Hap18", "distance": 2, "diff_positions": [19, 27]}, {"source": "Hap1", "target": "Hap19", "distance": 12, "diff_positions": [13, 19, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap1", "target": "Hap2", "distance": 12, "diff_positions": [15, 19, 23, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap1", "target": "Hap20", "distance": 13, "diff_positions": [2, 13, 19, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap1", "target": "Hap3", "distance": 4, "diff_positions": [10, 19, 36, 45]}, {"source": "Hap1", "target": "Hap4", "distance": 6, "diff_positions": [2, 3, 8, 12, 19, 37]}, {"source": "Hap1", "target": "Hap5", "distance": 4, "diff_positions": [16, 19, 32, 39]}, {"source": "Hap1", "target": "Hap6", "distance": 18, "diff_positions": [1, 2, 4, 14, 19, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap1", "target": "Hap7", "distance": 2, "diff_positions": [19, 37]}, {"source": "Hap1", "target": "Hap8", "distance": 16, "diff_positions": [6, 17, 19, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap1", "target": "Hap9", "distance": 1, "diff_positions": [19]}, {"source": "Hap10", "target": "Hap11", "distance": 17, "diff_positions": [16, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap10", "target": "Hap12", "distance": 8, "diff_positions": [2, 3, 8, 12, 16, 32, 33, 39]}, {"source": "Hap10", "target": "Hap13", "distance": 11, "diff_positions": [2, 3, 8, 12, 16, 24, 25, 27, 32, 33, 39]}, {"source": "Hap10", "target": "Hap14", "distance": 5, "diff_positions": [2, 16, 32, 33, 39]}, {"source": "Hap10", "target": "Hap15", "distance": 5, "diff_positions": [13, 16, 32, 33, 39]}, {"source": "Hap10", "target": "Hap16", "distance": 20, "diff_positions": [0, 16, 17, 22, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap10", "target": "Hap17", "distance": 12, "diff_positions": [2, 3, 5, 8, 11, 12, 16, 18, 32, 33, 39, 43]}, {"source": "Hap10", "target": "Hap18", "distance": 5, "diff_positions": [16, 27, 32, 33, 39]}, {"source": "Hap10", "target": "Hap19", "distance": 15, "diff_positions": [13, 16, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42, 44]}, {"source": "Hap10", "target": "Hap2", "distance": 15, "diff_positions": [15, 16, 23, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42]}, {"source": "Hap10", "target": "Hap20", "distance": 16, "diff_positions": [2, 13, 16, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42, 44]}, {"source": "Hap10", "target": "Hap3", "distance": 7, "diff_positions": [10, 16, 32, 33, 36, 39, 45]}, {"source": "Hap10", "target": "Hap4", "distance": 9, "diff_positions": [2, 3, 8, 12, 16, 32, 33, 37, 39]}, {"source": "Hap10", "target": "Hap5", "distance": 1, "diff_positions": [33]}, {"source": "Hap10", "target": "Hap6", "distance": 21, "diff_positions": [1, 2, 4, 14, 16, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap10", "target": "Hap7", "distance": 5, "diff_positions": [16, 32, 33, 37, 39]}, {"source": "Hap10", "target": "Hap8", "distance": 19, "diff_positions": [6, 16, 17, 28, 29, 30, 31, 32, 33, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap10", "target": "Hap9", "distance": 4, "diff_positions": [16, 32, 33, 39]}, {"source": "Hap11", "target": "Hap12", "distance": 17, "diff_positions": [2, 3, 8, 12, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap13", "distance": 20, "diff_positions": [2, 3, 8, 12, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap14", "distance": 14, "diff_positions": [2, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap15", "distance": 14, "diff_positions": [13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap16", "distance": 3, "diff_positions": [0, 17, 22]}, {"source": "Hap11", "target": "Hap17", "distance": 21, "diff_positions": [2, 3, 5, 8, 11, 12, 18, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap18", "distance": 14, "diff_positions": [27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap19", "distance": 4, "diff_positions": [13, 46, 48, 49]}, {"source": "Hap11", "target": "Hap2", "distance": 6, "diff_positions": [15, 23, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap20", "distance": 5, "diff_positions": [2, 13, 46, 48, 49]}, {"source": "Hap11", "target": "Hap3", "distance": 16, "diff_positions": [10, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 44, 45, 46, 48, 49]}, {"source": "Hap11", "target": "Hap4", "distance": 18, "diff_positions": [2, 3, 8, 12, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap5", "distance": 16, "diff_positions": [16, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap6", "distance": 4, "diff_positions": [1, 2, 4, 14]}, {"source": "Hap11", "target": "Hap7", "distance": 14, "diff_positions": [28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap11", "target": "Hap8", "distance": 2, "diff_positions": [6, 17]}, {"source": "Hap11", "target": "Hap9", "distance": 13, "diff_positions": [28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap12", "target": "Hap13", "distance": 3, "diff_positions": [24, 25, 27]}, {"source": "Hap12", "target": "Hap14", "distance": 3, "diff_positions": [3, 8, 12]}, {"source": "Hap12", "target": "Hap15", "distance": 5, "diff_positions": [2, 3, 8, 12, 13]}, {"source": "Hap12", "target": "Hap16", "distance": 20, "diff_positions": [0, 2, 3, 8, 12, 17, 22, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap12", "target": "Hap17", "distance": 4, "diff_positions": [5, 11, 18, 43]}, {"source": "Hap12", "target": "Hap18", "distance": 5, "diff_positions": [2, 3, 8, 12, 27]}, {"source": "Hap12", "target": "Hap19", "distance": 15, "diff_positions": [2, 3, 8, 12, 13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap12", "target": "Hap2", "distance": 15, "diff_positions": [2, 3, 8, 12, 15, 23, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap12", "target": "Hap20", "distance": 14, "diff_positions": [3, 8, 12, 13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap12", "target": "Hap3", "distance": 7, "diff_positions": [2, 3, 8, 10, 12, 36, 45]}, {"source": "Hap12", "target": "Hap4", "distance": 1, "diff_positions": [37]}, {"source": "Hap12", "target": "Hap5", "distance": 7, "diff_positions": [2, 3, 8, 12, 16, 32, 39]}, {"source": "Hap12", "target": "Hap6", "distance": 19, "diff_positions": [1, 3, 4, 8, 12, 14, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap12", "target": "Hap7", "distance": 5, "diff_positions": [2, 3, 8, 12, 37]}, {"source": "Hap12", "target": "Hap8", "distance": 19, "diff_positions": [2, 3, 6, 8, 12, 17, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap12", "target": "Hap9", "distance": 4, "diff_positions": [2, 3, 8, 12]}, {"source": "Hap13", "target": "Hap14", "distance": 6, "diff_positions": [3, 8, 12, 24, 25, 27]}, {"source": "Hap13", "target": "Hap15", "distance": 8, "diff_positions": [2, 3, 8, 12, 13, 24, 25, 27]}, {"source": "Hap13", "target": "Hap16", "distance": 23, "diff_positions": [0, 2, 3, 8, 12, 17, 22, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap13", "target": "Hap17", "distance": 7, "diff_positions": [5, 11, 18, 24, 25, 27, 43]}, {"source": "Hap13", "target": "Hap18", "distance": 6, "diff_positions": [2, 3, 8, 12, 24, 25]}, {"source": "Hap13", "target": "Hap19", "distance": 18, "diff_positions": [2, 3, 8, 12, 13, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap13", "target": "Hap2", "distance": 18, "diff_positions": [2, 3, 8, 12, 15, 23, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap13", "target": "Hap20", "distance": 17, "diff_positions": [3, 8, 12, 13, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap13", "target": "Hap3", "distance": 10, "diff_positions": [2, 3, 8, 10, 12, 24, 25, 27, 36, 45]}, {"source": "Hap13", "target": "Hap4", "distance": 4, "diff_positions": [24, 25, 27, 37]}, {"source": "Hap13", "target": "Hap5", "distance": 10, "diff_positions": [2, 3, 8, 12, 16, 24, 25, 27, 32, 39]}, {"source": "Hap13", "target": "Hap6", "distance": 22, "diff_positions": [1, 3, 4, 8, 12, 14, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap13", "target": "Hap7", "distance": 8, "diff_positions": [2, 3, 8, 12, 24, 25, 27, 37]}, {"source": "Hap13", "target": "Hap8", "distance": 22, "diff_positions": [2, 3, 6, 8, 12, 17, 24, 25, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap13", "target": "Hap9", "distance": 7, "diff_positions": [2, 3, 8, 12, 24, 25, 27]}, {"source": "Hap14", "target": "Hap15", "distance": 2, "diff_positions": [2, 13]}, {"source": "Hap14", "target": "Hap16", "distance": 17, "diff_positions": [0, 2, 17, 22, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap14", "target": "Hap17", "distance": 7, "diff_positions": [3, 5, 8, 11, 12, 18, 43]}, {"source": "Hap14", "target": "Hap18", "distance": 2, "diff_positions": [2, 27]}, {"source": "Hap14", "target": "Hap19", "distance": 12, "diff_positions": [2, 13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap14", "target": "Hap2", "distance": 12, "diff_positions": [2, 15, 23, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap14", "target": "Hap20", "distance": 11, "diff_positions": [13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap14", "target": "Hap3", "distance": 4, "diff_positions": [2, 10, 36, 45]}, {"source": "Hap14", "target": "Hap4", "distance": 4, "diff_positions": [3, 8, 12, 37]}, {"source": "Hap14", "target": "Hap5", "distance": 4, "diff_positions": [2, 16, 32, 39]}, {"source": "Hap14", "target": "Hap6", "distance": 16, "diff_positions": [1, 4, 14, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap14", "target": "Hap7", "distance": 2, "diff_positions": [2, 37]}, {"source": "Hap14", "target": "Hap8", "distance": 16, "diff_positions": [2, 6, 17, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap14", "target": "Hap9", "distance": 1, "diff_positions": [2]}, {"source": "Hap15", "target": "Hap16", "distance": 17, "diff_positions": [0, 13, 17, 22, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap15", "target": "Hap17", "distance": 9, "diff_positions": [2, 3, 5, 8, 11, 12, 13, 18, 43]}, {"source": "Hap15", "target": "Hap18", "distance": 2, "diff_positions": [13, 27]}, {"source": "Hap15", "target": "Hap19", "distance": 10, "diff_positions": [28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap15", "target": "Hap2", "distance": 12, "diff_positions": [13, 15, 23, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap15", "target": "Hap20", "distance": 11, "diff_positions": [2, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap15", "target": "Hap3", "distance": 4, "diff_positions": [10, 13, 36, 45]}, {"source": "Hap15", "target": "Hap4", "distance": 6, "diff_positions": [2, 3, 8, 12, 13, 37]}, {"source": "Hap15", "target": "Hap5", "distance": 4, "diff_positions": [13, 16, 32, 39]}, {"source": "Hap15", "target": "Hap6", "distance": 18, "diff_positions": [1, 2, 4, 13, 14, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap15", "target": "Hap7", "distance": 2, "diff_positions": [13, 37]}, {"source": "Hap15", "target": "Hap8", "distance": 16, "diff_positions": [6, 13, 17, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap15", "target": "Hap9", "distance": 1, "diff_positions": [13]}, {"source": "Hap16", "target": "Hap17", "distance": 24, "diff_positions": [0, 2, 3, 5, 8, 11, 12, 17, 18, 22, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43, 44, 46, 48, 49]}, {"source": "Hap16", "target": "Hap18", "distance": 17, "diff_positions": [0, 17, 22, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap16", "target": "Hap19", "distance": 7, "diff_positions": [0, 13, 17, 22, 46, 48, 49]}, {"source": "Hap16", "target": "Hap2", "distance": 9, "diff_positions": [0, 15, 17, 22, 23, 44, 46, 48, 49]}, {"source": "Hap16", "target": "Hap20", "distance": 8, "diff_positions": [0, 2, 13, 17, 22, 46, 48, 49]}, {"source": "Hap16", "target": "Hap3", "distance": 19, "diff_positions": [0, 10, 17, 22, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 44, 45, 46, 48, 49]}, {"source": "Hap16", "target": "Hap4", "distance": 21, "diff_positions": [0, 2, 3, 8, 12, 17, 22, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap16", "target": "Hap5", "distance": 19, "diff_positions": [0, 16, 17, 22, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap16", "target": "Hap6", "distance": 7, "diff_positions": [0, 1, 2, 4, 14, 17, 22]}, {"source": "Hap16", "target": "Hap7", "distance": 17, "diff_positions": [0, 17, 22, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap16", "target": "Hap8", "distance": 3, "diff_positions": [0, 6, 22]}, {"source": "Hap16", "target": "Hap9", "distance": 16, "diff_positions": [0, 17, 22, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap17", "target": "Hap18", "distance": 9, "diff_positions": [2, 3, 5, 8, 11, 12, 18, 27, 43]}, {"source": "Hap17", "target": "Hap19", "distance": 19, "diff_positions": [2, 3, 5, 8, 11, 12, 13, 18, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43, 44]}, {"source": "Hap17", "target": "Hap2", "distance": 19, "diff_positions": [2, 3, 5, 8, 11, 12, 15, 18, 23, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43]}, {"source": "Hap17", "target": "Hap20", "distance": 18, "diff_positions": [3, 5, 8, 11, 12, 13, 18, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43, 44]}, {"source": "Hap17", "target": "Hap3", "distance": 11, "diff_positions": [2, 3, 5, 8, 10, 11, 12, 18, 36, 43, 45]}, {"source": "Hap17", "target": "Hap4", "distance": 5, "diff_positions": [5, 11, 18, 37, 43]}, {"source": "Hap17", "target": "Hap5", "distance": 11, "diff_positions": [2, 3, 5, 8, 11, 12, 16, 18, 32, 39, 43]}, {"source": "Hap17", "target": "Hap6", "distance": 23, "diff_positions": [1, 3, 4, 5, 8, 11, 12, 14, 18, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43, 44, 46, 48, 49]}, {"source": "Hap17", "target": "Hap7", "distance": 9, "diff_positions": [2, 3, 5, 8, 11, 12, 18, 37, 43]}, {"source": "Hap17", "target": "Hap8", "distance": 23, "diff_positions": [2, 3, 5, 6, 8, 11, 12, 17, 18, 28, 29, 30, 31, 34, 38, 40, 41, 42, 43, 44, 46, 48, 49]}, {"source": "Hap17", "target": "Hap9", "distance": 8, "diff_positions": [2, 3, 5, 8, 11, 12, 18, 43]}, {"source": "Hap18", "target": "Hap19", "distance": 12, "diff_positions": [13, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap18", "target": "Hap2", "distance": 12, "diff_positions": [15, 23, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap18", "target": "Hap20", "distance": 13, "diff_positions": [2, 13, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap18", "target": "Hap3", "distance": 4, "diff_positions": [10, 27, 36, 45]}, {"source": "Hap18", "target": "Hap4", "distance": 6, "diff_positions": [2, 3, 8, 12, 27, 37]}, {"source": "Hap18", "target": "Hap5", "distance": 4, "diff_positions": [16, 27, 32, 39]}, {"source": "Hap18", "target": "Hap6", "distance": 18, "diff_positions": [1, 2, 4, 14, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap18", "target": "Hap7", "distance": 2, "diff_positions": [27, 37]}, {"source": "Hap18", "target": "Hap8", "distance": 16, "diff_positions": [6, 17, 27, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap18", "target": "Hap9", "distance": 1, "diff_positions": [27]}, {"source": "Hap19", "target": "Hap2", "distance": 4, "diff_positions": [13, 15, 23, 44]}, {"source": "Hap19", "target": "Hap20", "distance": 1, "diff_positions": [2]}, {"source": "Hap19", "target": "Hap3", "distance": 14, "diff_positions": [10, 13, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 44, 45]}, {"source": "Hap19", "target": "Hap4", "distance": 16, "diff_positions": [2, 3, 8, 12, 13, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44]}, {"source": "Hap19", "target": "Hap5", "distance": 14, "diff_positions": [13, 16, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42, 44]}, {"source": "Hap19", "target": "Hap6", "distance": 8, "diff_positions": [1, 2, 4, 13, 14, 46, 48, 49]}, {"source": "Hap19", "target": "Hap7", "distance": 12, "diff_positions": [13, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44]}, {"source": "Hap19", "target": "Hap8", "distance": 6, "diff_positions": [6, 13, 17, 46, 48, 49]}, {"source": "Hap19", "target": "Hap9", "distance": 11, "diff_positions": [13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap2", "target": "Hap20", "distance": 5, "diff_positions": [2, 13, 15, 23, 44]}, {"source": "Hap2", "target": "Hap3", "distance": 14, "diff_positions": [10, 15, 23, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 45]}, {"source": "Hap2", "target": "Hap4", "distance": 16, "diff_positions": [2, 3, 8, 12, 15, 23, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42]}, {"source": "Hap2", "target": "Hap5", "distance": 14, "diff_positions": [15, 16, 23, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42]}, {"source": "Hap2", "target": "Hap6", "distance": 10, "diff_positions": [1, 2, 4, 14, 15, 23, 44, 46, 48, 49]}, {"source": "Hap2", "target": "Hap7", "distance": 12, "diff_positions": [15, 23, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42]}, {"source": "Hap2", "target": "Hap8", "distance": 8, "diff_positions": [6, 15, 17, 23, 44, 46, 48, 49]}, {"source": "Hap2", "target": "Hap9", "distance": 11, "diff_positions": [15, 23, 28, 29, 30, 31, 34, 38, 40, 41, 42]}, {"source": "Hap20", "target": "Hap3", "distance": 15, "diff_positions": [2, 10, 13, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 44, 45]}, {"source": "Hap20", "target": "Hap4", "distance": 15, "diff_positions": [3, 8, 12, 13, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44]}, {"source": "Hap20", "target": "Hap5", "distance": 15, "diff_positions": [2, 13, 16, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42, 44]}, {"source": "Hap20", "target": "Hap6", "distance": 7, "diff_positions": [1, 4, 13, 14, 46, 48, 49]}, {"source": "Hap20", "target": "Hap7", "distance": 13, "diff_positions": [2, 13, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44]}, {"source": "Hap20", "target": "Hap8", "distance": 7, "diff_positions": [2, 6, 13, 17, 46, 48, 49]}, {"source": "Hap20", "target": "Hap9", "distance": 12, "diff_positions": [2, 13, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44]}, {"source": "Hap3", "target": "Hap4", "distance": 8, "diff_positions": [2, 3, 8, 10, 12, 36, 37, 45]}, {"source": "Hap3", "target": "Hap5", "distance": 6, "diff_positions": [10, 16, 32, 36, 39, 45]}, {"source": "Hap3", "target": "Hap6", "distance": 20, "diff_positions": [1, 2, 4, 10, 14, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 44, 45, 46, 48, 49]}, {"source": "Hap3", "target": "Hap7", "distance": 4, "diff_positions": [10, 36, 37, 45]}, {"source": "Hap3", "target": "Hap8", "distance": 18, "diff_positions": [6, 10, 17, 28, 29, 30, 31, 34, 36, 38, 40, 41, 42, 44, 45, 46, 48, 49]}, {"source": "Hap3", "target": "Hap9", "distance": 3, "diff_positions": [10, 36, 45]}, {"source": "Hap4", "target": "Hap5", "distance": 8, "diff_positions": [2, 3, 8, 12, 16, 32, 37, 39]}, {"source": "Hap4", "target": "Hap6", "distance": 20, "diff_positions": [1, 3, 4, 8, 12, 14, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap4", "target": "Hap7", "distance": 4, "diff_positions": [2, 3, 8, 12]}, {"source": "Hap4", "target": "Hap8", "distance": 20, "diff_positions": [2, 3, 6, 8, 12, 17, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap4", "target": "Hap9", "distance": 5, "diff_positions": [2, 3, 8, 12, 37]}, {"source": "Hap5", "target": "Hap6", "distance": 20, "diff_positions": [1, 2, 4, 14, 16, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap5", "target": "Hap7", "distance": 4, "diff_positions": [16, 32, 37, 39]}, {"source": "Hap5", "target": "Hap8", "distance": 18, "diff_positions": [6, 16, 17, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap5", "target": "Hap9", "distance": 3, "diff_positions": [16, 32, 39]}, {"source": "Hap6", "target": "Hap7", "distance": 18, "diff_positions": [1, 2, 4, 14, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap6", "target": "Hap8", "distance": 6, "diff_positions": [1, 2, 4, 6, 14, 17]}, {"source": "Hap6", "target": "Hap9", "distance": 17, "diff_positions": [1, 2, 4, 14, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap7", "target": "Hap8", "distance": 16, "diff_positions": [6, 17, 28, 29, 30, 31, 34, 37, 38, 40, 41, 42, 44, 46, 48, 49]}, {"source": "Hap7", "target": "Hap9", "distance": 1, "diff_positions": [37]}, {"source": "Hap8", "target": "Hap9", "distance": 15, "diff_positions": [6, 17, 28, 29, 30, 31, 34, 38, 40, 41, 42, 44, 46, 48, 49]}];
+
+// 设置
+const container = document.getElementById('network');
+const width = container.clientWidth || 1200;
+const height = 700;
+let currentLayout = 'force';
+let currentSizeMode = 'count';
+
+// 创建SVG
+const svg = d3.select('#network')
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .style('display', 'block');
+
+// 添加clipPath限制显示范围
+svg.append('defs').append('clipPath')
+    .attr('id', 'clip-net-standalone')
+    .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+
+// 主绘图组
+const g = svg.append('g').attr('clip-path', 'url(#clip-net-standalone)');
+
+// 内部缩放组（用于滚轮缩放）
+const zoomG = g.append('g').attr('class', 'zoom-group');
+
+// 缩放比例状态
+let currentScale = 1;
+let minScale = 0.5, maxScale = 2.5;
+
+// 滚轮缩放内部节点（容器边界不变）
+svg.on('wheel', function(e) {
+    e.preventDefault();
+    var delta = e.deltaY > 0 ? 0.9 : 1.1;
+    var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
+    if (newScale !== currentScale) {
+        currentScale = newScale;
+        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
+    }
+});
+
+// 深拷贝节点
+const simNodes = nodes.map(d => Object.assign({}, d));
+const nodeById = {};
+simNodes.forEach(d => nodeById[d.id] = d);
+
+// 构建连线
+let simLinks = links
+    .filter(e => nodeById[e.source] && nodeById[e.target])
+    .map(e => ({ source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }));
+
+// 力导向模拟
+const sim = d3.forceSimulation(simNodes)
+    .force('link', d3.forceLink(simLinks).distance(d => Math.min(80, 35 + d.distance * 12)).strength(0.8))
+    .force('charge', d3.forceManyBody().strength(-180))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => d.size * 0.45 + 4))
+    .force('x', d3.forceX(width / 2).strength(0.05))
+    .force('y', d3.forceY(height / 2).strength(0.05));
+
+// 绘制连线
+const linkSel = zoomG.append('g').selectAll('line').data(simLinks).join('line')
+    .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
+    .attr('stroke-width', d => Math.max(1, 3.5 - d.distance * 0.4));
+
+// 绘制节点组（支持拖拽）
+const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+        .on('start', function(e, d) { 
+            if (!e.active) sim.alphaTarget(0.3).restart(); 
+            d.fx = d.x; 
+            d.fy = d.y; 
+        })
+        .on('drag', function(e, d) { 
+            var r = d.size * 0.5 + 5;
+            d.fx = Math.max(r, Math.min(width - r, e.x));
+            d.fy = Math.max(r, Math.min(height - r, e.y));
+        })
+        .on('end', function(e, d) { 
+            if (!e.active) sim.alphaTarget(0); 
+            d.fx = null; 
+            d.fy = null; 
+        })
+    );
+
+// 节点圆形
+nodeG.append('circle')
+    .attr('r', d => d.size * 0.5)
+    .attr('fill', d => d.color)
+    .attr('stroke', '#fff').attr('stroke-width', 2.5);
+
+// 节点标签
+nodeG.append('text')
+    .attr('text-anchor', 'middle').attr('dy', '0.35em')
+    .attr('font-size', d => Math.min(11, Math.max(7, d.size * 0.28)) + 'px')
+    .attr('fill', '#fff').attr('font-weight', 'bold').attr('pointer-events', 'none')
+    .text(d => d.id.replace('Hap', 'H'));
+
+// 样本数标签
+nodeG.append('text')
+    .attr('text-anchor', 'middle').attr('dy', d => d.size * 0.5 + 13)
+    .attr('font-size', '9px').attr('fill', '#445566').attr('pointer-events', 'none')
+    .text(d => 'n=' + d.count);
+
+// 更新位置
+sim.on('tick', () => {
+    linkSel
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    nodeG.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+});
+
+// 缩放控制函数
+function zoomIn() {
+    var newScale = Math.min(maxScale, currentScale * 1.2);
+    if (newScale !== currentScale) {
+        currentScale = newScale;
+        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
+    }
+}
+
+function zoomOut() {
+    var newScale = Math.max(minScale, currentScale / 1.2);
+    if (newScale !== currentScale) {
+        currentScale = newScale;
+        zoomG.attr('transform', 'translate('+width/2+','+height/2+') scale('+currentScale+') translate('+(-width/2)+','+(-height/2)+')');
+    }
+}
+
+function resetZoom() {
+    currentScale = 1;
+    zoomG.attr('transform', null);
+    sim.alpha(1).restart();
+}
+
+// Tooltip
+const tooltip = d3.select('#tooltip');
+nodeG.on('mouseover', function(event, d) {
+    d3.select(this).select('circle').attr('stroke', '#f39c12').attr('stroke-width', 3.5);
+    tooltip.style('display', 'block')
+        .html('<h4>' + d.id + '</h4><p>Count: ' + d.count + '</p><p>Variants: ' + d.snp_count + '</p>');
+}).on('mousemove', function(event) {
+    tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY - 10) + 'px');
+}).on('mouseout', function(event) {
+    d3.select(this).select('circle').attr('stroke', '#fff').attr('stroke-width', 2.5);
+    tooltip.style('display', 'none');
+}).on('mousedown', function(event) {
+    // 阻止节点上的mousedown冒泡
+    event.stopPropagation();
+});
+
+// 布局切换
+function setLayout(type) {
+    currentLayout = type;
+    document.getElementById('forceBtn').classList.toggle('active', type === 'force');
+    document.getElementById('radialBtn').classList.toggle('active', type === 'radial');
+    
+    if (type === 'radial') {
+        // 放射状布局
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) / 3;
+        
+        simNodes.forEach((d, i) => {
+            const angle = (i / simNodes.length) * 2 * Math.PI;
+            d.fx = centerX + radius * Math.cos(angle);
+            d.fy = centerY + radius * Math.sin(angle);
+        });
+        sim.alpha(0.3).restart();
+    } else {
+        // 力导向布局
+        simNodes.forEach(d => {
+            d.fx = null;
+            d.fy = null;
+        });
+        sim.alpha(1).restart();
+    }
+}
+
+// 节点大小模式
+function toggleSizeMode(mode) {
+    // 节点大小始终基于样本数量
+    nodeG.selectAll('circle').transition().duration(300)
+        .attr('r', d => Math.max(10, Math.min(50, d.size * 0.5)));
+}
+</script>
+</body>
+</html>

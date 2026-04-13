@@ -17,7 +17,7 @@
 #
 #   results/                            # 结果文件夹
 #   └── {gene_id}/
-#       └── integrated_analysis.html    # 综HTML图
+#       └── integrated_analysis.html    # 综合分析HTML图
 #
 # 默认处理基因:
 #   - CSIAAS1BG1157200HC (di19)
@@ -31,97 +31,135 @@ echo "Start time: $(date)"
 echo "Host: $HOSTNAME"
 
 # ============================================================================
+# 环境配置
+# ============================================================================
+
+echo ""
+echo "[Step 1] Loading Python environment..."
+
+# 尝试加载包含 pysam 的 conda 环境
+module load anaconda3 2>/dev/null || module load miniconda3 2>/dev/null || true
+
+# 检查是否有包含 pysam 的环境
+if python -c "import pysam" 2>/dev/null; then
+    echo "  ✓ pysam available in current environment"
+else
+    # 尝试安装 pysam
+    echo "  Installing pysam..."
+    pip install pysam --user --quiet 2>&1 | tail -5
+    
+    # 再次检查
+    if python -c "import pysam" 2>/dev/null; then
+        echo "  ✓ pysam installed successfully"
+    else
+        echo "  ✗ Failed to install pysam"
+        echo "  Trying conda install..."
+        conda install -c bioconda pysam -y 2>&1 | tail -10 || true
+    fi
+fi
+
+echo "Python: $(python --version)"
+python -c "import pysam; print(f'pysam: {pysam.__version__}')" 2>/dev/null || echo "pysam: not available"
+
+# ============================================================================
 # 配置
 # ============================================================================
 
-# 数据路径 (CS-IAAS T2T v1.1)
-VCF_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz"
-GFF_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_HC.gff3"
-PHENO_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
+# ============================================================================
+# 创建输出目录
+# ============================================================================
 
-# 输出目录
 DATABASE_DIR="./database"
 RESULTS_DIR="./results"
-
-# 指定基因列表（可选，不指定则使用脚本默认值）
-# GENES="CSIAAS1BG1157200HC CSIAAS4BG0701800HC"
-
-# ============================================================================
-# 环境检查
-# ============================================================================
-
-echo ""
-echo "[Step 1] Checking environment..."
-
-# 检查Python
-if ! command -v python &> /dev/null; then
-    echo "ERROR: Python not found"
-    exit 1
-fi
-echo "  ✓ Python: $(python --version)"
-
-# 检查必要模块
-for pkg in numpy pandas pysam; do
-    if python -c "import $pkg" 2>/dev/null; then
-        echo "  ✓ $pkg available"
-    else
-        echo "  ✗ $pkg not found"
-        exit 1
-    fi
-done
-
-# ============================================================================
-# 数据检查
-# ============================================================================
-
-echo ""
-echo "[Step 2] Checking data files..."
-
-if [ -f "${VCF_FILE}" ]; then
-    echo "  ✓ VCF: ${VCF_FILE}"
-else
-    echo "  ✗ VCF NOT FOUND"
-    exit 1
-fi
-
-if [ -f "${GFF_FILE}" ]; then
-    echo "  ✓ GFF: ${GFF_FILE}"
-else
-    echo "  ✗ GFF NOT FOUND"
-    exit 1
-fi
-
-if [ -f "${PHENO_FILE}" ]; then
-    echo "  ✓ Phenotype: ${PHENO_FILE}"
-else
-    echo "  ✗ Phenotype NOT FOUND"
-    exit 1
-fi
-
-# ============================================================================
-# 运行扫描
-# ============================================================================
-
-echo ""
-echo "[Step 3] Running genome-wide scan..."
-
-cd ~/project1 2>/dev/null || {
-    echo "ERROR: Cannot find project directory"
-    exit 1
-}
 
 mkdir -p ${DATABASE_DIR}
 mkdir -p ${RESULTS_DIR}
 mkdir -p logs
 
-LOG_FILE="logs/genome_scan_$(date +%s).log"
-
+echo "Output directories:"
 echo "  Database: ${DATABASE_DIR}"
 echo "  Results:  ${RESULTS_DIR}"
-echo "  Log: ${LOG_FILE}"
+
+# ============================================================================
+# 工作目录
+# ============================================================================
+
+echo ""
+echo "[Step 2] Setting up working directory..."
+
+cd ~/project1 2>/dev/null || \
+cd /storage/public/home/2024110093/project1 2>/dev/null || {
+    echo "ERROR: Cannot find project directory"
+    exit 1
+}
+
+echo "Working directory: $(pwd)"
+
+# ============================================================================
+# 数据检查（大麦 Barley Morex_v3）
+# ============================================================================
+
+echo ""
+echo "[Step 3] Checking data files..."
+
+# 大麦 Morex_v3 数据路径
+VCF_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/00.Rawdata/chrALL.impute.vcf.gz"
+PHENO_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/04.Gemma/00.pheno/K.rep1.SA.gemma"
+GFF_FILE="/home/qinz/data/genomes/Morex_v3/gene_annotation/Hv_Morex.pgsb.Jul2020.gff3"
+FASTA_FILE="/home/qinz/data/genomes/Morex_v3/MorexV3_MtPt.fasta"
+
+if [ -f "${VCF_FILE}" ]; then
+    echo "  ✓ VCF: chrALL.impute.vcf.gz"
+else
+    echo "  ✗ VCF NOT FOUND: ${VCF_FILE}"
+    exit 1
+fi
+
+if [ -f "${PHENO_FILE}" ]; then
+    echo "  ✓ Phenotype: K.rep1.SA.gemma"
+else
+    echo "  ✗ Phenotype NOT FOUND: ${PHENO_FILE}"
+    exit 1
+fi
+
+if [ -f "${GFF_FILE}" ]; then
+    echo "  ✓ GFF3: Hv_Morex.pgsb.Jul2020.gff3"
+else
+    echo "  ✗ GFF3 NOT FOUND: ${GFF_FILE}"
+    exit 1
+fi
+
+if [ -f "${FASTA_FILE}" ]; then
+    echo "  ✓ FASTA: MorexV3_MtPt.fasta"
+else
+    echo "  ✗ FASTA NOT FOUND: ${FASTA_FILE}"
+    exit 1
+fi
+
+# 检查分析脚本
+if [ -f "genome_wide_haplotype_scan.py" ]; then
+    echo "  ✓ genome_wide_haplotype_scan.py found"
+else
+    echo "  ✗ genome_wide_haplotype_scan.py - NOT FOUND"
+    exit 1
+fi
+
+# ============================================================================
+# 运行单倍型数据集构建
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Running Haplotype Database Builder"
+echo "========================================="
+echo "Start: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+echo "Target: Barley Morex_v3 genes"
 echo ""
 
-# 运行扫描脚本（完整基因区间）
+LOG_FILE="logs/genome_scan_local_$(date +%Y%m%d_%H%M%S).log"
+
+# 运行扫描（完整基因区间）
 python genome_wide_haplotype_scan.py \
     --vcf ${VCF_FILE} \
     --gff ${GFF_FILE} \
@@ -134,22 +172,52 @@ python genome_wide_haplotype_scan.py \
 
 EXIT_CODE=${PIPESTATUS[0]}
 
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "✓ Build completed successfully!"
+else
+    echo ""
+    echo "✗ Build failed with exit code: $EXIT_CODE"
+    echo "Check log: $LOG_FILE"
+    tail -100 "$LOG_FILE"
+    exit $EXIT_CODE
+fi
+
+# ============================================================================
+# 结果汇总
+# ============================================================================
+
+echo ""
+echo "========================================="
+echo "  Results Summary"
+echo "========================================="
+
+echo ""
+echo "Database files:"
+ls -lh ${DATABASE_DIR}/ 2>/dev/null || echo "No database files found"
+
+echo ""
+echo "Results files:"
+ls -lh ${RESULTS_DIR}/ 2>/dev/null || echo "No result files found"
+
+# 统计基因数
+if [ -f "${DATABASE_DIR}/summary.csv" ]; then
+    N_GENES=$(tail -n +2 ${DATABASE_DIR}/summary.csv | wc -l)
+    echo ""
+    echo "Total genes processed: ${N_GENES}"
+fi
+
 # ============================================================================
 # 完成
 # ============================================================================
 
 echo ""
 echo "========================================="
-if [ $EXIT_CODE -eq 0 ]; then
-    echo "  Build completed successfully!"
-    echo "  Database: ${DATABASE_DIR}/"
-    ls -lh ${DATABASE_DIR}/ 2>/dev/null
-    echo ""
-    echo "  Results: ${RESULTS_DIR}/"
-    ls -lh ${RESULTS_DIR}/ 2>/dev/null
-else
-    echo "  Build failed (exit code: $EXIT_CODE)"
-    echo "  Check log: ${LOG_FILE}"
-fi
+echo "  Job Complete"
 echo "========================================="
-echo "End time: $(date)"
+echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+echo "Next steps:"
+echo "  1. Check database: ls -la ${DATABASE_DIR}/"
+echo "  2. Check results:  ls -la ${RESULTS_DIR}/"
+echo "  3. View summary:   cat ${DATABASE_DIR}/summary.csv"

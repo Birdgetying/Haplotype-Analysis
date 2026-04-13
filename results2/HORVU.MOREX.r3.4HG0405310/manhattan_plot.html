@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manhattan Plot - Region chr4H:569,705,198-569,709,600</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px;
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;
+                  padding: 20px 30px; border-radius: 10px 10px 0 0; }
+        .header h1 { font-size: 22px; margin-bottom: 8px; }
+        .header-info { font-size: 13px; opacity: 0.9; }
+        .plot-container { padding: 30px; }
+        #manhattan { width: 100%; height: 450px; }
+        .tooltip { position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px;
+                   border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; }
+        .axis text { font-size: 11px; }
+        .axis-label { font-size: 13px; font-weight: 600; }
+        .threshold-line { stroke-dasharray: 5,5; }
+        .legend { display: flex; gap: 20px; padding: 15px 30px; border-top: 1px solid #eee; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Manhattan Plot</h1>
+        <div class="header-info">Region: chr4H:569,705,198 - 569,709,600 | Variants: 18</div>
+    </div>
+    
+    <div class="plot-container">
+        <div id="manhattan"></div>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#3498db;"></div>Variants</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e74c3c;"></div>P &lt; 0.05</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8B0000;"></div>P &lt; 0.01</div>
+        <div class="legend-item"><span style="color:#e74c3c;">---</span> P = 0.05</div>
+        <div class="legend-item"><span style="color:#8B0000;">---</span> P = 0.01</div>
+    </div>
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<script>
+const data = [{"pos": 569705334, "pvalue": 0.7795682354437583, "logp": 0.10814586510667819, "type": "variant"}, {"pos": 569706002, "pvalue": 1.0, "logp": -0.0, "type": "variant"}, {"pos": 569706336, "pvalue": 0.00048687300960959537, "logp": 3.3125843004233326, "type": "variant"}, {"pos": 569707154, "pvalue": 0.02860277131115917, "logp": 1.5435918862123659, "type": "variant"}, {"pos": 569707204, "pvalue": 0.6056918555367392, "logp": 0.2177482660580669, "type": "variant"}, {"pos": 569707222, "pvalue": 0.0006285724992323862, "logp": 3.2016446237843765, "type": "variant"}, {"pos": 569707268, "pvalue": 0.02860277131115917, "logp": 1.5435918862123659, "type": "variant"}, {"pos": 569707320, "pvalue": 0.0008443094546542129, "logp": 3.073498347430365, "type": "variant"}, {"pos": 569707402, "pvalue": 0.11575718121486792, "logp": 0.9364520571977037, "type": "variant"}, {"pos": 569707455, "pvalue": 0.7795682354437583, "logp": 0.10814586510667819, "type": "variant"}, {"pos": 569707508, "pvalue": 0.0008443094546542129, "logp": 3.073498347430365, "type": "variant"}, {"pos": 569708019, "pvalue": 0.0008443094546542129, "logp": 3.073498347430365, "type": "variant"}, {"pos": 569708028, "pvalue": 0.038238109682621126, "logp": 1.4175035853995588, "type": "variant"}, {"pos": 569708724, "pvalue": 0.02860277131115917, "logp": 1.5435918862123659, "type": "variant"}, {"pos": 569708888, "pvalue": 0.23860087283467296, "logp": 0.6223279719540729, "type": "variant"}, {"pos": 569708921, "pvalue": 0.11312695368887626, "logp": 0.9464339075085371, "type": "variant"}, {"pos": 569709003, "pvalue": 0.23860087283467296, "logp": 0.6223279719540729, "type": "variant"}, {"pos": 569709578, "pvalue": 0.23860087283467296, "logp": 0.6223279719540729, "type": "variant"}];
+const margin = {top: 30, right: 40, bottom: 60, left: 70};
+const container = document.getElementById('manhattan');
+const width = container.clientWidth - margin.left - margin.right;
+const height = 450 - margin.top - margin.bottom;
+
+const svg = d3.select('#manhattan')
+    .append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+// 比例尺
+const xScale = d3.scaleLinear()
+    .domain([569705198, 569709600])
+    .range([0, width]);
+
+const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp)) * 1.1 : 5;
+const yScale = d3.scaleLinear()
+    .domain([0, Math.max(maxLogP, 3)])
+    .range([height, 0]);
+
+// 坐标轴
+svg.append('g')
+    .attr('transform', `translate(0,${height})`)
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => (d/1000000).toFixed(2) + 'M'));
+
+svg.append('g')
+    .call(d3.axisLeft(yScale));
+
+// 坐标轴标签
+svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('x', width / 2)
+    .attr('y', height + 45)
+    .attr('text-anchor', 'middle')
+    .text('Position (Mb)');
+
+svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -height / 2)
+    .attr('y', -50)
+    .attr('text-anchor', 'middle')
+    .text('-log10(P-value)');
+
+// 阈值线
+const thresholds = [
+    {value: -Math.log10(0.05), color: '#e74c3c', label: 'P=0.05'},
+    {value: -Math.log10(0.01), color: '#8B0000', label: 'P=0.01'}
+];
+
+thresholds.forEach(t => {
+    if (t.value <= maxLogP) {
+        svg.append('line')
+            .attr('class', 'threshold-line')
+            .attr('x1', 0)
+            .attr('x2', width)
+            .attr('y1', yScale(t.value))
+            .attr('y2', yScale(t.value))
+            .attr('stroke', t.color)
+            .attr('stroke-width', 1.5);
+    }
+});
+
+// 绘制点
+const tooltip = d3.select('#tooltip');
+
+svg.selectAll('circle')
+    .data(data)
+    .enter()
+    .append('circle')
+    .attr('cx', d => xScale(d.pos))
+    .attr('cy', d => yScale(d.logp))
+    .attr('r', 5)
+    .attr('fill', d => {
+        if (d.pvalue < 0.01) return '#8B0000';
+        if (d.pvalue < 0.05) return '#e74c3c';
+        return '#3498db';
+    })
+    .attr('opacity', 0.7)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(event, d) {
+        d3.select(this).attr('r', 8).attr('opacity', 1);
+        tooltip.style('display', 'block')
+            .html(`<strong>Position:</strong> ${d.pos.toLocaleString()}<br>
+                   <strong>P-value:</strong> ${d.pvalue.toExponential(2)}<br>
+                   <strong>-log10(P):</strong> ${d.logp.toFixed(2)}`);
+    })
+    .on('mousemove', function(event) {
+        tooltip.style('left', (event.pageX + 15) + 'px')
+               .style('top', (event.pageY - 10) + 'px');
+    })
+    .on('mouseout', function() {
+        d3.select(this).attr('r', 5).attr('opacity', 0.7);
+        tooltip.style('display', 'none');
+    });
+</script>
+</body>
+</html>

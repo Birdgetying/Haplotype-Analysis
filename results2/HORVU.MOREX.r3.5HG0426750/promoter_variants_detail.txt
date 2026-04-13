@@ -1,0 +1,47 @@
+启动子区域变异分析报告
+============================================================
+基因: HORVU.MOREX.r3.5HG0426750
+染色体: chr5H
+链方向: -
+启动子区域: 16,873,322-16,875,321
+TSS位置: 16,867,965 (正链) 或 16,873,321 (负链)
+变异总数: 36
+
+变异详情:
+------------------------------------------------------------
+  位置: 16,873,323 | 距离TSS: 2bp | REF: A | ALT: G | MAF: 0.077
+  位置: 16,873,334 | 距离TSS: 13bp | REF: G | ALT: GC | MAF: 0.077
+  位置: 16,873,337 | 距离TSS: 16bp | REF: G | ALT: GCC | MAF: 0.077
+  位置: 16,873,396 | 距离TSS: 75bp | REF: TAGCCGAGGGGGTCGGCACGTC | ALT: T | MAF: 0.026
+  位置: 16,873,429 | 距离TSS: 108bp | REF: C | ALT: G | MAF: 0.293
+  位置: 16,873,436 | 距离TSS: 115bp | REF: GGGTGGTCTCCT | ALT: G | MAF: 0.206
+  位置: 16,873,528 | 距离TSS: 207bp | REF: CGT | ALT: C | MAF: 0.029
+  位置: 16,873,553 | 距离TSS: 232bp | REF: A | ALT: G | MAF: 0.334
+  位置: 16,873,571 | 距离TSS: 250bp | REF: AAG | ALT: A | MAF: 0.223
+  位置: 16,873,650 | 距离TSS: 329bp | REF: C | ALT: CAA | MAF: 0.316
+  位置: 16,873,779 | 距离TSS: 458bp | REF: GGTGTTCTCTGACCCTATACCATCCACCTCTTCTCTCTTC | ALT: G | MAF: 0.011
+  位置: 16,874,059 | 距离TSS: 738bp | REF: A | ALT: C | MAF: 0.184
+  位置: 16,874,094 | 距离TSS: 773bp | REF: AAGAAGGCAGACAAGGAG | ALT: A | MAF: 0.017
+  位置: 16,874,179 | 距离TSS: 858bp | REF: TC | ALT: T | MAF: 0.029
+  位置: 16,874,252 | 距离TSS: 931bp | REF: G | ALT: A | MAF: 0.026
+  位置: 16,874,323 | 距离TSS: 1,002bp | REF: GAA | ALT: G | MAF: 0.029
+  位置: 16,874,326 | 距离TSS: 1,005bp | REF: T | ALT: G | MAF: 0.029
+  位置: 16,874,424 | 距离TSS: 1,103bp | REF: TAGAGTAGATGATCA | ALT: T | MAF: 0.029
+  位置: 16,874,461 | 距离TSS: 1,140bp | REF: T | ALT: C | MAF: 0.045
+  位置: 16,874,487 | 距离TSS: 1,166bp | REF: TG | ALT: T | MAF: 0.183
+  位置: 16,874,498 | 距离TSS: 1,177bp | REF: GGGCCTGGATCTGTCCAT | ALT: G | MAF: 0.367
+  位置: 16,874,537 | 距离TSS: 1,216bp | REF: A | ALT: AGAGAGT | MAF: 0.017
+  位置: 16,874,549 | 距离TSS: 1,228bp | REF: A | ALT: AC | MAF: 0.183
+  位置: 16,874,551 | 距离TSS: 1,230bp | REF: AC | ALT: A | MAF: 0.014
+  位置: 16,874,563 | 距离TSS: 1,242bp | REF: G | ALT: A | MAF: 0.026
+  位置: 16,874,600 | 距离TSS: 1,279bp | REF: G | ALT: A | MAF: 0.039
+  位置: 16,874,631 | 距离TSS: 1,310bp | REF: T | ALT: TA | MAF: 0.045
+  位置: 16,874,682 | 距离TSS: 1,361bp | REF: A | ALT: AG | MAF: 0.012
+  位置: 16,874,724 | 距离TSS: 1,403bp | REF: T | ALT: C | MAF: 0.028
+  位置: 16,874,783 | 距离TSS: 1,462bp | REF: G | ALT: C | MAF: 0.184
+  位置: 16,874,819 | 距离TSS: 1,498bp | REF: A | ALT: G | MAF: 0.450
+  位置: 16,874,980 | 距离TSS: 1,659bp | REF: T | ALT: C | MAF: 0.026
+  位置: 16,874,989 | 距离TSS: 1,668bp | REF: A | ALT: AT | MAF: 0.009
+  位置: 16,874,996 | 距离TSS: 1,675bp | REF: G | ALT: A | MAF: 0.025
+  位置: 16,875,158 | 距离TSS: 1,837bp | REF: G | ALT: A | MAF: 0.477
+  位置: 16,875,204 | 距离TSS: 1,883bp | REF: C | ALT: T | MAF: 0.184

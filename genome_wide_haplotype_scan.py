@@ -656,6 +656,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'length': end - start + 1,
             'promoter_length': promoter_length,
             'vcf_file': vcf_file,
+            'vcf_mtime': os.path.getmtime(vcf_file),  # 关键：保存VCF修改时间用于缓存判断
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'exons': gtf_data.get('exons', []),
             'cds': gtf_data.get('cds', [])
@@ -664,7 +665,14 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             json.dump(gene_info_dict, f, indent=2)
         
         if hap_df is None or len(hap_df) == 0:
+            print(f"[WARNING] hap_df 为空，但 hap_sample_df 有 {len(hap_sample_df) if hap_sample_df is not None else 0} 行")
             result_summary['status'] = 'no_variants'
+            return result_summary
+        
+        # 关键检查：如果 hap_sample_df 为空，直接返回
+        if hap_sample_df is None or len(hap_sample_df) == 0:
+            print(f"[WARNING] hap_sample_df 为空，无法继续")
+            result_summary['status'] = 'no_valid_haplotypes'
             return result_summary
         
         n_variants = len(positions) if positions else 0
@@ -708,26 +716,114 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             promoter_start = gene_end + 1
             promoter_end = gene_end + promoter_length
         
+        # **关键修复**：加载所有基因的CDS信息，用于检查启动子变异是否与其他基因重叠
+        all_genes_cds = []  # [(chrom, cds_start, cds_end, gene_id), ...]
+        if gff_file and os.path.exists(gff_file):
+            open_func_gff = gzip.open if gff_file.endswith('.gz') else open
+            is_gff3_format = gff_file.endswith('.gff3') or gff_file.endswith('.gff')
+            current_gene_id = None
+            
+            try:
+                with open_func_gff(gff_file, 'rt') as f:
+                    for line in f:
+                        if line.startswith('#'):
+                            continue
+                        parts = line.strip().split('\t')
+                        if len(parts) < 9:
+                            continue
+                        
+                        feature_type = parts[2]
+                        gff_chrom = parts[0]
+                        gff_start = int(parts[3])
+                        gff_end = int(parts[4])
+                        attr = parts[8]
+                        
+                        # 解析基因ID
+                        if is_gff3_format:
+                            if feature_type == 'gene':
+                                for item in attr.split(';'):
+                                    if item.startswith('ID='):
+                                        current_gene_id = item[3:]
+                                        break
+                            elif feature_type == 'CDS' and current_gene_id:
+                                for item in attr.split(';'):
+                                    if item.startswith('Parent='):
+                                        parent_id = item[7:]
+                                        # 如果Parent是当前关注的基因，跳过（不检查自己）
+                                        if parent_id == gene_id:
+                                            break
+                                        all_genes_cds.append((gff_chrom, gff_start, gff_end, parent_id))
+                                        break
+                        else:
+                            # GTF格式
+                            if feature_type == 'gene':
+                                for item in attr.split(';'):
+                                    item = item.strip()
+                                    if item.startswith('gene_id "'):
+                                        current_gene_id = item[9:-1]
+                                        break
+                            elif feature_type == 'CDS':
+                                for item in attr.split(';'):
+                                    item = item.strip()
+                                    if item.startswith('gene_id "'):
+                                        cds_gene_id = item[9:-1]
+                                        if cds_gene_id != gene_id:  # 不检查自己
+                                            all_genes_cds.append((gff_chrom, gff_start, gff_end, cds_gene_id))
+                                        break
+            except Exception as e:
+                print(f"[WARNING] 加载其他基因CDS信息失败: {e}")
+            
+            print(f"[INFO] 加载了 {len(all_genes_cds)} 个其他基因的CDS区域（用于重叠检查）")
+        
         # 提取启动子区域的变异
         promoter_variants = []
         if positions:
             for pos in positions:
                 if promoter_start <= pos <= promoter_end:
                     info = extractor.variant_info.get(pos, {}) if hasattr(extractor, 'variant_info') else {}
-                    promoter_variants.append({
-                        'position': pos,
-                        'ref': info.get('ref', ''),
-                        'alt': info.get('alt', ''),
-                        'distance_to_tss': abs(pos - gene_start) if strand == '+' else abs(pos - gene_end),
-                        'is_sv': info.get('is_sv', False),
-                        'maf': info.get('maf', 0.5)
-                    })
+                    
+                    # **关键检查**：该位置是否在其他基因的CDS区域内
+                    overlaps_cds = False
+                    overlapping_genes = []
+                    
+                    for cds_chrom, cds_start, cds_end, cds_gene_id in all_genes_cds:
+                        if cds_chrom == chrom and cds_start <= pos <= cds_end:
+                            overlaps_cds = True
+                            overlapping_genes.append(cds_gene_id)
+                    
+                    # 如果与CDS重叠，标记但保留（让用户知道）
+                    if overlaps_cds:
+                        promoter_variants.append({
+                            'position': pos,
+                            'ref': info.get('ref', ''),
+                            'alt': info.get('alt', ''),
+                            'distance_to_tss': abs(pos - gene_start) if strand == '+' else abs(pos - gene_end),
+                            'is_sv': info.get('is_sv', False),
+                            'maf': info.get('maf', 0.5),
+                            'overlaps_cds': True,
+                            'overlapping_genes': ';'.join(overlapping_genes)
+                        })
+                    else:
+                        promoter_variants.append({
+                            'position': pos,
+                            'ref': info.get('ref', ''),
+                            'alt': info.get('alt', ''),
+                            'distance_to_tss': abs(pos - gene_start) if strand == '+' else abs(pos - gene_end),
+                            'is_sv': info.get('is_sv', False),
+                            'maf': info.get('maf', 0.5),
+                            'overlaps_cds': False,
+                            'overlapping_genes': ''
+                        })
         
         # 保存启动子变异信息
         if promoter_variants:
             promoter_df = pd.DataFrame(promoter_variants)
             promoter_df.to_csv(os.path.join(gene_data_dir, 'promoter_variants.csv'), index=False)
             print(f"[INFO] 启动子变异信息已保存: {len(promoter_df)} 个变异")
+            
+            # 统计CDS重叠的变异数量
+            n_overlaps_cds = sum(1 for v in promoter_variants if v.get('overlaps_cds', False))
+            n_pure_promoter = len(promoter_variants) - n_overlaps_cds
             
             # 同时保存详细文本报告
             with open(os.path.join(gene_data_dir, 'promoter_variants_detail.txt'), 'w') as f:
@@ -739,12 +835,17 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 f.write(f"启动子区域: {promoter_start:,}-{promoter_end:,}\n")
                 f.write(f"TSS位置: {gene_start:,} (正链) 或 {gene_end:,} (负链)\n")
                 f.write(f"变异总数: {len(promoter_variants)}\n")
+                f.write(f"  - 纯启动子变异: {n_pure_promoter}\n")
+                f.write(f"  - 与其他基因CDS重叠: {n_overlaps_cds}\n")
                 f.write(f"\n变异详情:\n")
                 f.write(f"-" * 60 + "\n")
                 for v in promoter_variants:
                     sv_marker = " [SV]" if v['is_sv'] else ""
+                    cds_marker = ""
+                    if v.get('overlaps_cds', False):
+                        cds_marker = f" [CDS重叠: {v.get('overlapping_genes', 'N/A')}]"
                     f.write(f"  位置: {v['position']:,} | 距离TSS: {v['distance_to_tss']:,}bp | "
-                           f"REF: {v['ref']} | ALT: {v['alt']} | MAF: {v['maf']:.3f}{sv_marker}\n")
+                           f"REF: {v['ref']} | ALT: {v['alt']} | MAF: {v['maf']:.3f}{sv_marker}{cds_marker}\n")
         else:
             print(f"[INFO] 启动子区域未发现变异")
         
@@ -752,9 +853,9 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         print(f"\n[DATA FORMAT] 样本-单倍型映射表 (hap_sample_df)")
         print(f"  行数: {len(hap_sample_df)}, 列数: {len(hap_sample_df.columns)}")
         print(f"  列名: {list(hap_sample_df.columns)}")
-        if len(hap_sample_df) > 0:
-            print(f"  SampleID列数据类型: {hap_sample_df.iloc[:, 0].dtype if 'SampleID' in hap_sample_df.columns else 'N/A'}")
-            print(f"  SampleID示例 (前5个): {hap_sample_df.iloc[:5, 0].tolist() if 'SampleID' in hap_sample_df.columns else hap_sample_df.iloc[:5, 0].tolist()}")
+        if len(hap_sample_df) > 0 and 'SampleID' in hap_sample_df.columns:
+            print(f"  SampleID列数据类型: {hap_sample_df['SampleID'].dtype}")
+            print(f"  SampleID示例 (前5个): {hap_sample_df['SampleID'].head(5).tolist()}")
         print()
         
         print(f"[DATA FORMAT] 表型数据 (pheno_df)")
@@ -774,37 +875,39 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         # 保存样本-单倍型对应表
         hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
         
-        # **新增**: 保存子集VCF文件（与原始数据完全一致）
-        # 注意：在合并表型数据之前保存，确保包含所有VCF样本
-        try:
-            subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
-            # 获取所有在hap_sample_df中的样本（这些样本在VCF中有基因型数据）
-            vcf_sample_ids = hap_sample_df['SampleID'].tolist()
-            print(f"[DEBUG] 准备保存VCF: {subset_vcf_path}, 样本数: {len(vcf_sample_ids)}")
-            print(f"[DEBUG] VCF区域: {chrom}:{start}-{end}")
-            
-            # 关键修复：如果 sample_ids 为空或提取失败，保存所有样本
-            if not vcf_sample_ids:
-                print(f"[WARNING] 样本ID列表为空，保存所有样本")
-                create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, sample_ids=None)
-            else:
-                create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, 
-                                sample_ids=vcf_sample_ids)
-            
-            # 验证 VCF 文件是否为空
-            vcf_size = os.path.getsize(subset_vcf_path)
-            if vcf_size == 0:
-                print(f"[ERROR] 生成的 VCF 文件为空！重新提取所有样本...")
-                create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, sample_ids=None)
+        # **保存完整VCF子集**（与原始数据完全一致）
+        # 注意：无索引时会全文件扫描，耗时较长但数据完整
+        subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
+        if not os.path.exists(subset_vcf_path) or os.path.getsize(subset_vcf_path) < 1024:
+            try:
+                # 获取所有在hap_sample_df中的样本（这些样本在VCF中有基因型数据）
+                vcf_sample_ids = hap_sample_df['SampleID'].tolist()
+                print(f"[INFO] 开始保存VCF子集: {subset_vcf_path}")
+                print(f"[INFO] VCF区域: {chrom}:{start}-{end}, 样本数: {len(vcf_sample_ids)}")
+                
+                # 保存VCF子集（包含所有样本的基因型数据）
+                if not vcf_sample_ids:
+                    print(f"[WARNING] 样本ID列表为空，保存所有样本")
+                    create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, sample_ids=None)
+                else:
+                    create_subset_vcf(vcf_file, chrom, start, end, subset_vcf_path, 
+                                    sample_ids=vcf_sample_ids)
+                
+                # 验证 VCF 文件是否成功生成
                 vcf_size = os.path.getsize(subset_vcf_path)
-            
-            print(f"[INFO] 子集VCF已保存: {subset_vcf_path} ({vcf_size/1024:.1f} KB)")
-        except Exception as e:
-            import traceback
-            print(f"[WARNING] 保存子集VCF失败: {e}")
-            print(f"[WARNING] 错误详情: {traceback.format_exc()}")
+                if vcf_size > 1024:
+                    print(f"[INFO] VCF子集已保存: {subset_vcf_path} ({vcf_size/1024:.1f} KB)")
+                else:
+                    print(f"[WARNING] VCF子集文件过小 ({vcf_size} bytes)，可能提取失败")
+            except Exception as e:
+                import traceback
+                print(f"[WARNING] 保存VCF子集失败: {e}")
+                print(f"[WARNING] 错误详情: {traceback.format_exc()}")
+        else:
+            print(f"[INFO] VCF 子集已存在: {subset_vcf_path} ({os.path.getsize(subset_vcf_path)/1024:.1f} KB)")
         
         merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
+        print(f"[INFO] 表型合并完成: merged 行数={len(merged)}")
         
         print(f"[DATA FORMAT] 合并后的表型数据 (merged)")
         print(f"  行数: {len(merged)} (hap_sample_df: {len(hap_sample_df)}, pheno_df: {len(pheno_df)})")
@@ -830,6 +933,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         if len(merged) == 0:
             print(f"[WARNING] 表型数据匹配失败，保存已有数据后退出")
             # 即使表型不匹配，也保存单倍型统计（不含表型）
+            print(f"[INFO] 开始保存 haplotype_stats.csv（无表型）...")
             hap_stats_list = []
             hap_sample_counts = hap_sample_df['Hap_Name'].value_counts()
             for hap_name, count in hap_sample_counts.items():
@@ -843,12 +947,15 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             hap_stats_df = pd.DataFrame(hap_stats_list)
             hap_stats_df.to_csv(os.path.join(gene_data_dir, 'haplotype_stats.csv'), index=False)
             print(f"[INFO] 已保存 haplotype_stats.csv（无表型数据）")
+            print(f"[INFO] 返回结果: no_phenotype_match")
             
             result_summary['status'] = 'no_phenotype_match'
             return result_summary
         
         # 保存合并后的表型数据
+        print(f"[INFO] 保存 phenotype_data.csv...")
         merged.to_csv(os.path.join(gene_data_dir, 'phenotype_data.csv'), index=False)
+        print(f"[INFO] phenotype_data.csv 已保存")
         
         # 获取表型列
         pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
@@ -895,8 +1002,10 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         
         hap_stats_df = pd.DataFrame(hap_stats_list)
         hap_stats_df.to_csv(os.path.join(gene_data_dir, 'haplotype_stats.csv'), index=False)
+        print(f"[INFO] haplotype_stats.csv 已保存 ({n_haplotypes} 个单倍型)")
         
         result_summary['status'] = 'success'
+        print(f"[INFO] 基因处理完成: {gene_id}, status=success")
         return result_summary
         
     except Exception as e:
@@ -1216,10 +1325,22 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
             is_numeric = False
         
         if is_numeric:
-            # 第一列是数值，说明没有样本 ID 列，需要自动生成
+            # 第一列是数值，说明没有样本 ID 列，需要从 VCF 读取真实样本ID
             print(f"\n  ⚠️  检测到表型文件无样本ID列（第一列为数值）")
             print(f"  第一列示例值: {first_col_sample}")
-            print(f"  自动添加样本ID列: Sample_001, Sample_002, ...")
+            
+            # 关键修复：从 VCF 读取真实样本ID
+            vcf_samples = []
+            if vcf_file and os.path.exists(vcf_file):
+                try:
+                    import pysam
+                    vcf = pysam.VariantFile(vcf_file)
+                    vcf_samples = list(vcf.header.samples)
+                    vcf.close()
+                    print(f"  从 VCF 读取到 {len(vcf_samples)} 个真实样本ID")
+                    print(f"  VCF 样本ID示例: {vcf_samples[:5]}")
+                except Exception as e:
+                    print(f"  [WARNING] 读取 VCF 样本失败: {e}")
             
             # 重新读取，所有列都作为表型数据
             pheno_df = pd.read_csv(pheno_file, sep=separator, header=None)
@@ -1236,9 +1357,17 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 pheno_df = pheno_df.iloc[1:].reset_index(drop=True)
                 print(f"  检测到：有表头，列名: {list(pheno_df.columns)}")
             
-            # 添加样本 ID
-            pheno_df.insert(0, 'SampleID', [f'Sample_{i+1:03d}' for i in range(len(pheno_df))])
-            print(f"  已添加 SampleID 列（格式: Sample_001, Sample_002, ...）")
+            # 关键修复：使用 VCF 的真实样本ID
+            if len(vcf_samples) >= len(pheno_df):
+                pheno_df.insert(0, 'SampleID', vcf_samples[:len(pheno_df)])
+                print(f"  已添加 SampleID 列（从 VCF 读取，示例: {vcf_samples[:3]}）")
+            elif len(vcf_samples) > 0:
+                print(f"  [WARNING] VCF 样本数({len(vcf_samples)}) < 表型行数({len(pheno_df)})")
+                pheno_df.insert(0, 'SampleID', vcf_samples + [f'Unknown_{i}' for i in range(len(pheno_df) - len(vcf_samples))])
+            else:
+                print(f"  [WARNING] 无法读取 VCF 样本，使用自动生成ID")
+                pheno_df.insert(0, 'SampleID', [f'Sample_{i+1:03d}' for i in range(len(pheno_df))])
+            
             
         else:
             # 第一列是字符串，可能是样本 ID
@@ -1321,42 +1450,59 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     cached_info = json.load(f)
                 cached_vcf_mtime = cached_info.get('vcf_mtime', 0)
                 
+                # 关键修复：如果旧缓存没有 vcf_mtime，自动补充
+                if cached_vcf_mtime == 0:
+                    print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHE FIX] 旧缓存缺少 vcf_mtime，自动补充")
+                    cached_info['vcf_mtime'] = vcf_mtime
+                    with open(cached_gene_info_file, 'w') as f:
+                        json.dump(cached_info, f, indent=2)
+                    cached_vcf_mtime = vcf_mtime  # 设置为当前时间，下次就能命中缓存
+                
                 if vcf_mtime <= cached_vcf_mtime:
-                    print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHED] 从数据库加载")
-                    # 从缓存加载统计信息
-                    hap_stats_file = os.path.join(gene_data_dir, 'haplotype_stats.csv')
-                    if os.path.exists(hap_stats_file):
-                        hap_stats = pd.read_csv(hap_stats_file)
-                        result_summary = {
-                            'gene_id': gene_id,
-                            'chrom': cached_info.get('chrom'),
-                            'start': cached_info.get('start'),
-                            'end': cached_info.get('end'),
-                            'strand': cached_info.get('strand'),
-                            'n_variants': len(pd.read_csv(os.path.join(gene_data_dir, 'variant_info.csv'))) if os.path.exists(os.path.join(gene_data_dir, 'variant_info.csv')) else 0,
-                            'n_haplotypes': len(hap_stats),
-                            'n_samples': int(hap_stats['haplotype_count'].sum()),
-                            'data_folder': gene_id,
-                            'results_folder': gene_id if results_dir else None,
-                            'status': 'success'
-                        }
+                    # 关键：验证缓存文件完整性
+                    required_files = ['gene_info.json', 'haplotype_data.csv', 'haplotype_samples.csv', 'variant_info.csv']
+                    missing_files = [f for f in required_files if not os.path.exists(os.path.join(gene_data_dir, f))]
+                    
+                    if missing_files:
+                        print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHE INCOMPLETE] 缺少文件 {missing_files}，重新处理")
                     else:
-                        result_summary = {
-                            'gene_id': gene_id,
-                            'chrom': cached_info.get('chrom'),
-                            'start': cached_info.get('start'),
-                            'end': cached_info.get('end'),
-                            'strand': cached_info.get('strand'),
-                            'n_variants': 0,
-                            'n_haplotypes': 0,
-                            'n_samples': 0,
-                            'data_folder': gene_id,
-                            'results_folder': gene_id if results_dir else None,
-                            'status': 'cached_no_stats'
-                        }
-                    all_results.append(result_summary)
-                    processed += 1
-                    continue
+                        print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHED] 从数据库加载")
+                        # 从缓存加载统计信息
+                        hap_stats_file = os.path.join(gene_data_dir, 'haplotype_stats.csv')
+                        if os.path.exists(hap_stats_file):
+                            hap_stats = pd.read_csv(hap_stats_file)
+                            # 安全检查：确保列存在
+                            n_samples = int(hap_stats['haplotype_count'].sum()) if 'haplotype_count' in hap_stats.columns else 0
+                            result_summary = {
+                                'gene_id': gene_id,
+                                'chrom': cached_info.get('chrom'),
+                                'start': cached_info.get('start'),
+                                'end': cached_info.get('end'),
+                                'strand': cached_info.get('strand'),
+                                'n_variants': len(pd.read_csv(os.path.join(gene_data_dir, 'variant_info.csv'))) if os.path.exists(os.path.join(gene_data_dir, 'variant_info.csv')) else 0,
+                                'n_haplotypes': len(hap_stats),
+                                'n_samples': n_samples,
+                                'data_folder': gene_id,
+                                'results_folder': gene_id if results_dir else None,
+                                'status': 'success'
+                            }
+                        else:
+                            result_summary = {
+                                'gene_id': gene_id,
+                                'chrom': cached_info.get('chrom'),
+                                'start': cached_info.get('start'),
+                                'end': cached_info.get('end'),
+                                'strand': cached_info.get('strand'),
+                                'n_variants': 0,
+                                'n_haplotypes': 0,
+                                'n_samples': 0,
+                                'data_folder': gene_id,
+                                'results_folder': gene_id if results_dir else None,
+                                'status': 'cached_no_stats'
+                            }
+                        all_results.append(result_summary)
+                        processed += 1
+                        continue
                 else:
                     print(f"  [{processed+1}/{total_genes}] {gene_id}: VCF已更新，重新扫描")
             except Exception as e:
@@ -1369,8 +1515,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
         all_results.append(result)
         processed += 1
         
-        # 成功处理后，保存 VCF 修改时间到 gene_info.json
-        if result['status'] == 'success':
+        # 关键修复：只要处理过（无论成功与否），都保存 VCF 修改时间，避免重复扫描
+        if result.get('data_folder'):
             gene_info_file = os.path.join(database_dir, result['data_folder'], 'gene_info.json')
             if os.path.exists(gene_info_file):
                 try:

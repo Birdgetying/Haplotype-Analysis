@@ -1,0 +1,13 @@
+启动子区域变异分析报告
+============================================================
+基因: CSIAAS4BG0701800HC
+染色体: Chr4B
+链方向: +
+启动子区域: 547,158,928-547,160,927
+TSS位置: 547,160,928 (正链) 或 547,162,875 (负链)
+变异总数: 2
+
+变异详情:
+------------------------------------------------------------
+  位置: 547,160,672 | 距离TSS: 256bp | REF: G | ALT: T | MAF: 0.485
+  位置: 547,160,743 | 距离TSS: 185bp | REF: AT | ALT: ATTAAGGCTGCGCTTGGTATGGGGGTATTTTTATACACCTGTATTTATTTTACAGGTGTATAATACCGGCCACACTTGATTTTGAGCTGGAAAGAAAAACGACCGACGAAGGTCTGTATATTTTACAGGGGTATTGCGGCGTGAAACGCCAATCCAATCAGGGCC | MAF: 0.104 [SV]

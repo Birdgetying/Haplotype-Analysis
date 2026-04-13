@@ -108,41 +108,41 @@ echo "  Results:  ${RESULTS_DIR}"
 
 
 # ============================================================================
-# 数据检查 (CS-IAAS T2T v1.1)
+# 数据检查（大麦 Barley Morex_v3）
 # ============================================================================
 
 echo ""
 echo "[Step 3] Checking data files..."
 
-# CS-IAAS 数据路径
-VCF_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Core819Samples_ALL.vcf.gz"
-PHENO_FILE="/storage/public/home/2024110093/data/Variation/CSIAAS/Phe.txt"
-GFF_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1_HC.gff3"
-FASTA_FILE="/storage/public/home/2024110093/data/genomes/CS_T2T_v1.1/CS-IAAS_v1.1.fasta"
+# 大麦 Morex_v3 数据路径
+VCF_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/00.Rawdata/chrALL.impute.vcf.gz"
+PHENO_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/04.Gemma/00.pheno/K.rep1.SA.gemma"
+GFF_FILE="/home/qinz/data/genomes/Morex_v3/gene_annotation/Hv_Morex.pgsb.Jul2020.gff3"
+FASTA_FILE="/home/qinz/data/genomes/Morex_v3/MorexV3_MtPt.fasta"
 
 if [ -f "${VCF_FILE}" ]; then
-    echo "  ✓ VCF: Core819Samples_ALL.vcf.gz"
+    echo "  ✓ VCF: chrALL.impute.vcf.gz"
 else
     echo "  ✗ VCF NOT FOUND: ${VCF_FILE}"
     exit 1
 fi
 
 if [ -f "${PHENO_FILE}" ]; then
-    echo "  ✓ Phenotype: Phe.txt"
+    echo "  ✓ Phenotype: K.rep1.SA.gemma"
 else
     echo "  ✗ Phenotype NOT FOUND: ${PHENO_FILE}"
     exit 1
 fi
 
 if [ -f "${GFF_FILE}" ]; then
-    echo "  ✓ GFF3: CS-IAAS_v1.1_HC.gff3"
+    echo "  ✓ GFF3: Hv_Morex.pgsb.Jul2020.gff3"
 else
     echo "  ✗ GFF3 NOT FOUND: ${GFF_FILE}"
     exit 1
 fi
 
 if [ -f "${FASTA_FILE}" ]; then
-    echo "  ✓ FASTA: CS-IAAS_v1.1.fasta"
+    echo "  ✓ FASTA: MorexV3_MtPt.fasta"
 else
     echo "  ✗ FASTA NOT FOUND: ${FASTA_FILE}"
     exit 1
@@ -167,9 +167,7 @@ echo "  Running Haplotype Database Builder"
 echo "========================================="
 echo "Start: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
-echo "Target genes:"
-echo "  - CSIAAS1BG1157200HC (di19)"
-echo "  - CSIAAS4BG0701800HC (hox)"
+echo "Target: Barley Morex_v3 genes"
 echo ""
 
 LOG_FILE="logs/genome_scan_${JSUB_JOBID}.log"
