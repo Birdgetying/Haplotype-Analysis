@@ -1503,16 +1503,18 @@ class HaplotypeExtractor:
         
         对于不同变异类型，统一返回单字符以保证序列格式一致：
         - SNP: 返回实际碱基 (A/T/G/C)
-        - 插入(INS): 返回 '+' 
-        - 缺失(DEL): 返回 '-'
+        - 插入(INS): 返回 '+' (会在variant_info中记录具体插入长度)
+        - 缺失(DEL): 返回 '-' (会在variant_info中记录具体缺失长度)
         """
         # 判断变异类型，确定如何展示ALT
         if len(ref) == 1 and len(alt0) == 1:
             # SNP: 直接用实际碱基
             alt_repr = alt0.upper()
         elif len(alt0) > len(ref):  # 插入
+            # 插入：返回 + 符号，具体长度记录在variant_info中
             alt_repr = '+'  # Insertion 使用 + 符号
         else:  # 缺失
+            # 缺失：返回 - 符号，具体长度记录在variant_info中
             alt_repr = '-'  # Deletion 使用 - 符号
         ref_repr = ref[0].upper() if ref else 'N'  # REF统一取第一个字符
         
@@ -4616,7 +4618,10 @@ class ReportGenerator:
                 'maf': float(info.get('maf', 0.5)),
                 'missing_rate': float(info.get('missing_rate', 0.0)),
                 'annotation': ann,
-                'functional_ann': functional_ann
+                'functional_ann': functional_ann,
+                # **关键修复**：添加启动子变异CDS重叠信息
+                'overlaps_cds': info.get('overlaps_cds', False),
+                'overlapping_genes': info.get('overlapping_genes', '')
             })
 
         lead_pos = None
@@ -5423,6 +5428,15 @@ var currentFilter = { maf: 0.05, missingRate: 0.2 };
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
     
+    // **关键修复**：检查启动子变异是否与其他基因CDS重叠
+    // 如果overlaps_cds为true，说明这个"启动子变异"实际位于其他基因的编码区
+    // 应该将其归类为'missense'或'synonymous'（而不是promoter）
+    if (a === 'promoter' && d.overlaps_cds === true) {
+        // 如果overlapping_genes字段存在，说明与其他基因CDS重叠
+        // 将其归类为other，避免被promoter过滤器误选
+        return 'other';
+    }
+    
     // 处理 missense 变体（包括各种亚型）
     if (a.indexOf('missense') !== -1) {
         return 'missense';
@@ -5436,7 +5450,11 @@ function annNorm(d) {
         if (fa.indexOf('synonymous') !== -1) return 'synonymous';
         if (fa.indexOf('utr') !== -1) return 'UTR';
         if (fa.indexOf('intron') !== -1) return 'intron';
-        if (fa.indexOf('promoter') !== -1) return 'promoter';
+        if (fa.indexOf('promoter') !== -1) {
+            // 再次检查overlaps_cds
+            if (d.overlaps_cds === true) return 'other';
+            return 'promoter';
+        }
         return 'other';
     }
     
