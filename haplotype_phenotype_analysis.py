@@ -5260,11 +5260,12 @@ class ReportGenerator:
                     # 获取位置信息
                     pos = display_positions[idx] if idx < len(display_positions) else None
                     
-                    # **关键修复**：对于+/-，根据variant_info的len_diff显示具体数值
+                    # **关键修复**：对于+/-或I/D，根据variant_info的len_diff显示具体数值
                     # 例如：+2bp（插入2个碱基）、-1bp（缺失1个碱基）
+                    # 支持两种格式：新格式(+/-)和旧格式(I/D)
                     display_base = base
                     actual_type = base  # 实际用于确定颜色的类型
-                    if base in ('+', '-') and pos and variant_info and pos in variant_info:
+                    if base in ('+', '-', 'I', 'D') and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         if len_diff > 0:  # 插入: alt比ref长
                             display_base = f"+{len_diff}bp"  # 例如：+2bp
