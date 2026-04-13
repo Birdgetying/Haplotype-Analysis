@@ -8894,7 +8894,7 @@ class HaplotypePhenotypeAnalyzer:
                     try:
                         variant_info_df = pd.read_csv(variant_info_path)
                         preloaded_data['variant_info'] = {
-                            row['position']: {
+                            int(row['position']): {  # 强制转换为整数，确保与VCF的pos类型一致
                                 'ref': row.get('ref', ''),
                                 'alt': row.get('alt', ''),
                                 'len_diff': row.get('len_diff', 0),
