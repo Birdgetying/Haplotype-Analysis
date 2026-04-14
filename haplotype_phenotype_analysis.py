@@ -5169,12 +5169,12 @@ class ReportGenerator:
         # HTML表格 - 宽度与SVG精确匹配
         table_width = svg_width  # 表格宽度与SVG一致
         html += f'''<table class="data-table" style="width:{table_width}px;">
-<thead><tr>
+<thead><tr style="height:45px;">
     <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;">Haplotype</th>
     <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>
     <th class="box-cell" style="vertical-align:middle;">Phenotype</th>
-    <th style="width:70px;min-width:70px;max-width:70px;text-align:center;vertical-align:middle;">
-        <button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;font-size:11px;font-weight:600;">Copy All</button>
+    <th style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;">
+        <button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy All</button>
     </th>\n'''
         
         for pos in display_positions:
@@ -5310,9 +5310,9 @@ class ReportGenerator:
             # 添加复制样本按钮列（在 n 列之前）
             samples_for_hap = hap_samples_map.get(hap, [])
             samples_str = ','.join(samples_for_hap) if samples_for_hap else ''
-            html += f'<td style="width:70px;min-width:70px;max-width:70px;text-align:center;vertical-align:middle;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:10px;font-weight:500;white-space:nowrap;">Copy</button></td>\n'
+            html += f'<td style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;transition:all 0.2s;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy</button></td>\n'
             
-            html += f'<td class="n-cell">{cnt}</td></tr>\n'
+            html += f'<td class="n-cell" style="padding-left:15px;">{cnt}</td></tr>\n'
         
         # 表格底部：共用坐标轴行（三列分开对应）
         html += '<tr style="height:30px;">'
@@ -5353,10 +5353,13 @@ class ReportGenerator:
         html += '</td>\n'
         
         # 第4列：复制样本列（空）
-        html += '<td style="border:none;"></td>\n'
+        html += '<td style="width:80px;min-width:80px;max-width:80px;border:none;"></td>\n'
         
-        # 剩余列（序列+n）
-        html += f'<td colspan="{len(display_positions)+1}" style="border:none;"></td>\n'
+        # 第5列：n 列（空）
+        html += '<td style="width:40px;min-width:40px;max-width:40px;border:none;"></td>\n'
+        
+        # 剩余列（序列）
+        html += f'<td colspan="{len(display_positions)}" style="border:none;"></td>\n'
         html += '</tr>\n'
         
         html += r'''</tbody></table>
@@ -5433,24 +5436,36 @@ function copySamples(hapName) {
     var btn = document.querySelector(`button.copy-samples-btn[onclick="copySamples('${hapName}')"]`);
     if (!btn) return;
     
+    // 添加点击反馈
+    btn.style.transform = 'scale(0.95)';
+    btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)';
+    
     var samples = btn.getAttribute('data-samples');
     if (!samples) {
         alert('No samples for ' + hapName);
+        btn.style.transform = '';
+        btn.style.boxShadow = '';
         return;
     }
     
     // 复制到剪贴板
     navigator.clipboard.writeText(samples).then(function() {
-        // 静默成功，不显示提示
+        // 恢复按钮样式
+        setTimeout(function() {
+            btn.style.transform = '';
+            btn.style.boxShadow = '';
+        }, 150);
     }).catch(function(err) {
-        // 降级方案：使用传统方法
         var textArea = document.createElement('textarea');
         textArea.value = samples;
         document.body.appendChild(textArea);
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        // 静默成功
+        setTimeout(function() {
+            btn.style.transform = '';
+            btn.style.boxShadow = '';
+        }, 150);
     });
 }
 
