@@ -5170,11 +5170,11 @@ class ReportGenerator:
         table_width = svg_width  # 表格宽度与SVG一致
         html += f'''<table class="data-table" style="width:{table_width}px;">
 <thead><tr>
-    <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;height:60px;">Haplotype</th>
-    <th class="effect-cell" style="vertical-align:middle;height:60px;">Effect (vs Grand Mean)</th>
-    <th class="box-cell" style="vertical-align:middle;height:60px;">Phenotype</th>
-    <th style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;height:60px;">
-        <button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:10px;">Copy All</button>
+    <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;">Haplotype</th>
+    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>
+    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>
+    <th style="width:70px;min-width:70px;max-width:70px;text-align:center;vertical-align:middle;">
+        <button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;font-size:11px;font-weight:600;">Copy All</button>
     </th>\n'''
         
         for pos in display_positions:
@@ -5186,7 +5186,7 @@ class ReportGenerator:
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
-        html += '<th style="width:40px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
+        html += '<th style="width:40px;vertical-align:middle;">n</th></tr></thead><tbody>\n'
         
         # 数据行
         for i, hap in enumerate(top_haps):
@@ -5307,10 +5307,10 @@ class ReportGenerator:
                     
                     html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
-            # 添加复制样本按钮列
+            # 添加复制样本按钮列（在 n 列之前）
             samples_for_hap = hap_samples_map.get(hap, [])
             samples_str = ','.join(samples_for_hap) if samples_for_hap else ''
-            html += f'<td style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:9px;white-space:nowrap;">Copy</button></td>\n'
+            html += f'<td style="width:70px;min-width:70px;max-width:70px;text-align:center;vertical-align:middle;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:10px;font-weight:500;white-space:nowrap;">Copy</button></td>\n'
             
             html += f'<td class="n-cell">{cnt}</td></tr>\n'
         
@@ -5441,14 +5441,7 @@ function copySamples(hapName) {
     
     // 复制到剪贴板
     navigator.clipboard.writeText(samples).then(function() {
-        // 成功提示
-        var originalText = btn.innerText;
-        btn.innerText = 'Copied!';
-        btn.style.background = '#27ae60';
-        setTimeout(function() {
-            btn.innerText = originalText;
-            btn.style.background = '#3498db';
-        }, 1500);
+        // 静默成功，不显示提示
     }).catch(function(err) {
         // 降级方案：使用传统方法
         var textArea = document.createElement('textarea');
@@ -5457,14 +5450,7 @@ function copySamples(hapName) {
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        
-        var originalText = btn.innerText;
-        btn.innerText = 'Copied!';
-        btn.style.background = '#27ae60';
-        setTimeout(function() {
-            btn.innerText = originalText;
-            btn.style.background = '#3498db';
-        }, 1500);
+        // 静默成功
     });
 }
 
@@ -5486,14 +5472,7 @@ function copyAllSamples() {
     }
     
     navigator.clipboard.writeText(allText).then(function() {
-        var btn = document.getElementById('copyAllBtn');
-        var originalText = btn.innerText;
-        btn.innerText = 'Copied All!';
-        btn.style.background = '#27ae60';
-        setTimeout(function() {
-            btn.innerText = originalText;
-            btn.style.background = '#3498db';
-        }, 1500);
+        // 静默成功
     }).catch(function(err) {
         var textArea = document.createElement('textarea');
         textArea.value = allText;
@@ -5501,15 +5480,7 @@ function copyAllSamples() {
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        
-        var btn = document.getElementById('copyAllBtn');
-        var originalText = btn.innerText;
-        btn.innerText = 'Copied All!';
-        btn.style.background = '#27ae60';
-        setTimeout(function() {
-            btn.innerText = originalText;
-            btn.style.background = '#3498db';
-        }, 1500);
+        // 静默成功
     });
 }
 

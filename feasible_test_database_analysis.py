@@ -17,12 +17,25 @@ from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer
 DATABASE_DIR = "d:/Desktop/project1/database"
 BASE_OUTPUT_DIR = "d:/Desktop/project1/results2"
 
-# 获取数据库中所有基因文件夹
-gene_folders = [d for d in os.listdir(DATABASE_DIR) 
-                if os.path.isdir(os.path.join(DATABASE_DIR, d)) and 
-                os.path.exists(os.path.join(DATABASE_DIR, d, 'gene_info.json'))]
+# 优先使用 database 目录，如果为空则使用 results2 中的现有数据
+if os.path.exists(DATABASE_DIR):
+    gene_folders = [d for d in os.listdir(DATABASE_DIR) 
+                    if os.path.isdir(os.path.join(DATABASE_DIR, d)) and 
+                    os.path.exists(os.path.join(DATABASE_DIR, d, 'gene_info.json'))]
+else:
+    gene_folders = []
 
-print(f"[INFO] 数据库中找到 {len(gene_folders)} 个基因:")
+# 如果 database 目录为空，使用 results2 中的现有基因
+if not gene_folders:
+    print("[WARNING] database 目录为空，使用 results2 中的现有基因")
+    if os.path.exists(BASE_OUTPUT_DIR):
+        gene_folders = [d for d in os.listdir(BASE_OUTPUT_DIR) 
+                        if os.path.isdir(os.path.join(BASE_OUTPUT_DIR, d))]
+    else:
+        print(f"[ERROR] results2 目录也不存在: {BASE_OUTPUT_DIR}")
+        exit(1)
+
+print(f"[INFO] 找到 {len(gene_folders)} 个基因:")
 for gene in gene_folders:
     print(f"  - {gene}")
 print()
@@ -52,8 +65,20 @@ for GENE_ID in genes_to_analyze:
     
     # 加载基因信息
     gene_info_path = os.path.join(DATABASE_DIR, GENE_ID, 'gene_info.json')
-    with open(gene_info_path, 'r') as f:
-        gene_info = json.load(f)
+    if os.path.exists(gene_info_path):
+        with open(gene_info_path, 'r') as f:
+            gene_info = json.load(f)
+        print(f"[INFO] 从 database 加载基因信息")
+    else:
+        # 从 results2 中使用，尝试从文件名提取信息
+        print(f"[INFO] 使用 results2 中的现有数据")
+        gene_info = {
+            'gene_id': GENE_ID,
+            'chrom': GENE_ID.split('.')[3] if len(GENE_ID.split('.')) > 3 else 'Unknown',
+            'start': 0,
+            'end': 1000000,
+            'strand': '+'
+        }
 
     print(f"[INFO] 基因信息:")
     print(f"  - ID: {gene_info['gene_id']}")
@@ -82,9 +107,14 @@ for GENE_ID in genes_to_analyze:
 
     # 从数据库加载表型数据
     phenotype_data_path = os.path.join(DATABASE_DIR, GENE_ID, 'phenotype_data.csv')
+    if not os.path.exists(phenotype_data_path):
+        # 尝试从 results2 加载
+        phenotype_data_path = os.path.join(BASE_OUTPUT_DIR, GENE_ID, 'sample_haplotypes.csv')
+    
     if os.path.exists(phenotype_data_path):
         analyzer.phenotype_df = pd.read_csv(phenotype_data_path)
-        print(f"[INFO] 从数据库加载表型数据: {len(analyzer.phenotype_df)} 个样本")
+        print(f"[INFO] 加载表型数据: {phenotype_data_path}")
+        print(f"[INFO] {len(analyzer.phenotype_df)} 个样本")
         print(f"[DATA FORMAT] 表型数据格式")
         print(f"  列名: {list(analyzer.phenotype_df.columns)}")
         print(f"  数据类型: {dict(analyzer.phenotype_df.dtypes)}")
@@ -99,7 +129,7 @@ for GENE_ID in genes_to_analyze:
             print(f"    非空值数: {analyzer.phenotype_df[pheno_cols[0]].notna().sum()}")
             print(f"    统计: mean={analyzer.phenotype_df[pheno_cols[0]].mean():.4f}, std={analyzer.phenotype_df[pheno_cols[0]].std():.4f}")
     else:
-        print(f"[WARNING] 数据库中缺少表型数据: {phenotype_data_path}")
+        print(f"[WARNING] 缺少表型数据: {phenotype_data_path}")
         continue  # 跳过这个基因，继续下一个
 
     # 检查并删除标记文件（避免分析器误读）
@@ -113,7 +143,11 @@ for GENE_ID in genes_to_analyze:
 
     # 运行分析，传入database_dir以使用预计算数据
     # 注意：使用数据库中实际的表型列名
-    phenotype_data_path = os.path.join(DATABASE_DIR, GENE_ID, 'phenotype_data.csv')
+    if os.path.exists(os.path.join(DATABASE_DIR, GENE_ID, 'phenotype_data.csv')):
+        phenotype_data_path = os.path.join(DATABASE_DIR, GENE_ID, 'phenotype_data.csv')
+    else:
+        phenotype_data_path = os.path.join(BASE_OUTPUT_DIR, GENE_ID, 'sample_haplotypes.csv')
+    
     temp_pheno_df = pd.read_csv(phenotype_data_path)
     pheno_cols = [c for c in temp_pheno_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
     actual_pheno_col = pheno_cols[0] if pheno_cols else 'Phenotype_1'
