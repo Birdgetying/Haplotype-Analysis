@@ -5172,10 +5172,7 @@ class ReportGenerator:
 <thead><tr style="height:45px;">
     <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;">Haplotype</th>
     <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>
-    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>
-    <th style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;">
-        <button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy All</button>
-    </th>\n'''
+    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>\n'''
         
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
@@ -5186,6 +5183,7 @@ class ReportGenerator:
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
+        html += f'<th style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;"><button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy All</button></th>\n'
         html += '<th style="width:40px;vertical-align:middle;">n</th></tr></thead><tbody>\n'
         
         # 数据行
@@ -5307,12 +5305,12 @@ class ReportGenerator:
                     
                     html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
-            # 添加复制样本按钮列（在 n 列之前）
+            # 添加复制样本按钮列（在序列列之后，n 列之前）
             samples_for_hap = hap_samples_map.get(hap, [])
             samples_str = ','.join(samples_for_hap) if samples_for_hap else ''
             html += f'<td style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;transition:all 0.2s;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy</button></td>\n'
             
-            html += f'<td class="n-cell" style="padding-left:15px;">{cnt}</td></tr>\n'
+            html += f'<td class="n-cell">{cnt}</td></tr>\n'
         
         # 表格底部：共用坐标轴行（三列分开对应）
         html += '<tr style="height:30px;">'
@@ -5352,14 +5350,14 @@ class ReportGenerator:
             html += '</div>'
         html += '</td>\n'
         
-        # 第4列：复制样本列（空）
+        # 序列列（空）
+        html += f'<td colspan="{len(display_positions)}" style="border:none;"></td>\n'
+        
+        # Copy 列（空）
         html += '<td style="width:80px;min-width:80px;max-width:80px;border:none;"></td>\n'
         
-        # 第5列：n 列（空）
+        # n 列（空）
         html += '<td style="width:40px;min-width:40px;max-width:40px;border:none;"></td>\n'
-        
-        # 剩余列（序列）
-        html += f'<td colspan="{len(display_positions)}" style="border:none;"></td>\n'
         html += '</tr>\n'
         
         html += r'''</tbody></table>
