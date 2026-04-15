@@ -1,0 +1,5 @@
+Haplotype,N,Mean,Effect,95% CI,Cohen's d,Effect Size,P-value,Direction
+Hap1,220,56.117,+2.980,"[1.69, 4.27]",0.430,small,0.0000***,positive (+)
+Hap3,152,54.685,+1.548,"[0.15, 2.94]",0.239,small,0.0307*,positive (+)
+Hap4,13,53.878,+0.741,"[-3.17, 4.66]",0.125,negligible,0.7167,positive (+)
+Hap2,223,53.137,REF,-,-,-,-,-

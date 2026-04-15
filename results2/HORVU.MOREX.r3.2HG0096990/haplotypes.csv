@@ -1,0 +1,5 @@
+Haplotype_Seq,Count,Hap_Name,Alleles
+G|C|A,234,Hap1,"['G', 'C', 'A']"
+G|C|G,233,Hap2,"['G', 'C', 'G']"
++|A|G,162,Hap3,"['+', 'A', 'G']"
++|A|A,15,Hap4,"['+', 'A', 'A']"

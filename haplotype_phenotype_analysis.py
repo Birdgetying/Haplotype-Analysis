@@ -4844,7 +4844,7 @@ class ReportGenerator:
         .bar-box {{ position: absolute; top: 3px; height: 14px; border-radius: 2px; border: 2px solid #3498db; background: rgba(52,152,219,0.2); }}
         .bar-median {{ position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }}
         .data-dot {{ position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }}
-        .n-cell {{ font-size: 11px; color: #666; }}
+        .n-cell {{ font-size: 11px; color: #666; width:40px; min-width:40px; max-width:40px; text-align:center; }}
     </style>
 </head>
 <body>
@@ -5183,8 +5183,9 @@ class ReportGenerator:
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
-        html += f'<th style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;"><button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy All</button></th>\n'
-        html += '<th style="width:40px;vertical-align:middle;">n</th></tr></thead><tbody>\n'
+        html += '<th style="width:40px;min-width:40px;max-width:40px;text-align:center;vertical-align:middle;">n</th>\n'
+        html += f'<th style="width:90px;min-width:90px;max-width:90px;text-align:center;vertical-align:middle;padding:5px;"><button id="copyAllBtn" onclick="copyAllSamples()" style="background:#3498db;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy All</button></th>\n'
+        html += '</tr></thead><tbody>\n'
         
         # 数据行
         for i, hap in enumerate(top_haps):
@@ -5305,12 +5306,14 @@ class ReportGenerator:
                     
                     html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
-            # 添加复制样本按钮列（在序列列之后，n 列之前）
+            html += f'<td class="n-cell">{cnt}</td>\n'
+            
+            # 添加复制样本按钮列（在 n 列之后，最右边）
             samples_for_hap = hap_samples_map.get(hap, [])
             samples_str = ','.join(samples_for_hap) if samples_for_hap else ''
-            html += f'<td style="width:80px;min-width:80px;max-width:80px;text-align:center;vertical-align:middle;padding:5px;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;transition:all 0.2s;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy</button></td>\n'
+            html += f'<td style="width:90px;min-width:90px;max-width:90px;text-align:center;vertical-align:middle;padding:5px;"><button class="copy-samples-btn" onclick="copySamples(\'{hap}\')" data-samples="{samples_str}" style="background:#3498db;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap;transition:all 0.2s;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Copy</button></td>\n'
             
-            html += f'<td class="n-cell">{cnt}</td></tr>\n'
+            html += '</tr>\n'
         
         # 表格底部：共用坐标轴行（三列分开对应）
         html += '<tr style="height:30px;">'
@@ -5353,11 +5356,11 @@ class ReportGenerator:
         # 序列列（空）
         html += f'<td colspan="{len(display_positions)}" style="border:none;"></td>\n'
         
-        # Copy 列（空）
-        html += '<td style="width:80px;min-width:80px;max-width:80px;border:none;"></td>\n'
-        
         # n 列（空）
         html += '<td style="width:40px;min-width:40px;max-width:40px;border:none;"></td>\n'
+        
+        # Copy 列（空）
+        html += '<td style="width:90px;min-width:90px;max-width:90px;border:none;"></td>\n'
         html += '</tr>\n'
         
         html += r'''</tbody></table>
@@ -5468,6 +5471,14 @@ function copySamples(hapName) {
 }
 
 function copyAllSamples() {
+    // 找到 Copy All 按钮
+    var btn = document.getElementById('copyAllBtn');
+    if (!btn) return;
+    
+    // 添加点击反馈
+    btn.style.transform = 'scale(0.95)';
+    btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)';
+    
     // 获取所有单倍型的样本
     var allSamples = [];
     var buttons = document.querySelectorAll('button.copy-samples-btn');
@@ -5481,11 +5492,17 @@ function copyAllSamples() {
     var allText = allSamples.join(',');
     if (!allText) {
         alert('No samples found');
+        btn.style.transform = '';
+        btn.style.boxShadow = '';
         return;
     }
     
     navigator.clipboard.writeText(allText).then(function() {
-        // 静默成功
+        // 恢复按钮样式
+        setTimeout(function() {
+            btn.style.transform = '';
+            btn.style.boxShadow = '';
+        }, 150);
     }).catch(function(err) {
         var textArea = document.createElement('textarea');
         textArea.value = allText;
@@ -5493,7 +5510,10 @@ function copyAllSamples() {
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        // 静默成功
+        setTimeout(function() {
+            btn.style.transform = '';
+            btn.style.boxShadow = '';
+        }, 150);
     });
 }
 

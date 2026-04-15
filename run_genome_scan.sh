@@ -103,7 +103,7 @@ echo ""
 echo "[Step 3] Checking data files..."
 
 # 大麦 Morex_v3 数据路径
-VCF_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/00.Rawdata/chrALL.impute.vcf.gz"
+VCF_FILE="/home/URPs/2025_URP_G1/project1/chrALL.impute.vcf.gz"
 PHENO_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/04.Gemma/00.pheno/K.rep1.SA.gemma"
 GFF_FILE="/home/qinz/data/genomes/Morex_v3/gene_annotation/Hv_Morex.pgsb.Jul2020.gff3"
 FASTA_FILE="/home/qinz/data/genomes/Morex_v3/MorexV3_MtPt.fasta"
@@ -166,7 +166,7 @@ python genome_wide_haplotype_scan.py \
     --phenotype ${PHENO_FILE} \
     --database-dir ${DATABASE_DIR} \
     --results-dir ${RESULTS_DIR} \
-    --min-samples 5 \
+    --min-samples 1 \
     --test-region 0 \
     2>&1 | tee "${LOG_FILE}"
 

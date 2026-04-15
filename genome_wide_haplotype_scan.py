@@ -592,10 +592,10 @@ def parse_gtf_for_gene(gtf_file: str, target_gene_id: str) -> dict:
         return {'exons': [], 'cds': [], 'strand': '+', 'chrom': None, 'gene_start': None, 'gene_end': None}
 
 
-def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame, 
+def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         database_dir: str, results_dir: str = None,
                         min_samples: int = 1, test_region_length: int = 0,
-                        gff_file: str = None) -> dict:
+                        gff_file: str = None, all_genes_cds: list = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
@@ -742,8 +742,13 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             promoter_end = gene_end + promoter_length
         
         # **关键修复**：加载所有基因的CDS信息，用于检查启动子变异是否与其他基因重叠
-        all_genes_cds = []  # [(chrom, cds_start, cds_end, gene_id), ...]
-        if gff_file and os.path.exists(gff_file):
+        # 性能优化：如果外部传入 all_genes_cds，直接使用，避免重复扫描 GFF 文件
+        if all_genes_cds is not None:
+            # 使用外部传入的 CDS 信息（只加载一次）
+            print(f"[INFO] 使用预加载的 {len(all_genes_cds)} 个 CDS 区域（用于重叠检查）")
+        elif gff_file and os.path.exists(gff_file):
+            # 如果没有传入，则加载（兼容旧代码）
+            all_genes_cds = []  # [(chrom, cds_start, cds_end, gene_id), ...]
             open_func_gff = gzip.open if gff_file.endswith('.gz') else open
             is_gff3_format = gff_file.endswith('.gff3') or gff_file.endswith('.gff')
             current_gene_id = None
@@ -799,6 +804,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 print(f"[WARNING] 加载其他基因CDS信息失败: {e}")
             
             print(f"[INFO] 加载了 {len(all_genes_cds)} 个其他基因的CDS区域（用于重叠检查）")
+        else:
+            all_genes_cds = []
         
         # 提取启动子区域的变异
         promoter_variants = []
@@ -1452,6 +1459,60 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
     
     gene_list = genes_df.to_dict('records')
     
+    # 性能优化：预加载 CDS 信息（只扫描一次 GFF 文件）
+    print("\n[INFO] 预加载 CDS 区域信息（只执行一次）...")
+    all_genes_cds = []
+    if gff_file and os.path.exists(gff_file):
+        open_func_gff = gzip.open if gff_file.endswith('.gz') else open
+        is_gff3_format = gff_file.endswith('.gff3') or gff_file.endswith('.gff')
+        current_gene_id = None
+        
+        try:
+            with open_func_gff(gff_file, 'rt') as f:
+                for line in f:
+                    if line.startswith('#'):
+                        continue
+                    parts = line.strip().split('\t')
+                    if len(parts) < 9:
+                        continue
+                    
+                    feature_type = parts[2]
+                    gff_chrom = parts[0]
+                    gff_start = int(parts[3])
+                    gff_end = int(parts[4])
+                    attr = parts[8]
+                    
+                    if is_gff3_format:
+                        if feature_type == 'gene':
+                            for item in attr.split(';'):
+                                if item.startswith('ID='):
+                                    current_gene_id = item[3:]
+                                    break
+                        elif feature_type == 'CDS' and current_gene_id:
+                            for item in attr.split(';'):
+                                if item.startswith('Parent='):
+                                    parent_id = item[7:]
+                                    all_genes_cds.append((gff_chrom, gff_start, gff_end, parent_id))
+                                    break
+                    else:
+                        if feature_type == 'gene':
+                            for item in attr.split(';'):
+                                item = item.strip()
+                                if item.startswith('gene_id "'):
+                                    current_gene_id = item[9:-1]
+                                    break
+                        elif feature_type == 'CDS':
+                            for item in attr.split(';'):
+                                item = item.strip()
+                                if item.startswith('gene_id "'):
+                                    cds_gene_id = item[9:-1]
+                                    all_genes_cds.append((gff_chrom, gff_start, gff_end, cds_gene_id))
+                                    break
+        except Exception as e:
+            print(f"[WARNING] 预加载 CDS 信息失败: {e}")
+        
+        print(f"[INFO] 预加载完成: {len(all_genes_cds)} 个 CDS 区域")
+    
     # 使用进度条
     print(f"\n[INFO] 开始处理 {total_genes} 个基因...")
     print(f"[INFO] 数据库输出目录: {database_dir}")
@@ -1533,10 +1594,11 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
             except Exception as e:
                 print(f"  [{processed+1}/{total_genes}] {gene_id}: 缓存检测失败 ({e})，重新扫描")
         
-        result = process_single_gene(gene_info, vcf_file, pheno_df, 
+        result = process_single_gene(gene_info, vcf_file, pheno_df,
                                      database_dir, results_dir, min_samples,
                                      test_region_length=test_region_length,
-                                     gff_file=gff_file)
+                                     gff_file=gff_file,
+                                     all_genes_cds=all_genes_cds)
         all_results.append(result)
         processed += 1
         

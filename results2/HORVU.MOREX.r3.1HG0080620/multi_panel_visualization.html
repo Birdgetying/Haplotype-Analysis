@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Integrated Visualization - Haplotype Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; }
+        .main-container { max-width: 100%; width: 100%; margin: 0 auto; padding: 20px; }
+        .main-header { background: linear-gradient(135deg, #2c3e50 0%, #4a6073 100%); color: white;
+                       padding: 25px 35px; border-radius: 12px 12px 0 0; }
+        .main-header h1 { font-size: 24px; margin-bottom: 10px; }
+        .main-header-info { display: flex; gap: 30px; font-size: 13px; opacity: 0.9; flex-wrap: wrap; }
+        .tab-container { background: white; border-radius: 0 0 12px 12px;
+                         box-shadow: 0 4px 25px rgba(0,0,0,0.1); overflow: hidden; }
+        .tab-nav { display: flex; background: #34495e; padding: 0; flex-wrap: wrap; }
+        .tab-btn { padding: 14px 25px; background: transparent; border: none; color: rgba(255,255,255,0.7);
+                   font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.3s;
+                   border-bottom: 3px solid transparent; }
+        .tab-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+        .tab-btn.active { background: rgba(255,255,255,0.15); color: white; border-bottom-color: #3498db; }
+        .tab-content { display: none; padding: 0; min-height: 600px; }
+        .tab-content.active { display: block; }
+        
+        /* Association Analysis 面板 - 整合布局 */
+        #integrated { padding: 0; margin: 0; }
+        .integrated-layout { display: flex; flex-direction: column; height: calc(100vh - 200px); }
+        .top-panels { display: flex; height: 280px; border-bottom: 1px solid #ddd; }
+        .top-left { width: 50%; border-right: 1px solid #ddd; padding: 10px; position: relative; }
+        .top-right { width: 50%; padding: 10px; position: relative; }
+        .main-panel { flex: 1; overflow: auto; }
+        .main-panel iframe { width: 100%; height: 100%; border: none; }
+        
+        /* 过滤控制面板 */
+        .filter-panel { background: #f8f9fa; padding: 10px 15px; border-bottom: 1px solid #ddd;
+                        display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label { font-size: 12px; color: #555; font-weight: 500; }
+        .filter-group input[type="range"] { width: 100px; }
+        .filter-group select { padding: 4px 8px; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .filter-value { font-size: 11px; color: #3498db; min-width: 40px; }
+        .filter-btn { padding: 5px 12px; background: #3498db; color: white; border: none;
+                      border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .filter-btn:hover { background: #2980b9; }
+        .filter-reset { background: #95a5a6; }
+        .filter-reset:hover { background: #7f8c8d; }
+        
+        /* 小图表容器 */
+        .mini-chart { width: 100%; height: 100%; }
+        .mini-chart-title { font-size: 12px; font-weight: 600; color: #2c3e50; margin-bottom: 5px; }
+        
+        /* GWAS棒棒糖图 */
+        .lollipop-chart { width: 100%; height: calc(100% - 25px); }
+        
+        .panel-header { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+        .panel-header h3 { font-size: 14px; color: #2c3e50; }
+        .panel-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+        .panel-controls label { font-size: 11px; color: #666; }
+        .panel-controls button { padding: 4px 10px; border: 1px solid #ddd; border-radius: 3px;
+                                 background: white; cursor: pointer; font-size: 11px; }
+        .panel-controls button:hover { background: #f5f5f5; }
+        .panel-controls button.active { background: #3498db; color: white; border-color: #3498db; }
+        .chart-container { position: relative; width: 100%; height: 550px; }
+        .tooltip { position: fixed; background: rgba(0,0,0,0.9); color: white; padding: 10px 14px;
+                   border-radius: 6px; font-size: 11px; pointer-events: none; z-index: 1000;
+                   max-width: 250px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .tooltip h4 { color: #ffd700; margin-bottom: 4px; font-size: 12px; }
+        .tooltip p { margin: 2px 0; }
+        .legend { position: absolute; top: 5px; right: 5px; background: rgba(255,255,255,0.95);
+                  padding: 8px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 10px; }
+        .legend-item { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+        .quick-nav { position: fixed; right: 15px; top: 50%; transform: translateY(-50%);
+                     background: white; padding: 12px; border-radius: 8px;
+                     box-shadow: 0 2px 12px rgba(0,0,0,0.1); z-index: 100; }
+        .quick-nav a { display: block; padding: 6px 10px; color: #666; text-decoration: none;
+                       font-size: 11px; border-radius: 4px; margin: 2px 0; }
+        .quick-nav a:hover { background: #f0f0f0; }
+        .quick-nav a.active { background: #3498db; color: white; }
+    </style>
+</head>
+<body>
+<div class="main-container">
+    <div class="main-header">
+        <h1>Integrated Multi-Panel Visualization</h1>
+        <div class="main-header-info">
+            <span>Region: chr1H:486,476,592 - 486,484,769</span>
+            <span>Gene: 486,476,592 - 486,484,769</span>
+            <span>Variants: 42</span>
+            <span>Haplotypes: 18</span>
+            <span>Total Samples: 522</span>
+        </div>
+    </div>
+    
+    <div class="tab-container">
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="showTab('integrated')">Association Analysis</button>
+            <button class="tab-btn" onclick="showTab('network')">Haplotype Network</button>
+            <button class="tab-btn" onclick="showTab('manhattan')">Manhattan Plot</button>
+            <button class="tab-btn" onclick="showTab('pca')">PCA Analysis</button>
+        </div>
+        
+        <!-- Association Analysis 面板 - 整合布局 -->
+        <div id="integrated" class="tab-content active">
+            <div class="integrated-layout">
+                <!-- 过滤控制面板 -->
+                <div class="filter-panel">
+                    <div class="filter-group">
+                        <label>MAF ≥</label>
+                        <input type="range" id="mafSlider" min="0" max="0.5" step="0.01" value="0" oninput="updateFilter('maf', this.value); applyFilters()">
+                        <span class="filter-value" id="mafValue">0</span>
+                    </div>
+                    <div class="filter-group">
+                        <label>Missing Rate ≤</label>
+                        <input type="range" id="missingSlider" min="0" max="1" step="0.05" value="1" oninput="updateFilter('missing', this.value); applyFilters()">
+                        <span class="filter-value" id="missingValue">1.0</span>
+                    </div>
+                    <div class="filter-group" style="flex-wrap:wrap;max-width:520px;">
+                        <label style="width:100%;">Annotation:</label>
+                        <span style="display:flex;flex-wrap:wrap;gap:6px 10px;font-size:11px;">
+                            <label><input type="checkbox" class="ann-cb-mp" value="missense" checked onchange="applyFilters()"> Missense</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="UTR" checked onchange="applyFilters()"> UTR</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="intron" checked onchange="applyFilters()"> Intron</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="indel" checked onchange="applyFilters()"> Indel</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="SV" checked onchange="applyFilters()"> SV</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="other" checked onchange="applyFilters()"> Other</label>
+                        </span>
+                    </div>
+                    <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
+                    <button class="filter-btn" onclick="applyFilters()">Apply</button>
+                </div>
+                
+                <!-- 顶部面板区域 -->
+                <div class="top-panels">
+                    <div class="top-left">
+                        <div class="mini-chart-title">Haplotype Network</div>
+                        <div class="mini-chart" id="mini-network"></div>
+                    </div>
+                    <div class="top-right">
+                        <div class="mini-chart-title">Manhattan Plot</div>
+                        <div class="mini-chart" id="mini-manhattan"></div>
+                    </div>
+                </div>
+                
+                <!-- 主面板 - 原始integrated_analysis.html -->
+                <div class="main-panel">
+                    <iframe src="integrated_analysis.html" id="integrated-frame"></iframe>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 网络图面板（全屏） -->
+        <div id="network" class="tab-content">
+            <div class="panel-header"><h3>Haplotype Network (D3.js Interactive)</h3></div>
+            <div class="panel-controls">
+                <label>Zoom:</label>
+                <button onclick="networkZoomIn()">+</button>
+                <button onclick="networkZoomOut()">-</button>
+                <button onclick="networkResetZoom()">Reset</button>
+                <span style="margin-left:10px;border-left:1px solid #ddd;padding-left:10px;"></span>
+                <label>Layout:</label>
+                <button id="netForceBtn" class="active" onclick="setNetworkLayout('force')">Force</button>
+                <button id="netRadialBtn" onclick="setNetworkLayout('radial')">Radial</button>
+            </div>
+            <div class="chart-container" id="network-chart"></div>
+        </div>
+        
+        <!-- 曼哈顿图面板（全屏） -->
+        <div id="manhattan" class="tab-content">
+            <div class="panel-header"><h3>Manhattan Plot</h3></div>
+            <div class="chart-container" id="manhattan-chart"></div>
+        </div>
+        
+        <!-- PCA面板 -->
+        <div id="pca" class="tab-content">
+            <div class="panel-header"><h3>Principal Component Analysis (PCA)</h3></div>
+            <div class="panel-controls">
+                <label>X-axis:</label>
+                <select id="pcaXAxis" onchange="updatePCA()">
+                    <option value="pc1">PC1</option>
+                    <option value="pc2">PC2</option>
+                </select>
+                <label>Y-axis:</label>
+                <select id="pcaYAxis" onchange="updatePCA()">
+                    <option value="pc1">PC1</option>
+                    <option value="pc2" selected>PC2</option>
+                </select>
+            </div>
+            <div class="chart-container" id="pca-chart"></div>
+        </div>
+    </div>
+</div>
+
+<div class="quick-nav">
+    <a href="#" onclick="showTab('integrated'); return false;" id="nav-integrated" class="active">Association</a>
+    <a href="#" onclick="showTab('network'); return false;" id="nav-network">Network</a>
+    <a href="#" onclick="showTab('manhattan'); return false;" id="nav-manhattan">Manhattan</a>
+    <a href="#" onclick="showTab('pca'); return false;" id="nav-pca">PCA</a>
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<script>
+// 全局数据
+const networkNodes = [{"id": "Hap1", "count": 145, "size": 60, "color": "rgb(135, 100, 119)", "phenoMean": 55.15}, {"id": "Hap10", "count": 9, "size": 33.0, "color": "rgb(0, 100, 255)", "phenoMean": 48.742}, {"id": "Hap11", "count": 9, "size": 33.0, "color": "rgb(17, 100, 237)", "phenoMean": 49.59}, {"id": "Hap12", "count": 8, "size": 31.970562748477143, "color": "rgb(122, 100, 132)", "phenoMean": 54.535}, {"id": "Hap13", "count": 7, "size": 30.874507866387546, "color": "rgb(255, 100, 0)", "phenoMean": 60.822}, {"id": "Hap14", "count": 6, "size": 29.696938456699066, "color": "rgb(49, 100, 205)", "phenoMean": 51.098}, {"id": "Hap15", "count": 5, "size": 28.41640786499874, "color": "rgb(126, 100, 128)", "phenoMean": 54.753}, {"id": "Hap16", "count": 5, "size": 28.41640786499874, "color": "rgb(153, 100, 101)", "phenoMean": 56.002}, {"id": "Hap17", "count": 5, "size": 28.41640786499874, "color": "rgb(95, 100, 159)", "phenoMean": 53.252}, {"id": "Hap18", "count": 5, "size": 28.41640786499874, "color": "rgb(52, 100, 202)", "phenoMean": 51.226}, {"id": "Hap2", "count": 76, "size": 60, "color": "rgb(182, 100, 72)", "phenoMean": 57.405}, {"id": "Hap3", "count": 76, "size": 60, "color": "rgb(131, 100, 123)", "phenoMean": 54.979}, {"id": "Hap4", "count": 45, "size": 55.24922359499622, "color": "rgb(109, 100, 145)", "phenoMean": 53.934}, {"id": "Hap5", "count": 36, "size": 51.0, "color": "rgb(90, 100, 164)", "phenoMean": 53.014}, {"id": "Hap6", "count": 29, "size": 47.31098884280702, "color": "rgb(174, 100, 80)", "phenoMean": 57.023}, {"id": "Hap7", "count": 24, "size": 44.39387691339813, "color": "rgb(217, 100, 37)", "phenoMean": 59.045}, {"id": "Hap8", "count": 20, "size": 41.83281572999748, "color": "rgb(94, 100, 160)", "phenoMean": 53.206}, {"id": "Hap9", "count": 12, "size": 35.78460969082653, "color": "rgb(46, 100, 208)", "phenoMean": 50.958}];
+const networkEdges = [{"source": "Hap1", "target": "Hap10", "distance": 10, "diff_positions": [1, 2, 10, 11, 16, 18, 19, 20, 34, 36]}, {"source": "Hap1", "target": "Hap11", "distance": 11, "diff_positions": [1, 2, 6, 10, 11, 16, 18, 19, 20, 34, 36]}, {"source": "Hap1", "target": "Hap12", "distance": 11, "diff_positions": [1, 10, 11, 16, 18, 19, 20, 34, 36, 38, 39]}, {"source": "Hap1", "target": "Hap13", "distance": 11, "diff_positions": [1, 2, 10, 11, 16, 18, 19, 20, 34, 35, 36]}, {"source": "Hap1", "target": "Hap14", "distance": 12, "diff_positions": [1, 2, 6, 10, 11, 16, 18, 19, 20, 34, 36, 41]}, {"source": "Hap1", "target": "Hap15", "distance": 14, "diff_positions": [4, 7, 8, 9, 10, 12, 15, 18, 20, 21, 34, 36, 38, 39]}, {"source": "Hap1", "target": "Hap16", "distance": 10, "diff_positions": [10, 16, 17, 18, 19, 20, 22, 23, 34, 36]}, {"source": "Hap1", "target": "Hap17", "distance": 24, "diff_positions": [0, 1, 2, 6, 10, 11, 14, 16, 18, 19, 20, 23, 25, 26, 27, 28, 29, 30, 31, 32, 34, 36, 38, 40]}, {"source": "Hap1", "target": "Hap18", "distance": 9, "diff_positions": [1, 10, 11, 16, 18, 19, 20, 34, 36]}, {"source": "Hap1", "target": "Hap2", "distance": 22, "diff_positions": [1, 2, 6, 10, 11, 16, 18, 19, 20, 23, 25, 26, 27, 28, 29, 30, 31, 32, 34, 36, 38, 40]}, {"source": "Hap1", "target": "Hap3", "distance": 11, "diff_positions": [10, 16, 17, 18, 19, 20, 22, 23, 33, 34, 36]}, {"source": "Hap1", "target": "Hap4", "distance": 12, "diff_positions": [1, 2, 10, 11, 16, 18, 19, 20, 34, 36, 38, 39]}, {"source": "Hap1", "target": "Hap5", "distance": 14, "diff_positions": [3, 4, 7, 10, 13, 18, 19, 20, 24, 34, 36, 37, 38, 39]}, {"source": "Hap1", "target": "Hap6", "distance": 23, "diff_positions": [0, 1, 2, 6, 10, 11, 16, 18, 19, 20, 23, 25, 26, 27, 28, 29, 30, 31, 32, 34, 36, 38, 40]}, {"source": "Hap1", "target": "Hap7", "distance": 23, "diff_positions": [1, 2, 6, 10, 11, 14, 16, 18, 19, 20, 23, 25, 26, 27, 28, 29, 30, 31, 32, 34, 36, 38, 40]}, {"source": "Hap1", "target": "Hap8", "distance": 14, "diff_positions": [1, 2, 5, 6, 10, 11, 16, 18, 19, 20, 34, 36, 38, 39]}, {"source": "Hap1", "target": "Hap9", "distance": 13, "diff_positions": [1, 2, 6, 10, 11, 16, 18, 19, 20, 34, 36, 38, 39]}, {"source": "Hap10", "target": "Hap11", "distance": 1, "diff_positions": [6]}, {"source": "Hap10", "target": "Hap12", "distance": 3, "diff_positions": [2, 38, 39]}, {"source": "Hap10", "target": "Hap13", "distance": 1, "diff_positions": [35]}, {"source": "Hap10", "target": "Hap14", "distance": 2, "diff_positions": [6, 41]}, {"source": "Hap10", "target": "Hap15", "distance": 14, "diff_positions": [1, 2, 4, 7, 8, 9, 11, 12, 15, 16, 19, 21, 38, 39]}, {"source": "Hap10", "target": "Hap16", "distance": 6, "diff_positions": [1, 2, 11, 17, 22, 23]}, {"source": "Hap10", "target": "Hap17", "distance": 14, "diff_positions": [0, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap10", "target": "Hap18", "distance": 1, "diff_positions": [2]}, {"source": "Hap10", "target": "Hap2", "distance": 12, "diff_positions": [6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap10", "target": "Hap3", "distance": 7, "diff_positions": [1, 2, 11, 17, 22, 23, 33]}, {"source": "Hap10", "target": "Hap4", "distance": 2, "diff_positions": [38, 39]}, {"source": "Hap10", "target": "Hap5", "distance": 12, "diff_positions": [1, 2, 3, 4, 7, 11, 13, 16, 24, 37, 38, 39]}, {"source": "Hap10", "target": "Hap6", "distance": 13, "diff_positions": [0, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap10", "target": "Hap7", "distance": 13, "diff_positions": [6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap10", "target": "Hap8", "distance": 4, "diff_positions": [5, 6, 38, 39]}, {"source": "Hap10", "target": "Hap9", "distance": 3, "diff_positions": [6, 38, 39]}, {"source": "Hap11", "target": "Hap12", "distance": 4, "diff_positions": [2, 6, 38, 39]}, {"source": "Hap11", "target": "Hap13", "distance": 2, "diff_positions": [6, 35]}, {"source": "Hap11", "target": "Hap14", "distance": 1, "diff_positions": [41]}, {"source": "Hap11", "target": "Hap15", "distance": 15, "diff_positions": [1, 2, 4, 6, 7, 8, 9, 11, 12, 15, 16, 19, 21, 38, 39]}, {"source": "Hap11", "target": "Hap16", "distance": 7, "diff_positions": [1, 2, 6, 11, 17, 22, 23]}, {"source": "Hap11", "target": "Hap17", "distance": 13, "diff_positions": [0, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap11", "target": "Hap18", "distance": 2, "diff_positions": [2, 6]}, {"source": "Hap11", "target": "Hap2", "distance": 11, "diff_positions": [23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap11", "target": "Hap3", "distance": 8, "diff_positions": [1, 2, 6, 11, 17, 22, 23, 33]}, {"source": "Hap11", "target": "Hap4", "distance": 3, "diff_positions": [6, 38, 39]}, {"source": "Hap11", "target": "Hap5", "distance": 13, "diff_positions": [1, 2, 3, 4, 6, 7, 11, 13, 16, 24, 37, 38, 39]}, {"source": "Hap11", "target": "Hap6", "distance": 12, "diff_positions": [0, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap11", "target": "Hap7", "distance": 12, "diff_positions": [14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap11", "target": "Hap8", "distance": 3, "diff_positions": [5, 38, 39]}, {"source": "Hap11", "target": "Hap9", "distance": 2, "diff_positions": [38, 39]}, {"source": "Hap12", "target": "Hap13", "distance": 4, "diff_positions": [2, 35, 38, 39]}, {"source": "Hap12", "target": "Hap14", "distance": 5, "diff_positions": [2, 6, 38, 39, 41]}, {"source": "Hap12", "target": "Hap15", "distance": 11, "diff_positions": [1, 4, 7, 8, 9, 11, 12, 15, 16, 19, 21]}, {"source": "Hap12", "target": "Hap16", "distance": 7, "diff_positions": [1, 11, 17, 22, 23, 38, 39]}, {"source": "Hap12", "target": "Hap17", "distance": 15, "diff_positions": [0, 2, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap12", "target": "Hap18", "distance": 2, "diff_positions": [38, 39]}, {"source": "Hap12", "target": "Hap2", "distance": 13, "diff_positions": [2, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap12", "target": "Hap3", "distance": 8, "diff_positions": [1, 11, 17, 22, 23, 33, 38, 39]}, {"source": "Hap12", "target": "Hap4", "distance": 1, "diff_positions": [2]}, {"source": "Hap12", "target": "Hap5", "distance": 9, "diff_positions": [1, 3, 4, 7, 11, 13, 16, 24, 37]}, {"source": "Hap12", "target": "Hap6", "distance": 14, "diff_positions": [0, 2, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap12", "target": "Hap7", "distance": 14, "diff_positions": [2, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap12", "target": "Hap8", "distance": 3, "diff_positions": [2, 5, 6]}, {"source": "Hap12", "target": "Hap9", "distance": 2, "diff_positions": [2, 6]}, {"source": "Hap13", "target": "Hap14", "distance": 3, "diff_positions": [6, 35, 41]}, {"source": "Hap13", "target": "Hap15", "distance": 15, "diff_positions": [1, 2, 4, 7, 8, 9, 11, 12, 15, 16, 19, 21, 35, 38, 39]}, {"source": "Hap13", "target": "Hap16", "distance": 7, "diff_positions": [1, 2, 11, 17, 22, 23, 35]}, {"source": "Hap13", "target": "Hap17", "distance": 15, "diff_positions": [0, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 35, 38, 40]}, {"source": "Hap13", "target": "Hap18", "distance": 2, "diff_positions": [2, 35]}, {"source": "Hap13", "target": "Hap2", "distance": 13, "diff_positions": [6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 35, 38, 40]}, {"source": "Hap13", "target": "Hap3", "distance": 8, "diff_positions": [1, 2, 11, 17, 22, 23, 33, 35]}, {"source": "Hap13", "target": "Hap4", "distance": 3, "diff_positions": [35, 38, 39]}, {"source": "Hap13", "target": "Hap5", "distance": 13, "diff_positions": [1, 2, 3, 4, 7, 11, 13, 16, 24, 35, 37, 38, 39]}, {"source": "Hap13", "target": "Hap6", "distance": 14, "diff_positions": [0, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 35, 38, 40]}, {"source": "Hap13", "target": "Hap7", "distance": 14, "diff_positions": [6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 35, 38, 40]}, {"source": "Hap13", "target": "Hap8", "distance": 5, "diff_positions": [5, 6, 35, 38, 39]}, {"source": "Hap13", "target": "Hap9", "distance": 4, "diff_positions": [6, 35, 38, 39]}, {"source": "Hap14", "target": "Hap15", "distance": 16, "diff_positions": [1, 2, 4, 6, 7, 8, 9, 11, 12, 15, 16, 19, 21, 38, 39, 41]}, {"source": "Hap14", "target": "Hap16", "distance": 8, "diff_positions": [1, 2, 6, 11, 17, 22, 23, 41]}, {"source": "Hap14", "target": "Hap17", "distance": 14, "diff_positions": [0, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40, 41]}, {"source": "Hap14", "target": "Hap18", "distance": 3, "diff_positions": [2, 6, 41]}, {"source": "Hap14", "target": "Hap2", "distance": 12, "diff_positions": [23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40, 41]}, {"source": "Hap14", "target": "Hap3", "distance": 9, "diff_positions": [1, 2, 6, 11, 17, 22, 23, 33, 41]}, {"source": "Hap14", "target": "Hap4", "distance": 4, "diff_positions": [6, 38, 39, 41]}, {"source": "Hap14", "target": "Hap5", "distance": 14, "diff_positions": [1, 2, 3, 4, 6, 7, 11, 13, 16, 24, 37, 38, 39, 41]}, {"source": "Hap14", "target": "Hap6", "distance": 13, "diff_positions": [0, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40, 41]}, {"source": "Hap14", "target": "Hap7", "distance": 13, "diff_positions": [14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40, 41]}, {"source": "Hap14", "target": "Hap8", "distance": 4, "diff_positions": [5, 38, 39, 41]}, {"source": "Hap14", "target": "Hap9", "distance": 3, "diff_positions": [38, 39, 41]}, {"source": "Hap15", "target": "Hap16", "distance": 14, "diff_positions": [4, 7, 8, 9, 12, 15, 16, 17, 19, 21, 22, 23, 38, 39]}, {"source": "Hap15", "target": "Hap17", "distance": 26, "diff_positions": [0, 1, 2, 4, 6, 7, 8, 9, 11, 12, 14, 15, 16, 19, 21, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap15", "target": "Hap18", "distance": 13, "diff_positions": [1, 4, 7, 8, 9, 11, 12, 15, 16, 19, 21, 38, 39]}, {"source": "Hap15", "target": "Hap2", "distance": 24, "diff_positions": [1, 2, 4, 6, 7, 8, 9, 11, 12, 15, 16, 19, 21, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap15", "target": "Hap3", "distance": 15, "diff_positions": [4, 7, 8, 9, 12, 15, 16, 17, 19, 21, 22, 23, 33, 38, 39]}, {"source": "Hap15", "target": "Hap4", "distance": 12, "diff_positions": [1, 2, 4, 7, 8, 9, 11, 12, 15, 16, 19, 21]}, {"source": "Hap15", "target": "Hap5", "distance": 10, "diff_positions": [3, 8, 9, 12, 13, 15, 19, 21, 24, 37]}, {"source": "Hap15", "target": "Hap6", "distance": 25, "diff_positions": [0, 1, 2, 4, 6, 7, 8, 9, 11, 12, 15, 16, 19, 21, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap15", "target": "Hap7", "distance": 25, "diff_positions": [1, 2, 4, 6, 7, 8, 9, 11, 12, 14, 15, 16, 19, 21, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap15", "target": "Hap8", "distance": 14, "diff_positions": [1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 19, 21]}, {"source": "Hap15", "target": "Hap9", "distance": 13, "diff_positions": [1, 2, 4, 6, 7, 8, 9, 11, 12, 15, 16, 19, 21]}, {"source": "Hap16", "target": "Hap17", "distance": 18, "diff_positions": [0, 1, 2, 6, 11, 14, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap16", "target": "Hap18", "distance": 5, "diff_positions": [1, 11, 17, 22, 23]}, {"source": "Hap16", "target": "Hap2", "distance": 16, "diff_positions": [1, 2, 6, 11, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap16", "target": "Hap3", "distance": 1, "diff_positions": [33]}, {"source": "Hap16", "target": "Hap4", "distance": 8, "diff_positions": [1, 2, 11, 17, 22, 23, 38, 39]}, {"source": "Hap16", "target": "Hap5", "distance": 12, "diff_positions": [3, 4, 7, 13, 16, 17, 22, 23, 24, 37, 38, 39]}, {"source": "Hap16", "target": "Hap6", "distance": 17, "diff_positions": [0, 1, 2, 6, 11, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap16", "target": "Hap7", "distance": 17, "diff_positions": [1, 2, 6, 11, 14, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap16", "target": "Hap8", "distance": 10, "diff_positions": [1, 2, 5, 6, 11, 17, 22, 23, 38, 39]}, {"source": "Hap16", "target": "Hap9", "distance": 9, "diff_positions": [1, 2, 6, 11, 17, 22, 23, 38, 39]}, {"source": "Hap17", "target": "Hap18", "distance": 15, "diff_positions": [0, 2, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap17", "target": "Hap2", "distance": 2, "diff_positions": [0, 14]}, {"source": "Hap17", "target": "Hap3", "distance": 19, "diff_positions": [0, 1, 2, 6, 11, 14, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 33, 38, 40]}, {"source": "Hap17", "target": "Hap4", "distance": 14, "diff_positions": [0, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap17", "target": "Hap5", "distance": 24, "diff_positions": [0, 1, 2, 3, 4, 6, 7, 11, 13, 14, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 37, 39, 40]}, {"source": "Hap17", "target": "Hap6", "distance": 1, "diff_positions": [14]}, {"source": "Hap17", "target": "Hap7", "distance": 1, "diff_positions": [0]}, {"source": "Hap17", "target": "Hap8", "distance": 14, "diff_positions": [0, 5, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap17", "target": "Hap9", "distance": 13, "diff_positions": [0, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap18", "target": "Hap2", "distance": 13, "diff_positions": [2, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap18", "target": "Hap3", "distance": 6, "diff_positions": [1, 11, 17, 22, 23, 33]}, {"source": "Hap18", "target": "Hap4", "distance": 3, "diff_positions": [2, 38, 39]}, {"source": "Hap18", "target": "Hap5", "distance": 11, "diff_positions": [1, 3, 4, 7, 11, 13, 16, 24, 37, 38, 39]}, {"source": "Hap18", "target": "Hap6", "distance": 14, "diff_positions": [0, 2, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap18", "target": "Hap7", "distance": 14, "diff_positions": [2, 6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 38, 40]}, {"source": "Hap18", "target": "Hap8", "distance": 5, "diff_positions": [2, 5, 6, 38, 39]}, {"source": "Hap18", "target": "Hap9", "distance": 4, "diff_positions": [2, 6, 38, 39]}, {"source": "Hap2", "target": "Hap3", "distance": 17, "diff_positions": [1, 2, 6, 11, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 33, 38, 40]}, {"source": "Hap2", "target": "Hap4", "distance": 12, "diff_positions": [6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap2", "target": "Hap5", "distance": 22, "diff_positions": [1, 2, 3, 4, 6, 7, 11, 13, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 37, 39, 40]}, {"source": "Hap2", "target": "Hap6", "distance": 1, "diff_positions": [0]}, {"source": "Hap2", "target": "Hap7", "distance": 1, "diff_positions": [14]}, {"source": "Hap2", "target": "Hap8", "distance": 12, "diff_positions": [5, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap2", "target": "Hap9", "distance": 11, "diff_positions": [23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap3", "target": "Hap4", "distance": 9, "diff_positions": [1, 2, 11, 17, 22, 23, 33, 38, 39]}, {"source": "Hap3", "target": "Hap5", "distance": 13, "diff_positions": [3, 4, 7, 13, 16, 17, 22, 23, 24, 33, 37, 38, 39]}, {"source": "Hap3", "target": "Hap6", "distance": 18, "diff_positions": [0, 1, 2, 6, 11, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 33, 38, 40]}, {"source": "Hap3", "target": "Hap7", "distance": 18, "diff_positions": [1, 2, 6, 11, 14, 17, 22, 25, 26, 27, 28, 29, 30, 31, 32, 33, 38, 40]}, {"source": "Hap3", "target": "Hap8", "distance": 11, "diff_positions": [1, 2, 5, 6, 11, 17, 22, 23, 33, 38, 39]}, {"source": "Hap3", "target": "Hap9", "distance": 10, "diff_positions": [1, 2, 6, 11, 17, 22, 23, 33, 38, 39]}, {"source": "Hap4", "target": "Hap5", "distance": 10, "diff_positions": [1, 2, 3, 4, 7, 11, 13, 16, 24, 37]}, {"source": "Hap4", "target": "Hap6", "distance": 13, "diff_positions": [0, 6, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap4", "target": "Hap7", "distance": 13, "diff_positions": [6, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap4", "target": "Hap8", "distance": 2, "diff_positions": [5, 6]}, {"source": "Hap4", "target": "Hap9", "distance": 1, "diff_positions": [6]}, {"source": "Hap5", "target": "Hap6", "distance": 23, "diff_positions": [0, 1, 2, 3, 4, 6, 7, 11, 13, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 37, 39, 40]}, {"source": "Hap5", "target": "Hap7", "distance": 23, "diff_positions": [1, 2, 3, 4, 6, 7, 11, 13, 14, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 37, 39, 40]}, {"source": "Hap5", "target": "Hap8", "distance": 12, "diff_positions": [1, 2, 3, 4, 5, 6, 7, 11, 13, 16, 24, 37]}, {"source": "Hap5", "target": "Hap9", "distance": 11, "diff_positions": [1, 2, 3, 4, 6, 7, 11, 13, 16, 24, 37]}, {"source": "Hap6", "target": "Hap7", "distance": 2, "diff_positions": [0, 14]}, {"source": "Hap6", "target": "Hap8", "distance": 13, "diff_positions": [0, 5, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap6", "target": "Hap9", "distance": 12, "diff_positions": [0, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap7", "target": "Hap8", "distance": 13, "diff_positions": [5, 14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap7", "target": "Hap9", "distance": 12, "diff_positions": [14, 23, 25, 26, 27, 28, 29, 30, 31, 32, 39, 40]}, {"source": "Hap8", "target": "Hap9", "distance": 1, "diff_positions": [5]}];
+const manhattanData = [{"pos": 486477229, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486477424, "pvalue": 0.36224553731443176, "logp": 0.4409969561167051, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486477745, "pvalue": 0.3147579433102135, "logp": 0.5020233011175924, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486478084, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486478126, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486478342, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486478619, "pvalue": 0.21516309320378052, "logp": 0.6672322208891833, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486480885, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486480940, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486480981, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486480999, "pvalue": 0.0065983005143587185, "logp": 2.1805679087428342, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481011, "pvalue": 0.008997570838489892, "logp": 2.045874725431466, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481120, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481138, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481868, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481904, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481931, "pvalue": 0.26034831487516263, "logp": 0.5844452289842045, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486481994, "pvalue": 0.03212499040019951, "logp": 1.4931569934393574, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486482539, "pvalue": 0.008997570838489892, "logp": 2.045874725431466, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486482545, "pvalue": 0.8685781237541038, "logp": 0.061191113095503374, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486482605, "pvalue": 0.8685781237541038, "logp": 0.061191113095503374, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486482858, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486482974, "pvalue": 0.9634999146460396, "logp": 0.016148319481549166, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483007, "pvalue": 0.3147579433102135, "logp": 0.5020233011175924, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483115, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483541, "pvalue": 0.8685781237541038, "logp": 0.061191113095503374, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483547, "pvalue": 0.0065983005143587185, "logp": 2.1805679087428342, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483619, "pvalue": 0.048546389552220376, "logp": 1.3138430635078462, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483632, "pvalue": 0.8685781237541038, "logp": 0.061191113095503374, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483642, "pvalue": 0.2894281118924538, "logp": 0.5384592885354591, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483658, "pvalue": 0.9207078242680093, "logp": 0.03587816615449637, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483718, "pvalue": 0.9634999146460396, "logp": 0.016148319481549166, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483799, "pvalue": 0.9868545759428964, "logp": 0.005746840763739875, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483841, "pvalue": 0.9634999146460396, "logp": 0.016148319481549166, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483917, "pvalue": 0.8685781237541038, "logp": 0.061191113095503374, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486483964, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486484064, "pvalue": 0.9207078242680093, "logp": 0.03587816615449637, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486484263, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486484297, "pvalue": 0.00031802064160105, "logp": 3.4975446905737457, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486484391, "pvalue": 0.0065983005143587185, "logp": 2.1805679087428342, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486484408, "pvalue": 8.196518216366378e-05, "logp": 4.086370591584452, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}, {"pos": 486484467, "pvalue": 1.0, "logp": -0.0, "maf": 0.5, "missing_rate": 0.0, "annotation": "other", "ref": "", "alt": ""}];
+const pcaData = [{"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap15", "pc1": -2.908853292723171, "pc2": 0.6180910007076057, "pc3": -2.3896186502012537, "color": "rgb(126, 100, 128)"}, {"haplotype": "Hap15", "pc1": -2.908853292723171, "pc2": 0.6180910007076057, "pc3": -2.3896186502012537, "color": "rgb(126, 100, 128)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap16", "pc1": -1.8533633206797222, "pc2": -1.534968100558161, "pc3": 1.691526320083765, "color": "rgb(153, 100, 101)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap14", "pc1": -2.226259676470089, "pc2": -1.104810025875964, "pc3": -0.24656025720351593, "color": "rgb(49, 100, 205)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap17", "pc1": 7.938458216337516, "pc2": 0.6830670659938525, "pc3": 0.06244743174636591, "color": "rgb(95, 100, 159)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap17", "pc1": 7.938458216337516, "pc2": 0.6830670659938525, "pc3": 0.06244743174636591, "color": "rgb(95, 100, 159)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap15", "pc1": -2.908853292723171, "pc2": 0.6180910007076057, "pc3": -2.3896186502012537, "color": "rgb(126, 100, 128)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap15", "pc1": -2.908853292723171, "pc2": 0.6180910007076057, "pc3": -2.3896186502012537, "color": "rgb(126, 100, 128)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap16", "pc1": -1.8533633206797222, "pc2": -1.534968100558161, "pc3": 1.691526320083765, "color": "rgb(153, 100, 101)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap14", "pc1": -2.226259676470089, "pc2": -1.104810025875964, "pc3": -0.24656025720351593, "color": "rgb(49, 100, 205)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap16", "pc1": -1.8533633206797222, "pc2": -1.534968100558161, "pc3": 1.691526320083765, "color": "rgb(153, 100, 101)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap16", "pc1": -1.8533633206797222, "pc2": -1.534968100558161, "pc3": 1.691526320083765, "color": "rgb(153, 100, 101)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap17", "pc1": 7.938458216337516, "pc2": 0.6830670659938525, "pc3": 0.06244743174636591, "color": "rgb(95, 100, 159)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap18", "pc1": -2.381888009265051, "pc2": -1.0506462857116343, "pc3": -0.12754306510100344, "color": "rgb(52, 100, 202)"}, {"haplotype": "Hap17", "pc1": 7.938458216337516, "pc2": 0.6830670659938525, "pc3": 0.06244743174636591, "color": "rgb(95, 100, 159)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap16", "pc1": -1.8533633206797222, "pc2": -1.534968100558161, "pc3": 1.691526320083765, "color": "rgb(153, 100, 101)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap7", "pc1": 7.7212180080331265, "pc2": 0.6081847651327297, "pc3": 0.05353045262091749, "color": "rgb(217, 100, 37)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap13", "pc1": -2.312666179047736, "pc2": -1.1046980980430878, "pc3": -0.21262881677594914, "color": "rgb(255, 100, 0)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap17", "pc1": 7.938458216337516, "pc2": 0.6830670659938525, "pc3": 0.06244743174636591, "color": "rgb(95, 100, 159)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap18", "pc1": -2.381888009265051, "pc2": -1.0506462857116343, "pc3": -0.12754306510100344, "color": "rgb(52, 100, 202)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap5", "pc1": -2.2120857898031883, "pc2": -2.7613187230083236, "pc3": -3.5143353227300795, "color": "rgb(90, 100, 164)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap1", "pc1": -3.786752798865961, "pc2": 3.122641912163317, "pc3": 0.14356072275272513, "color": "rgb(135, 100, 119)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap18", "pc1": -2.381888009265051, "pc2": -1.0506462857116343, "pc3": -0.12754306510100344, "color": "rgb(52, 100, 202)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap14", "pc1": -2.226259676470089, "pc2": -1.104810025875964, "pc3": -0.24656025720351593, "color": "rgb(49, 100, 205)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap6", "pc1": 7.918292666255535, "pc2": 0.6765613778799731, "pc3": 0.06169447943138717, "color": "rgb(174, 100, 80)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap15", "pc1": -2.908853292723171, "pc2": 0.6180910007076057, "pc3": -2.3896186502012537, "color": "rgb(126, 100, 128)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap18", "pc1": -2.381888009265051, "pc2": -1.0506462857116343, "pc3": -0.12754306510100344, "color": "rgb(52, 100, 202)"}, {"haplotype": "Hap14", "pc1": -2.226259676470089, "pc2": -1.104810025875964, "pc3": -0.24656025720351593, "color": "rgb(49, 100, 205)"}, {"haplotype": "Hap11", "pc1": -2.221471042116187, "pc2": -1.0952328888249592, "pc3": -0.2437702484279649, "color": "rgb(17, 100, 237)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap18", "pc1": -2.381888009265051, "pc2": -1.0506462857116343, "pc3": -0.12754306510100344, "color": "rgb(52, 100, 202)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap10", "pc1": -2.30686260412354, "pc2": -1.0935259034485338, "pc3": -0.2098217586418456, "color": "rgb(0, 100, 255)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap9", "pc1": -1.663769092769332, "pc2": -2.1443003095439366, "pc3": -2.236809617219925, "color": "rgb(46, 100, 208)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap2", "pc1": 7.701052457951144, "pc2": 0.6016790770188498, "pc3": 0.05277750030593875, "color": "rgb(182, 100, 72)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap8", "pc1": -1.69104966545273, "pc2": -2.2934045624969626, "pc3": -2.444247952401194, "color": "rgb(94, 100, 160)"}, {"haplotype": "Hap14", "pc1": -2.226259676470089, "pc2": -1.104810025875964, "pc3": -0.24656025720351593, "color": "rgb(49, 100, 205)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap12", "pc1": -1.824186059918196, "pc2": -2.0997137064306113, "pc3": -2.1205824338929635, "color": "rgb(122, 100, 132)"}, {"haplotype": "Hap4", "pc1": -1.7491606547766847, "pc2": -2.1425933241675112, "pc3": -2.2028611274338057, "color": "rgb(109, 100, 145)"}, {"haplotype": "Hap3", "pc1": -2.0800534937298103, "pc2": -2.7371442847001153, "pc3": 3.964485813571627, "color": "rgb(131, 100, 123)"}, {"haplotype": "Hap14", "pc1": -2.226259676470089, "pc2": -1.104810025875964, "pc3": -0.24656025720351593, "color": "rgb(49, 100, 205)"}];
+const varExplained = [62.94277212157135, 15.618295204797278, 11.964628765433082];
+const regionStart = 486476592;
+const regionEnd = 486484769;
+const geneStart = 486476592;
+const geneEnd = 486484769;
+
+// 过滤状态
+let filterState = {
+    maf: 0,
+    missingRate: 1.0
+};
+
+function getAnnotationEnabledMp() {
+    const o = {};
+    document.querySelectorAll('.ann-cb-mp').forEach(cb => { o[cb.value] = cb.checked; });
+    return o;
+}
+
+function annAllowedMp(d) {
+    const a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    const cb = document.querySelector('.ann-cb-mp[value="' + a + '"]');
+    if (cb) return cb.checked;
+    const o = document.querySelector('.ann-cb-mp[value="other"]');
+    return o ? o.checked : true;
+}
+
+const tooltip = d3.select('#tooltip');
+
+// Tab切换
+function showTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.quick-nav a').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    document.querySelector(`.tab-btn[onclick="showTab('${tabId}')"]`).classList.add('active');
+    document.getElementById('nav-' + tabId).classList.add('active');
+    
+    // 延迟初始化图表
+    setTimeout(() => {
+        if (tabId === 'network' && !window.networkInitialized) initNetwork();
+        if (tabId === 'manhattan' && !window.manhattanInitialized) initManhattan();
+        if (tabId === 'pca' && !window.pcaInitialized) initPCA();
+    }, 100);
+}
+
+// ========== 过滤功能 ==========
+function updateFilter(type, value) {
+    if (type === 'maf') {
+        filterState.maf = parseFloat(value);
+        document.getElementById('mafValue').textContent = value;
+    } else if (type === 'missing') {
+        filterState.missingRate = parseFloat(value);
+        document.getElementById('missingValue').textContent = value;
+    }
+}
+
+function resetFilters() {
+    document.getElementById('mafSlider').value = 0;
+    document.getElementById('missingSlider').value = 1;
+    filterState = { maf: 0, missingRate: 1.0 };
+    document.getElementById('mafValue').textContent = '0';
+    document.getElementById('missingValue').textContent = '1.0';
+    document.querySelectorAll('.ann-cb-mp').forEach(cb => { cb.checked = true; });
+    applyFilters();
+}
+
+function applyFilters() {
+    const filteredData = manhattanData.filter(d => {
+        const mafPass = d.maf >= filterState.maf;
+        const missingPass = d.missing_rate <= filterState.missingRate;
+        return mafPass && missingPass && annAllowedMp(d);
+    });
+    
+    updateMiniManhattan(filteredData);
+    
+    const iframe = document.getElementById('integrated-frame');
+    if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+            type: 'filter',
+            filters: {
+                maf: filterState.maf,
+                missingRate: filterState.missingRate,
+                annotationEnabled: getAnnotationEnabledMp()
+            }
+        }, '*');
+    }
+}
+
+// ========== 网络图 ==========
+let networkSvg, networkG, networkSimulation;
+window.networkInitialized = false;
+
+let networkScale = 1;
+const networkCx = () => document.getElementById('network-chart').clientWidth / 2;
+const networkCy = () => 275;
+
+function applyNetworkPanelZoom() {
+    const cx = networkCx(), cy = networkCy();
+    networkG.attr('transform', 'translate(' + cx + ',' + cy + ') scale(' + networkScale + ') translate(' + (-cx) + ',' + (-cy) + ')');
+}
+
+function initNetwork() {
+    const container = document.getElementById('network-chart');
+    const width = container.clientWidth;
+    const height = 550;
+    
+    networkSvg = d3.select('#network-chart').append('svg').attr('width', width).attr('height', height).style('overflow', 'hidden');
+    networkSvg.append('defs').append('clipPath').attr('id', 'clip-net-panel')
+        .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+    networkG = networkSvg.append('g').attr('clip-path', 'url(#clip-net-panel)');
+    networkScale = 1;
+    applyNetworkPanelZoom();
+    
+    // 滚轮缩放
+    networkSvg.on('wheel', function(e) {
+        e.preventDefault();
+        var delta = e.deltaY > 0 ? 0.9 : 1.1;
+        networkScale = Math.max(0.45, Math.min(2.5, networkScale * delta));
+        applyNetworkPanelZoom();
+    });
+    
+    networkNodes.forEach(d => {
+        d.x = width / 2 + (Math.random() - 0.5) * 50;
+        d.y = height / 2 + (Math.random() - 0.5) * 50;
+    });
+    
+    networkSimulation = d3.forceSimulation(networkNodes)
+        .force('link', d3.forceLink(networkEdges).id(d => d.id).distance(d => 60 + d.distance * 12))
+        .force('charge', d3.forceManyBody().strength(-140))
+        .force('center', d3.forceCenter(width/2, height/2))
+        .force('x', d3.forceX(width/2).strength(0.1))
+        .force('y', d3.forceY(height/2).strength(0.1))
+        .force('collision', d3.forceCollide().radius(d => d.size + 8));
+    
+    // 绘制基础连线
+    const link = networkG.append('g').selectAll('line.base-link').data(networkEdges).enter().append('line')
+        .attr('class', 'base-link').attr('stroke', '#666').attr('stroke-opacity', 0.5).attr('stroke-width', 1.5);
+    
+    // 绘制差异位点标记（竖线）
+    const linkMarkers = networkG.append('g').selectAll('g.link-markers').data(networkEdges).enter().append('g')
+        .attr('class', 'link-markers');
+    
+    networkEdges.forEach((d, i) => {
+        const markerGroup = linkMarkers.filter((ld, li) => li === i);
+        const numDiffs = d.distance || 0;
+        if (numDiffs > 0) {
+            for (let j = 0; j < Math.min(numDiffs, 10); j++) {
+                const t = (j + 1) / (numDiffs + 1);
+                markerGroup.append('line').attr('class', 'diff-marker')
+                    .attr('stroke', '#e74c3c').attr('stroke-width', 2).attr('stroke-opacity', 0.8)
+                    .attr('data-t', t);
+            }
+        }
+    });
+    
+    const node = networkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
+        .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
+        .style('cursor', 'pointer')
+        .call(d3.drag()
+            .on('start', function(event, d) { if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+            .on('drag', function(event, d) { d.fx = event.x; d.fy = event.y; })
+            .on('end', function(event, d) { if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; })
+        );
+    
+    const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
+        .attr('text-anchor', 'middle').attr('dy', d => d.size + 14).attr('font-size', '11px')
+        .attr('font-weight', '600').attr('fill', '#333').text(d => d.id);
+    
+    node.on('mouseover', function(event, d) {
+        d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
+        tooltip.style('display', 'block').html(
+            `<h4>${d.id}</h4><p><b>Sample Count:</b> ${d.count}</p><p><b>Node Size:</b> ${d.size.toFixed(1)}</p><p><b>Mean Phenotype:</b> ${d.phenoMean}</p>`);
+    }).on('mousemove', function(event) {
+        tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
+    }).on('mouseout', function() {
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+        tooltip.style('display', 'none');
+    });
+    
+    networkSimulation.on('tick', () => {
+        networkNodes.forEach(d => {
+            const r = (d.size || 10) + 8;
+            d.x = Math.max(r, Math.min(width - r, d.x));
+            d.y = Math.max(r, Math.min(height - r, d.y));
+        });
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        
+        // 更新差异位点标记
+        linkMarkers.selectAll('line.diff-marker')
+            .attr('x1', function() {
+                const d = d3.select(this.parentNode).datum();
+                const t = +d3.select(this).attr('data-t');
+                return d.source.x + (d.target.x - d.source.x) * t;
+            })
+            .attr('y1', function() {
+                const d = d3.select(this.parentNode).datum();
+                const t = +d3.select(this).attr('data-t');
+                return d.source.y + (d.target.y - d.source.y) * t - 6;
+            })
+            .attr('x2', function() {
+                const d = d3.select(this.parentNode).datum();
+                const t = +d3.select(this).attr('data-t');
+                return d.source.x + (d.target.x - d.source.x) * t;
+            })
+            .attr('y2', function() {
+                const d = d3.select(this.parentNode).datum();
+                const t = +d3.select(this).attr('data-t');
+                return d.source.y + (d.target.y - d.source.y) * t + 6;
+            });
+        
+        node.attr('cx', d => d.x).attr('cy', d => d.y);
+        labels.attr('x', d => d.x).attr('y', d => d.y);
+    });
+    
+    window.networkInitialized = true;
+}
+
+function networkZoomIn() { networkScale = Math.min(2.5, networkScale * 1.2); applyNetworkPanelZoom(); }
+function networkZoomOut() { networkScale = Math.max(0.45, networkScale / 1.2); applyNetworkPanelZoom(); }
+function networkResetZoom() { networkScale = 1; applyNetworkPanelZoom(); }
+
+function setNetworkLayout(type) {
+    document.getElementById('netForceBtn').classList.toggle('active', type === 'force');
+    document.getElementById('netRadialBtn').classList.toggle('active', type === 'radial');
+    const width = document.getElementById('network-chart').clientWidth;
+    const height = 550;
+    if (type === 'radial') {
+        const r = Math.min(width, height) / 3;
+        networkNodes.forEach((d, i) => {
+            const angle = (i / networkNodes.length) * 2 * Math.PI;
+            d.fx = width/2 + r * Math.cos(angle);
+            d.fy = height/2 + r * Math.sin(angle);
+        });
+        networkSimulation.alpha(0.3).restart();
+    } else {
+        networkNodes.forEach(d => { d.fx = null; d.fy = null; });
+        networkSimulation.alpha(1).restart();
+    }
+}
+
+// ========== 曼哈顿图 ==========
+window.manhattanInitialized = false;
+
+function initManhattan() {
+    const container = document.getElementById('manhattan-chart');
+    const margin = {top: 30, right: 30, bottom: 50, left: 60};
+    const width = container.clientWidth - margin.left - margin.right;
+    const height = 500 - margin.top - margin.bottom;
+    
+    const svg = d3.select('#manhattan-chart').append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const xScale = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, width]);
+    const maxLogP = manhattanData.length > 0 ? Math.max(...manhattanData.map(d => d.logp)) * 1.1 : 3;
+    const yScale = d3.scaleLinear().domain([0, Math.max(maxLogP, 3)]).range([height, 0]);
+    
+    svg.append('g').attr('transform', `translate(0,${height})`).call(d3.axisBottom(xScale).ticks(8).tickFormat(d => (d/1000).toFixed(0) + 'k'));
+    svg.append('g').call(d3.axisLeft(yScale));
+    
+    svg.append('text').attr('x', width/2).attr('y', height + 40).attr('text-anchor', 'middle').attr('font-size', '12px').text('Position (kb)');
+    svg.append('text').attr('transform', 'rotate(-90)').attr('x', -height/2).attr('y', -45).attr('text-anchor', 'middle').attr('font-size', '12px').text('-log10(P-value)');
+    
+    svg.append('line').attr('x1', 0).attr('x2', width).attr('y1', yScale(-Math.log10(0.05))).attr('y2', yScale(-Math.log10(0.05)))
+        .attr('stroke', '#e74c3c').attr('stroke-dasharray', '5,5');
+    
+    svg.selectAll('circle').data(manhattanData).enter().append('circle')
+        .attr('cx', d => xScale(d.pos)).attr('cy', d => yScale(d.logp)).attr('r', 5)
+        .attr('fill', d => d.pvalue < 0.01 ? '#8B0000' : d.pvalue < 0.05 ? '#e74c3c' : '#3498db')
+        .attr('opacity', 0.7).style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            d3.select(this).attr('r', 8);
+            tooltip.style('display', 'block').html(`<h4>Position: ${d.pos.toLocaleString()}</h4><p>P-value: ${d.pvalue.toExponential(2)}</p><p>-log10(P): ${d.logp.toFixed(2)}</p>`);
+        }).on('mousemove', function(event) {
+            tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
+        }).on('mouseout', function() {
+            d3.select(this).attr('r', 5);
+            tooltip.style('display', 'none');
+        });
+    
+    window.manhattanInitialized = true;
+}
+
+// ========== PCA ==========
+let pcaSvg, pcaG;
+window.pcaInitialized = false;
+
+function initPCA() {
+    const container = document.getElementById('pca-chart');
+    const margin = {top: 30, right: 30, bottom: 50, left: 60};
+    const width = container.clientWidth - margin.left - margin.right;
+    const height = 500 - margin.top - margin.bottom;
+    
+    pcaSvg = d3.select('#pca-chart').append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom);
+    pcaG = pcaSvg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    window.pcaWidth = width;
+    window.pcaHeight = height;
+    updatePCA();
+    window.pcaInitialized = true;
+}
+
+function updatePCA() {
+    if (!window.pcaInitialized && !pcaG) return;
+    const xKey = document.getElementById('pcaXAxis').value;
+    const yKey = document.getElementById('pcaYAxis').value;
+    const width = window.pcaWidth || 800;
+    const height = window.pcaHeight || 450;
+    
+    pcaG.selectAll('*').remove();
+    
+    if (pcaData.length === 0) {
+        pcaG.append('text').attr('x', width/2).attr('y', height/2).attr('text-anchor', 'middle').text('No PCA data available');
+        return;
+    }
+    
+    const xValues = pcaData.map(d => d[xKey]);
+    const yValues = pcaData.map(d => d[yKey]);
+    const xPad = (Math.max(...xValues) - Math.min(...xValues)) * 0.1 || 1;
+    const yPad = (Math.max(...yValues) - Math.min(...yValues)) * 0.1 || 1;
+    
+    const xScale = d3.scaleLinear().domain([Math.min(...xValues) - xPad, Math.max(...xValues) + xPad]).range([0, width]);
+    const yScale = d3.scaleLinear().domain([Math.min(...yValues) - yPad, Math.max(...yValues) + yPad]).range([height, 0]);
+    
+    pcaG.append('g').attr('transform', `translate(0,${height})`).call(d3.axisBottom(xScale));
+    pcaG.append('g').call(d3.axisLeft(yScale));
+    
+    const xIdx = parseInt(xKey.slice(2)) - 1;
+    const yIdx = parseInt(yKey.slice(2)) - 1;
+    pcaG.append('text').attr('x', width/2).attr('y', height + 40).attr('text-anchor', 'middle').attr('font-size', '12px')
+        .text(xKey.toUpperCase() + ` (${varExplained[xIdx]?.toFixed(1) || '?'}%)`);
+    pcaG.append('text').attr('transform', 'rotate(-90)').attr('x', -height/2).attr('y', -45).attr('text-anchor', 'middle').attr('font-size', '12px')
+        .text(yKey.toUpperCase() + ` (${varExplained[yIdx]?.toFixed(1) || '?'}%)`);
+    
+    pcaG.selectAll('circle').data(pcaData).enter().append('circle')
+        .attr('cx', d => xScale(d[xKey])).attr('cy', d => yScale(d[yKey])).attr('r', 5)
+        .attr('fill', d => d.color).attr('opacity', 0.7).attr('stroke', '#fff').attr('stroke-width', 1)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            d3.select(this).attr('r', 8);
+            tooltip.style('display', 'block').html(`<h4>${d.haplotype}</h4><p>PC1: ${d.pc1.toFixed(2)}</p><p>PC2: ${d.pc2.toFixed(2)}</p>`);
+        }).on('mousemove', function(event) {
+            tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
+        }).on('mouseout', function() {
+            d3.select(this).attr('r', 5);
+            tooltip.style('display', 'none');
+        });
+}
+
+// ========== 迷你网络图（Association Analysis面板） ==========
+let miniNetworkSvg, miniNetworkG, miniNetworkSimulation;
+window.miniNetworkInitialized = false;
+
+function initMiniNetwork() {
+    const container = document.getElementById('mini-network');
+    if (!container) return;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    d3.select('#mini-network').selectAll('*').remove();
+    
+    miniNetworkSvg = d3.select('#mini-network').append('svg')
+        .attr('width', width).attr('height', height).style('overflow', 'hidden');
+    miniNetworkSvg.append('defs').append('clipPath').attr('id', 'clip-mini-net')
+        .append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+    miniNetworkG = miniNetworkSvg.append('g').attr('clip-path', 'url(#clip-mini-net)');
+    
+    networkNodes.forEach(d => {
+        d.x = width / 2 + (Math.random() - 0.5) * 20;
+        d.y = height / 2 + (Math.random() - 0.5) * 20;
+    });
+    
+    miniNetworkSimulation = d3.forceSimulation(networkNodes)
+        .force('link', d3.forceLink(networkEdges).id(d => d.id).distance(d => 40 + d.distance * 8))
+        .force('charge', d3.forceManyBody().strength(-90))
+        .force('center', d3.forceCenter(width/2, height/2))
+        .force('x', d3.forceX(width/2).strength(0.12))
+        .force('y', d3.forceY(height/2).strength(0.12))
+        .force('collision', d3.forceCollide().radius(d => d.size * 0.6 + 5));
+    
+    const link = miniNetworkG.append('g').selectAll('line').data(networkEdges).enter().append('line')
+        .attr('stroke', '#999').attr('stroke-opacity', 0.4).attr('stroke-width', 1);
+    
+    const node = miniNetworkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
+        .attr('r', d => d.size * 0.6).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 1.5)
+        .style('cursor', 'default');
+    
+    const labels = miniNetworkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
+        .attr('text-anchor', 'middle').attr('dy', d => d.size * 0.6 + 10).attr('font-size', '9px')
+        .attr('fill', '#333').text(d => d.id);
+    
+    node.on('mouseover', function(event, d) {
+        d3.select(this).attr('stroke', '#333').attr('stroke-width', 2);
+        tooltip.style('display', 'block').html(`<h4>${d.id}</h4><p>Count: ${d.count}</p><p>Mean: ${d.phenoMean}</p>`);
+    }).on('mousemove', function(event) {
+        tooltip.style('left', (event.clientX + 10) + 'px').style('top', (event.clientY - 10) + 'px');
+    }).on('mouseout', function() {
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5);
+        tooltip.style('display', 'none');
+    });
+    
+    miniNetworkSimulation.on('tick', () => {
+        networkNodes.forEach(d => {
+            const r = (d.size || 10) * 0.6 + 5;
+            d.x = Math.max(r, Math.min(width - r, d.x));
+            d.y = Math.max(r, Math.min(height - r, d.y));
+        });
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('cx', d => d.x).attr('cy', d => d.y);
+        labels.attr('x', d => d.x).attr('y', d => d.y);
+    });
+    
+    window.miniNetworkInitialized = true;
+}
+
+// ========== 迷你曼哈顿图（Association Analysis面板） ==========
+let miniManhattanSvg;
+window.miniManhattanInitialized = false;
+
+function initMiniManhattan() {
+    updateMiniManhattan(manhattanData);
+    window.miniManhattanInitialized = true;
+}
+
+function updateMiniManhattan(data) {
+    const container = document.getElementById('mini-manhattan');
+    if (!container) return;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const margin = {top: 10, right: 10, bottom: 25, left: 35};
+    
+    d3.select('#mini-manhattan').selectAll('*').remove();
+    
+    miniManhattanSvg = d3.select('#mini-manhattan').append('svg')
+        .attr('width', width).attr('height', height);
+    
+    const g = miniManhattanSvg.append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+    
+    const xScale = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, innerWidth]);
+    const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp), 1) : 1;
+    const yScale = d3.scaleLinear().domain([0, maxLogP * 1.1]).range([innerHeight, 0]);
+    
+    // 轴线
+    g.append('g').attr('transform', `translate(0,${innerHeight})`)
+        .call(d3.axisBottom(xScale).ticks(4).tickFormat(d => (d/1000).toFixed(0) + 'k'))
+        .selectAll('text').attr('font-size', '8px');
+    g.append('g').call(d3.axisLeft(yScale).ticks(4)).selectAll('text').attr('font-size', '8px');
+    
+    // 显著性线
+    g.append('line').attr('x1', 0).attr('x2', innerWidth)
+        .attr('y1', yScale(-Math.log10(0.05))).attr('y2', yScale(-Math.log10(0.05)))
+        .attr('stroke', '#e74c3c').attr('stroke-dasharray', '3,3').attr('opacity', 0.6);
+    
+    // 数据点
+    g.selectAll('circle').data(data).enter().append('circle')
+        .attr('cx', d => xScale(d.pos)).attr('cy', d => yScale(d.logp)).attr('r', 3)
+        .attr('fill', d => d.pvalue < 0.01 ? '#8B0000' : d.pvalue < 0.05 ? '#e74c3c' : '#3498db')
+        .attr('opacity', 0.7).style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            d3.select(this).attr('r', 5);
+            tooltip.style('display', 'block').html(`<h4>Pos: ${d.pos.toLocaleString()}</h4><p>P: ${d.pvalue.toExponential(2)}</p>`);
+        }).on('mousemove', function(event) {
+            tooltip.style('left', (event.clientX + 10) + 'px').style('top', (event.clientY - 10) + 'px');
+        }).on('mouseout', function() {
+            d3.select(this).attr('r', 3);
+            tooltip.style('display', 'none');
+        });
+}
+
+// 初始化（默认显示 Association Analysis 面板）
+document.addEventListener('DOMContentLoaded', () => {
+    // 初始化迷你图表
+    setTimeout(() => {
+        initMiniNetwork();
+        initMiniManhattan();
+    }, 200);
+});
+
+// 键盘快捷键
+document.addEventListener('keydown', (e) => {
+    if (e.key === '1') showTab('integrated');
+    if (e.key === '2') showTab('network');
+    if (e.key === '3') showTab('manhattan');
+    if (e.key === '4') showTab('pca');
+});
+</script>
+</body>
+</html>
