@@ -6431,7 +6431,12 @@ document.addEventListener('DOMContentLoaded', function() {
         else:
             print("[DEBUG] WARNING: SVG button NOT found in HTML before saving")
 
-        out = os.path.join(self.output_dir, "integrated_analysis.html")
+        # 使用基因名作为HTML文件名（如果提供了gene_id）
+        if gene_id:
+            html_filename = f"{gene_id}.html"
+        else:
+            html_filename = "integrated_analysis.html"
+        out = os.path.join(self.output_dir, html_filename)
         with open(out, 'w', encoding='utf-8') as f:
             f.write(html)
         print(f"[INFO] 综合HTML报告已保存: {out}")
