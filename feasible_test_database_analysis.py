@@ -21,7 +21,7 @@ from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer
 
 # 配置
 DATABASE_DIR = "d:/Desktop/project1/database"
-BASE_OUTPUT_DIR = "d:/Desktop/project1/results2"
+BASE_OUTPUT_DIR = "d:/Desktop/project1/results3"
 VCF_FILE = "d:/Desktop/project1/chrALL.impute.vcf.gz"  # 需要VCF文件用于HTML生成
 GFF_FILE = "d:/Desktop/project1/barley_morex_v3.chr.gff3"  # 需要GFF文件用于HTML生成
 

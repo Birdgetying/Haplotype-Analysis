@@ -783,7 +783,7 @@ class DataConfig:
     LOCAL_VCF_ID_PATH = "./Variation/CSIAAS/VCFID.txt"
     
     # 输出路径
-    OUTPUT_DIR = "./results/haplotype_analysis"
+    OUTPUT_DIR = "./results3"
 
 
 # ============================================================================
