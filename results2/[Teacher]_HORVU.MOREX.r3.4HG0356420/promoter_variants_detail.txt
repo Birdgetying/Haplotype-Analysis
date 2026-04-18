@@ -1,0 +1,91 @@
+启动子区域变异分析报告
+============================================================
+基因: HORVU.MOREX.r3.4HG0356420
+染色体: chr4H
+链方向: +
+启动子区域: 146,933,826-146,938,825
+TSS位置: 146,938,826 (正链) 或 146,943,753 (负链)
+变异总数: 78
+  - 纯启动子变异: 78
+  - 与其他基因CDS重叠: 0
+
+变异详情:
+------------------------------------------------------------
+  位置: 146,934,153 | 距离TSS: 4,673bp | REF: AT | ALT: A | MAF: 0.002
+  位置: 146,934,173 | 距离TSS: 4,653bp | REF: T | ALT: G | MAF: 0.033
+  位置: 146,934,226 | 距离TSS: 4,600bp | REF: G | ALT: A | MAF: 0.031
+  位置: 146,934,444 | 距离TSS: 4,382bp | REF: G | ALT: A | MAF: 0.351
+  位置: 146,934,452 | 距离TSS: 4,374bp | REF: G | ALT: A | MAF: 0.019
+  位置: 146,934,562 | 距离TSS: 4,264bp | REF: C | ALT: T | MAF: 0.489
+  位置: 146,934,633 | 距离TSS: 4,193bp | REF: G | ALT: T | MAF: 0.045
+  位置: 146,934,657 | 距离TSS: 4,169bp | REF: G | ALT: A | MAF: 0.478
+  位置: 146,934,658 | 距离TSS: 4,168bp | REF: C | ALT: T | MAF: 0.207
+  位置: 146,934,684 | 距离TSS: 4,142bp | REF: C | ALT: T | MAF: 0.029
+  位置: 146,934,697 | 距离TSS: 4,129bp | REF: A | ALT: AT | MAF: 0.481
+  位置: 146,934,771 | 距离TSS: 4,055bp | REF: C | ALT: T | MAF: 0.023
+  位置: 146,934,815 | 距离TSS: 4,011bp | REF: C | ALT: A | MAF: 0.082
+  位置: 146,934,857 | 距离TSS: 3,969bp | REF: G | ALT: A | MAF: 0.204
+  位置: 146,934,898 | 距离TSS: 3,928bp | REF: G | ALT: A | MAF: 0.011
+  位置: 146,934,900 | 距离TSS: 3,926bp | REF: G | ALT: A | MAF: 0.062
+  位置: 146,934,924 | 距离TSS: 3,902bp | REF: G | ALT: A | MAF: 0.014
+  位置: 146,934,956 | 距离TSS: 3,870bp | REF: G | ALT: A | MAF: 0.207
+  位置: 146,935,042 | 距离TSS: 3,784bp | REF: C | ALT: G | MAF: 0.019
+  位置: 146,935,139 | 距离TSS: 3,687bp | REF: C | ALT: T | MAF: 0.353
+  位置: 146,935,146 | 距离TSS: 3,680bp | REF: G | ALT: A | MAF: 0.011
+  位置: 146,935,187 | 距离TSS: 3,639bp | REF: C | ALT: T | MAF: 0.039
+  位置: 146,935,237 | 距离TSS: 3,589bp | REF: T | ALT: A | MAF: 0.045
+  位置: 146,935,303 | 距离TSS: 3,523bp | REF: C | ALT: T | MAF: 0.034
+  位置: 146,935,354 | 距离TSS: 3,472bp | REF: A | ALT: T | MAF: 0.043
+  位置: 146,935,507 | 距离TSS: 3,319bp | REF: C | ALT: T | MAF: 0.063
+  位置: 146,935,521 | 距离TSS: 3,305bp | REF: G | ALT: A | MAF: 0.093
+  位置: 146,935,589 | 距离TSS: 3,237bp | REF: T | ALT: A | MAF: 0.023
+  位置: 146,935,609 | 距离TSS: 3,217bp | REF: G | ALT: C | MAF: 0.054
+  位置: 146,935,641 | 距离TSS: 3,185bp | REF: G | ALT: T | MAF: 0.025
+  位置: 146,935,657 | 距离TSS: 3,169bp | REF: C | ALT: T | MAF: 0.012
+  位置: 146,935,740 | 距离TSS: 3,086bp | REF: C | ALT: G | MAF: 0.056
+  位置: 146,935,787 | 距离TSS: 3,039bp | REF: G | ALT: C | MAF: 0.020
+  位置: 146,935,823 | 距离TSS: 3,003bp | REF: G | ALT: A | MAF: 0.039
+  位置: 146,935,840 | 距离TSS: 2,986bp | REF: G | ALT: A | MAF: 0.063
+  位置: 146,935,906 | 距离TSS: 2,920bp | REF: C | ALT: T | MAF: 0.045
+  位置: 146,935,923 | 距离TSS: 2,903bp | REF: C | ALT: T | MAF: 0.065
+  位置: 146,936,047 | 距离TSS: 2,779bp | REF: A | ALT: G | MAF: 0.480
+  位置: 146,936,059 | 距离TSS: 2,767bp | REF: C | ALT: T | MAF: 0.017
+  位置: 146,936,105 | 距离TSS: 2,721bp | REF: G | ALT: C | MAF: 0.207
+  位置: 146,936,177 | 距离TSS: 2,649bp | REF: T | ALT: C | MAF: 0.023
+  位置: 146,936,257 | 距离TSS: 2,569bp | REF: A | ALT: T | MAF: 0.353
+  位置: 146,936,364 | 距离TSS: 2,462bp | REF: G | ALT: A | MAF: 0.207
+  位置: 146,936,379 | 距离TSS: 2,447bp | REF: A | ALT: T | MAF: 0.207
+  位置: 146,936,436 | 距离TSS: 2,390bp | REF: G | ALT: A | MAF: 0.063
+  位置: 146,936,455 | 距离TSS: 2,371bp | REF: T | ALT: G | MAF: 0.063
+  位置: 146,936,520 | 距离TSS: 2,306bp | REF: G | ALT: A | MAF: 0.063
+  位置: 146,936,585 | 距离TSS: 2,241bp | REF: C | ALT: T | MAF: 0.056
+  位置: 146,936,639 | 距离TSS: 2,187bp | REF: C | ALT: T | MAF: 0.206
+  位置: 146,936,705 | 距离TSS: 2,121bp | REF: C | ALT: T | MAF: 0.023
+  位置: 146,936,745 | 距离TSS: 2,081bp | REF: T | ALT: C | MAF: 0.045
+  位置: 146,936,898 | 距离TSS: 1,928bp | REF: G | ALT: A | MAF: 0.119
+  位置: 146,936,918 | 距离TSS: 1,908bp | REF: C | ALT: T | MAF: 0.033
+  位置: 146,937,025 | 距离TSS: 1,801bp | REF: T | ALT: C | MAF: 0.351
+  位置: 146,937,034 | 距离TSS: 1,792bp | REF: G | ALT: A | MAF: 0.023
+  位置: 146,937,108 | 距离TSS: 1,718bp | REF: GA | ALT: G | MAF: 0.207
+  位置: 146,937,113 | 距离TSS: 1,713bp | REF: A | ALT: C | MAF: 0.091
+  位置: 146,937,138 | 距离TSS: 1,688bp | REF: A | ALT: T | MAF: 0.014
+  位置: 146,937,327 | 距离TSS: 1,499bp | REF: G | ALT: A | MAF: 0.019
+  位置: 146,937,332 | 距离TSS: 1,494bp | REF: C | ALT: T | MAF: 0.207
+  位置: 146,937,386 | 距离TSS: 1,440bp | REF: G | ALT: C | MAF: 0.404
+  位置: 146,937,620 | 距离TSS: 1,206bp | REF: T | ALT: C | MAF: 0.404
+  位置: 146,937,683 | 距离TSS: 1,143bp | REF: G | ALT: A | MAF: 0.034
+  位置: 146,937,723 | 距离TSS: 1,103bp | REF: G | ALT: C | MAF: 0.207
+  位置: 146,937,752 | 距离TSS: 1,074bp | REF: C | ALT: T | MAF: 0.023
+  位置: 146,937,780 | 距离TSS: 1,046bp | REF: G | ALT: A | MAF: 0.207
+  位置: 146,937,850 | 距离TSS: 976bp | REF: C | ALT: T | MAF: 0.020
+  位置: 146,937,878 | 距离TSS: 948bp | REF: A | ALT: G | MAF: 0.478
+  位置: 146,937,930 | 距离TSS: 896bp | REF: C | ALT: T | MAF: 0.014
+  位置: 146,937,954 | 距离TSS: 872bp | REF: G | ALT: C | MAF: 0.015
+  位置: 146,938,113 | 距离TSS: 713bp | REF: C | ALT: G | MAF: 0.351
+  位置: 146,938,191 | 距离TSS: 635bp | REF: A | ALT: C | MAF: 0.107
+  位置: 146,938,212 | 距离TSS: 614bp | REF: C | ALT: T | MAF: 0.023
+  位置: 146,938,282 | 距离TSS: 544bp | REF: G | ALT: A | MAF: 0.011
+  位置: 146,938,474 | 距离TSS: 352bp | REF: C | ALT: CG | MAF: 0.014
+  位置: 146,938,541 | 距离TSS: 285bp | REF: GGA | ALT: G | MAF: 0.014
+  位置: 146,938,615 | 距离TSS: 211bp | REF: G | ALT: C | MAF: 0.406
+  位置: 146,938,769 | 距离TSS: 57bp | REF: ACTC | ALT: A | MAF: 0.039

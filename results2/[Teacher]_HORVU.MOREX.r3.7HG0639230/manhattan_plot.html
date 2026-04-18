@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manhattan Plot - Region chr7H:8,958,052-8,968,526</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px;
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;
+                  padding: 20px 30px; border-radius: 10px 10px 0 0; }
+        .header h1 { font-size: 22px; margin-bottom: 8px; }
+        .header-info { font-size: 13px; opacity: 0.9; }
+        .plot-container { padding: 30px; }
+        #manhattan { width: 100%; height: 450px; }
+        .tooltip { position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px;
+                   border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; }
+        .axis text { font-size: 11px; }
+        .axis-label { font-size: 13px; font-weight: 600; }
+        .threshold-line { stroke-dasharray: 5,5; }
+        .legend { display: flex; gap: 20px; padding: 15px 30px; border-top: 1px solid #eee; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Manhattan Plot</h1>
+        <div class="header-info">Region: chr7H:8,958,052 - 8,968,526 | Variants: 49</div>
+    </div>
+    
+    <div class="plot-container">
+        <div id="manhattan"></div>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#3498db;"></div>Variants</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e74c3c;"></div>P &lt; 0.05</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8B0000;"></div>P &lt; 0.01</div>
+        <div class="legend-item"><span style="color:#e74c3c;">---</span> P = 0.05</div>
+        <div class="legend-item"><span style="color:#8B0000;">---</span> P = 0.01</div>
+    </div>
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<script>
+const data = [{"pos": 8962631, "pvalue": 0.13911435095347607, "logp": 0.8566280661372052, "type": "variant"}, {"pos": 8962640, "pvalue": 0.2510620601349163, "logp": 0.6002189118150514, "type": "variant"}, {"pos": 8962650, "pvalue": 0.24247086655370242, "logp": 0.6153404354330535, "type": "variant"}, {"pos": 8962661, "pvalue": 0.32699631851865907, "logp": 0.48545713680770125, "type": "variant"}, {"pos": 8962684, "pvalue": 0.24247086655370242, "logp": 0.6153404354330535, "type": "variant"}, {"pos": 8962696, "pvalue": 0.03702343205539857, "logp": 1.4315233248150525, "type": "variant"}, {"pos": 8963191, "pvalue": 0.03702343205539857, "logp": 1.4315233248150525, "type": "variant"}, {"pos": 8963202, "pvalue": 0.35223873820634954, "logp": 0.4531628832804214, "type": "variant"}, {"pos": 8963216, "pvalue": 0.2635332470969565, "logp": 0.5791645868275173, "type": "variant"}, {"pos": 8963268, "pvalue": 0.01798840381029539, "logp": 1.7450073717926329, "type": "variant"}, {"pos": 8963286, "pvalue": 4.507505481776084e-05, "logp": 4.346063736440579, "type": "variant"}, {"pos": 8963319, "pvalue": 0.01798840381029539, "logp": 1.7450073717926329, "type": "variant"}, {"pos": 8963478, "pvalue": 7.353517225936853e-05, "logp": 4.133504885888695, "type": "variant"}, {"pos": 8963491, "pvalue": 0.2635332470969565, "logp": 0.5791645868275173, "type": "variant"}, {"pos": 8963581, "pvalue": 0.4806475286725005, "logp": 0.3181732863419304, "type": "variant"}, {"pos": 8963593, "pvalue": 0.19726446868794364, "logp": 0.7049511329049272, "type": "variant"}, {"pos": 8963739, "pvalue": 0.2635332470969565, "logp": 0.5791645868275173, "type": "variant"}, {"pos": 8963753, "pvalue": 3.052440632895664e-05, "logp": 4.51535277392085, "type": "variant"}, {"pos": 8963757, "pvalue": 0.4806475286725005, "logp": 0.3181732863419304, "type": "variant"}, {"pos": 8963771, "pvalue": 0.044532310532358954, "logp": 1.351324771174154, "type": "variant"}, {"pos": 8964120, "pvalue": 0.6214341660783032, "logp": 0.20660487317410542, "type": "variant"}, {"pos": 8964152, "pvalue": 0.021618948480595184, "logp": 1.6651654334253014, "type": "variant"}, {"pos": 8964174, "pvalue": 0.4806475286725005, "logp": 0.3181732863419304, "type": "variant"}, {"pos": 8964314, "pvalue": 0.08924057768808831, "logp": 1.0494376270262886, "type": "variant"}, {"pos": 8964394, "pvalue": 0.08924057768808831, "logp": 1.0494376270262886, "type": "variant"}, {"pos": 8964444, "pvalue": 0.03102129672060756, "logp": 1.5083400522079722, "type": "variant"}, {"pos": 8964501, "pvalue": 0.14111424776044457, "logp": 0.8504291349957956, "type": "variant"}, {"pos": 8965376, "pvalue": 0.40599429436388357, "logp": 0.391480069732394, "type": "variant"}, {"pos": 8965660, "pvalue": 0.01831981537154678, "logp": 1.7370789074979982, "type": "variant"}, {"pos": 8965848, "pvalue": 0.05862375939513489, "logp": 1.2319263347851428, "type": "variant"}, {"pos": 8965896, "pvalue": 0.5617832915726785, "logp": 0.2504311816273113, "type": "variant"}, {"pos": 8965922, "pvalue": 0.4806475286725005, "logp": 0.3181732863419304, "type": "variant"}, {"pos": 8965937, "pvalue": 0.16903049915606008, "logp": 0.7720349260365275, "type": "variant"}, {"pos": 8966277, "pvalue": 0.0010994156517715498, "logp": 2.9588380845163407, "type": "variant"}, {"pos": 8966314, "pvalue": 0.45041202744794884, "logp": 0.34639002094415816, "type": "variant"}, {"pos": 8966477, "pvalue": 0.002587350026196464, "logp": 2.5871448143593567, "type": "variant"}, {"pos": 8966529, "pvalue": 0.34146195709485305, "logp": 0.46665767483489407, "type": "variant"}, {"pos": 8966675, "pvalue": 0.35223873820634954, "logp": 0.4531628832804214, "type": "variant"}, {"pos": 8966712, "pvalue": 0.0010994156517715498, "logp": 2.9588380845163407, "type": "variant"}, {"pos": 8966713, "pvalue": 0.0010994156517715498, "logp": 2.9588380845163407, "type": "variant"}, {"pos": 8966799, "pvalue": 0.16903049915606008, "logp": 0.7720349260365275, "type": "variant"}, {"pos": 8966843, "pvalue": 0.29721931615786684, "logp": 0.5269229693792561, "type": "variant"}, {"pos": 8967072, "pvalue": 0.0075081069791630446, "logp": 2.124469547967421, "type": "variant"}, {"pos": 8967093, "pvalue": 0.01115443472496967, "logp": 1.9525524336317652, "type": "variant"}, {"pos": 8967107, "pvalue": 0.12454315175457048, "logp": 0.9046801479907352, "type": "variant"}, {"pos": 8967469, "pvalue": 0.12454315175457048, "logp": 0.9046801479907352, "type": "variant"}, {"pos": 8967497, "pvalue": 0.4806475286725005, "logp": 0.3181732863419304, "type": "variant"}, {"pos": 8968257, "pvalue": 0.12454315175457048, "logp": 0.9046801479907352, "type": "variant"}, {"pos": 8968307, "pvalue": 0.12454315175457048, "logp": 0.9046801479907352, "type": "variant"}];
+const margin = {top: 30, right: 40, bottom: 60, left: 70};
+const container = document.getElementById('manhattan');
+const width = container.clientWidth - margin.left - margin.right;
+const height = 450 - margin.top - margin.bottom;
+
+const svg = d3.select('#manhattan')
+    .append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+// 比例尺
+const xScale = d3.scaleLinear()
+    .domain([8958052, 8968526])
+    .range([0, width]);
+
+const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp)) * 1.1 : 5;
+const yScale = d3.scaleLinear()
+    .domain([0, Math.max(maxLogP, 3)])
+    .range([height, 0]);
+
+// 坐标轴
+svg.append('g')
+    .attr('transform', `translate(0,${height})`)
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => (d/1000000).toFixed(2) + 'M'));
+
+svg.append('g')
+    .call(d3.axisLeft(yScale));
+
+// 坐标轴标签
+svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('x', width / 2)
+    .attr('y', height + 45)
+    .attr('text-anchor', 'middle')
+    .text('Position (Mb)');
+
+svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -height / 2)
+    .attr('y', -50)
+    .attr('text-anchor', 'middle')
+    .text('-log10(P-value)');
+
+// 阈值线
+const thresholds = [
+    {value: -Math.log10(0.05), color: '#e74c3c', label: 'P=0.05'},
+    {value: -Math.log10(0.01), color: '#8B0000', label: 'P=0.01'}
+];
+
+thresholds.forEach(t => {
+    if (t.value <= maxLogP) {
+        svg.append('line')
+            .attr('class', 'threshold-line')
+            .attr('x1', 0)
+            .attr('x2', width)
+            .attr('y1', yScale(t.value))
+            .attr('y2', yScale(t.value))
+            .attr('stroke', t.color)
+            .attr('stroke-width', 1.5);
+    }
+});
+
+// 绘制点
+const tooltip = d3.select('#tooltip');
+
+svg.selectAll('circle')
+    .data(data)
+    .enter()
+    .append('circle')
+    .attr('cx', d => xScale(d.pos))
+    .attr('cy', d => yScale(d.logp))
+    .attr('r', 5)
+    .attr('fill', d => {
+        if (d.pvalue < 0.01) return '#8B0000';
+        if (d.pvalue < 0.05) return '#e74c3c';
+        return '#3498db';
+    })
+    .attr('opacity', 0.7)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(event, d) {
+        d3.select(this).attr('r', 8).attr('opacity', 1);
+        tooltip.style('display', 'block')
+            .html(`<strong>Position:</strong> ${d.pos.toLocaleString()}<br>
+                   <strong>P-value:</strong> ${d.pvalue.toExponential(2)}<br>
+                   <strong>-log10(P):</strong> ${d.logp.toFixed(2)}`);
+    })
+    .on('mousemove', function(event) {
+        tooltip.style('left', (event.pageX + 15) + 'px')
+               .style('top', (event.pageY - 10) + 'px');
+    })
+    .on('mouseout', function() {
+        d3.select(this).attr('r', 5).attr('opacity', 0.7);
+        tooltip.style('display', 'none');
+    });
+</script>
+</body>
+</html>

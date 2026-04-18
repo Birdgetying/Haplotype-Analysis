@@ -28,7 +28,7 @@
 <div class="container">
     <div class="header">
         <h1>P-value Heatmap Overlay</h1>
-        <p>Region: chr2H:3,379,055 - 3,382,918 | Gene: 3,379,055 - 3,382,918 | Variants: 3</p>
+        <p>Region: chr2H:3,379,055 - 3,382,918 | Gene: 3,379,055 - 3,382,918 | Variants: 4</p>
     </div>
     
     <div id="heatmap"></div>
@@ -46,7 +46,7 @@
 <div class="tooltip" id="tooltip" style="display:none;"></div>
 
 <script>
-const data = [{"pos": 3379282, "pvalue": 0.9949837186911742, "logp": 0.0021840257270712374, "significant": false}, {"pos": 3379288, "pvalue": 0.9949837186911742, "logp": 0.0021840257270712374, "significant": false}, {"pos": 3380383, "pvalue": 0.0003190681849098783, "logp": 3.4961164982412374, "significant": true}];
+const data = [{"pos": 3379142, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 3379282, "pvalue": 0.20920842179152632, "logp": 0.6794208367073991, "significant": false}, {"pos": 3379288, "pvalue": 0.9721210878331483, "logp": 0.012279635791372026, "significant": false}, {"pos": 3380383, "pvalue": 0.9721210878331483, "logp": 0.012279635791372026, "significant": false}];
 const regionStart = 3379055;
 const regionEnd = 3382918;
 const geneStart = 3379055;

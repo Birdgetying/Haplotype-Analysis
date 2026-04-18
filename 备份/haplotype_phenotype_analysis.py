@@ -1503,17 +1503,19 @@ class HaplotypeExtractor:
         
         对于不同变异类型，统一返回单字符以保证序列格式一致：
         - SNP: 返回实际碱基 (A/T/G/C)
-        - 插入(INS): 返回 '+' (限REF返回小写ref第一字符)
-        - 缺失(DEL): 返回 '-' (限REF返回小写ref第一字符)
+        - 插入(INS): 返回 '+' (会在variant_info中记录具体插入长度)
+        - 缺失(DEL): 返回 '-' (会在variant_info中记录具体缺失长度)
         """
         # 判断变异类型，确定如何展示ALT
         if len(ref) == 1 and len(alt0) == 1:
             # SNP: 直接用实际碱基
             alt_repr = alt0.upper()
         elif len(alt0) > len(ref):  # 插入
-            alt_repr = 'I'  # Insertion
+            # 插入：返回 + 符号，具体长度记录在variant_info中
+            alt_repr = '+'  # Insertion 使用 + 符号
         else:  # 缺失
-            alt_repr = 'D'  # Deletion
+            # 缺失：返回 - 符号，具体长度记录在variant_info中
+            alt_repr = '-'  # Deletion 使用 - 符号
         ref_repr = ref[0].upper() if ref else 'N'  # REF统一取第一个字符
         
         try:
@@ -1820,18 +1822,39 @@ class HaplotypeExtractor:
         # 第一次过滤（样本层面）已经删除了真正无变异的位点
         
         # 样本-单倍型对应表
-        hap_seq_to_name = dict(zip(hap_df["Haplotype_Seq"], hap_df["Hap_Name"]))
+        hap_seq_to_name = dict(zip(hap_df["Haplotype_Seq"], hap_df["Hap_Name"])) if len(hap_df) > 0 else {}
         rows = []
+        skipped_samples = []  # 记录被跳过的样本
         for sample, hap_seq in sample_to_hap.items():
             hap_name = hap_seq_to_name.get(hap_seq)
             if hap_name is None:
-                continue  # 数量少于 min_samples 的单倍型直接跳过，不归入 Other
+                skipped_samples.append(sample)  # 数量少于 min_samples 的单倍型直接跳过，不归入 Other
+                continue
             rows.append({
                 "SampleID": sample,
                 "Hap_Name": hap_name,
                 "Haplotype_Seq": hap_seq
             })
-        hap_sample_df = pd.DataFrame(rows)
+        
+        # 关键修复：如果没有样本匹配到有效单倍型，返回空 DataFrame
+        if not rows:
+            logger.warning(f"[WARNING] 没有样本匹配到有效单倍型（所有单倍型样本数<{min_samples}）")
+            hap_sample_df = pd.DataFrame(columns=["SampleID", "Hap_Name", "Haplotype_Seq"])
+        else:
+            hap_sample_df = pd.DataFrame(rows)
+        
+        # [DATA FORMAT LOG] 样本-单倍型映射表
+        logger.info(f"\n[DATA FORMAT] hap_sample_df (extract_region返回)")
+        logger.info(f"  行数: {len(hap_sample_df)}, 列数: {len(hap_sample_df.columns)}")
+        logger.info(f"  列名: {list(hap_sample_df.columns)}")
+        if len(hap_sample_df) > 0:
+            logger.info(f"  SampleID数据类型: {hap_sample_df['SampleID'].dtype}")
+            logger.info(f"  SampleID示例 (前5个): {hap_sample_df['SampleID'].head(5).tolist()}")
+            logger.info(f"  Hap_Name示例 (前5个): {hap_sample_df['Hap_Name'].head(5).tolist()}")
+        logger.info(f"  被跳过的样本数 (单倍型数量<min_samples): {len(skipped_samples)}")
+        if skipped_samples and len(skipped_samples) <= 10:
+            logger.info(f"  被跳过的样本ID: {skipped_samples}")
+        logger.info("")  # 空行分隔
         
         self.sample_haplotypes = sample_to_hap
         self.variant_info = variant_info  # 保存变异信息
@@ -4296,6 +4319,13 @@ class ReportGenerator:
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
         
+        # 构建单倍型到样本的映射字典 {hap_name: [sample1, sample2, ...]}
+        hap_samples_map = {}
+        if 'SampleID' in hap_sample_df.columns:
+            for hap_name in hap_counts.index:
+                samples = hap_sample_df[hap_sample_df[hap_col] == hap_name]['SampleID'].tolist()
+                hap_samples_map[hap_name] = samples
+        
         # DEBUG: 检查 snp_effects
         print(f"[DEBUG] generate_integrated_html: snp_effects type={type(snp_effects)}, len={len(snp_effects) if snp_effects else 0}")
         if snp_effects:
@@ -4323,7 +4353,7 @@ class ReportGenerator:
                 all_seqs = [hap_seqs[hap] for hap in hap_counts.index if hap in hap_seqs]
                 hap_names = [hap for hap in hap_counts.index if hap in hap_seqs]
                 
-                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 4, 'N': 4}
+                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 4, 'N': 4}
                 seq_matrix = [[base_map.get(base.upper(), 4) for base in seq] for seq in all_seqs]
                 
                 distances = pdist(seq_matrix, metric='hamming')
@@ -4455,7 +4485,7 @@ class ReportGenerator:
             all_positions = variant_positions if variant_positions else list(range(seq_len))
             all_orig_indices = list(range(len(all_positions)))
             
-            # **关键修复**: 基于实际显示的单倍型序列，过滤掉“无变异位点”
+            # **关键修复**: 基于实际显示的单倍型序列，过滤掉"无变异位点"
             # 如果某位点在所有显示的单倍型中碱基都相同，则不显示该位点
             top_hap_seqs = []
             for hap in top_haps:
@@ -4463,7 +4493,7 @@ class ReportGenerator:
                 if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
                     seq = hap_rows['Haplotype_Seq'].iloc[0].replace('|', '')
                     top_hap_seqs.append(seq)
-            
+                        
             # 检查每个位点在显示的单倍型中是否有变异
             variable_indices = []
             for idx in range(len(all_positions)):
@@ -4551,7 +4581,7 @@ class ReportGenerator:
         
         # 颜色方案：DEL蓝色、INS红色、A紫色
         base_colors = {'A': '#9b59b6', 'T': '#27AE60', 'C': '#3498DB', 'G': '#F1C40F',
-                       'I': '#e74c3c', 'D': '#3498db'}  # I=插入(红色), D=缺失(蓝色), A=紫色
+                       '+': '#e74c3c', '-': '#3498db'}  # +=插入(红色), -=缺失(蓝色), A=紫色
         row_height = 36
         n_haps = len(top_haps)
         
@@ -4595,7 +4625,10 @@ class ReportGenerator:
                 'maf': float(info.get('maf', 0.5)),
                 'missing_rate': float(info.get('missing_rate', 0.0)),
                 'annotation': ann,
-                'functional_ann': functional_ann
+                'functional_ann': functional_ann,
+                # **关键修复**：添加启动子变异CDS重叠信息
+                'overlaps_cds': info.get('overlaps_cds', False),
+                'overlapping_genes': info.get('overlapping_genes', '')
             })
 
         lead_pos = None
@@ -4713,6 +4746,18 @@ class ReportGenerator:
         gene_area_start = 85  # 与基因结构图相同的基因区域起始位置
         gene_area_width = n_vars * 20  # 基因区域宽度（变异列总宽度）
         svg_total_width = gene_area_start + gene_area_width + 100  # 与基因结构图相同的总宽度
+        
+        # 计算 main-data-section 所需的最小宽度（后续会用到）
+        hap_col_w_for_min = 90
+        eff_col_w_for_min = 180
+        box_col_w_for_min = 180
+        gene_area_start_for_table = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min  # 450px
+        gene_area_width_for_table = n_vars * 20
+        legend_w_for_min = 220
+        svg_width_for_min = gene_area_start_for_table + gene_area_width_for_table + legend_w_for_min
+        n_col_w_for_min = 60
+        table_width_for_min = gene_area_start_for_table + gene_area_width_for_table + n_col_w_for_min
+        main_min_width = max(svg_width_for_min, table_width_for_min)
         # GWAS图绘图区域宽度（只包含基因区域，不包含左侧固定列）
         gwas_plot_width = gene_area_width + 100  # 基因区域 + 图例区域
         # GWAS图左边距（与基因结构图的基因区域起始位置对齐）
@@ -4764,12 +4809,16 @@ class ReportGenerator:
         .zoom-controls span {{ font-size: 12px; color: #333; min-width: 45px; }}
         
         /* 可缩放内容区 */
-        .content-wrapper {{ overflow-x: scroll; overflow-y: auto; max-height: calc(100vh - 200px); }}
-        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; min-width: 100%; }}
+        .content-wrapper {{ overflow-x: visible; overflow-y: auto; max-height: calc(100vh - 200px); }}
+        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
+        
+        /* 表格滚动容器 */
+        .table-scroll-container {{ overflow-x: auto; overflow-y: visible; margin-top: 0; padding-bottom: 10px; min-width: 100%; }}
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
         .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        .main-data-section {{ }} /* 移除 fit-content，使用滚动容器 */
         .network-panel {{ width: 350px; min-width: 350px; height: 280px; 
                          border: 1px solid #e0e0e0; border-radius: 6px; 
                          background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; }}
@@ -4793,7 +4842,7 @@ class ReportGenerator:
         /* 表格样式 */
         .data-table {{ border-collapse: collapse; margin-top: 0; table-layout: fixed; }}
         .data-table th {{ background: #34495e; color: white; padding: 0; font-size: 10px; font-weight: 500; vertical-align: top; }}
-        .data-table td {{ padding: 6px 4px; text-align: center; border-bottom: 1px solid #eee; }}
+        .data-table td {{ padding: 6px 4px; text-align: center; border-bottom: 1px solid #eee; overflow: hidden; }}
         .data-table tr:hover {{ background: #f8f9fa; }}
         .data-table tr.ref-row {{ background: #fffbeb; }}
         .hap-cell {{ width: 90px; min-width: 90px; max-width: 90px; text-align: left !important; padding-left: 10px !important; font-weight: 600; font-size: 12px; }}
@@ -4811,13 +4860,13 @@ class ReportGenerator:
         .bar-box {{ position: absolute; top: 3px; height: 14px; border-radius: 2px; border: 2px solid #3498db; background: rgba(52,152,219,0.2); }}
         .bar-median {{ position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }}
         .data-dot {{ position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }}
-        .n-cell {{ font-size: 11px; color: #666; }}
+        .n-cell {{ width: auto !important; min-width: 60px !important; overflow: visible !important; font-size: 11px; color: #666; }}
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>Haplotype-Phenotype Association Analysis</h1>
+        <h1>Haplotype-Phenotype Association Analysis - {gene_id}</h1>
         <div class="header-info">
             <span>Region: {chrom}:{region_start:,}-{region_end:,}</span>
             <span>Length: {region_len_kb:.1f} kb</span>
@@ -4922,6 +4971,9 @@ class ReportGenerator:
                 
         # ==== 标题 ====
         html += f'<text x="{gene_area_start + gene_area_width/2}" y="13" font-size="11" fill="#2c3e50" text-anchor="middle" font-weight="600">Relative Position (kb)</text>\n'
+        
+        # 基因 ID（在标题上方）
+        html += f'<text x="{gene_area_start + gene_area_width/2}" y="8" font-size="10" fill="#3498db" text-anchor="middle" font-weight="500">{gene_id}</text>\n'
                 
         # ==== 坐标轴线（参照老师的图：带小刻度）====
         html += f'<line x1="{gene_area_start}" y1="{axis_y}" x2="{gene_area_start + gene_area_width}" y2="{axis_y}" stroke="#333" stroke-width="1.2"/>\n'
@@ -5132,14 +5184,31 @@ class ReportGenerator:
             html += f'<text x="{lx+13}" y="{ly+7}" font-size="7" fill="#333">{short_label}</text>\n'
                 
         html += '</svg>\n'
+                
+        # HTML表格 - 用滚动容器包裹，确保 n 列不被遮挡
+        # 表格宽度 = Haplotype(90) + Effect(180) + Phenotype(180) + 序列列(n_vars*20) + n(60)
+        n_vars = len(display_positions)  # 重新获取，确保与 colgroup 一致
+        n_col_w = 60
+        table_width = 90 + 180 + 180 + (n_vars * 20) + n_col_w  # 精确计算
         
-        # HTML表格 - 宽度与SVG精确匹配
-        table_width = svg_width  # 表格宽度与SVG一致
-        html += f'''<table class="data-table" style="width:{table_width}px;">
-<thead><tr>
-    <th style="width:90px;min-width:90px;max-width:90px;text-align:left;padding-left:10px;vertical-align:middle;height:60px;">Haplotype</th>
-    <th class="effect-cell" style="vertical-align:middle;height:60px;">Effect (vs Grand Mean)</th>
-    <th class="box-cell" style="vertical-align:middle;height:60px;">Phenotype</th>\n'''
+        # 添加滚动容器
+        html += f'<div class="table-scroll-container" style="min-width:{table_width}px;">\n'
+        
+        # 使用 colgroup 强制定义每列宽度（最可靠的方式）
+        html += f'<table class="data-table" style="width:auto;">\n'
+        html += '<colgroup>\n'
+        html += f'<col style="width:90px;min-width:90px;max-width:90px;">\n'  # Haplotype
+        html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
+        html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
+        for _ in display_positions:
+            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
+        html += f'<col style="width:auto;min-width:60px;">\n'  # n 列
+        html += '</colgroup>\n'
+        
+        html += '<thead><tr style="height:45px;">\n'
+        html += '    <th style="text-align:left;padding-left:10px;vertical-align:middle;cursor:pointer;" title="点击复制所有样本" onclick="copyAllHaplotypes()">Haplotype</th>\n'
+        html += '    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>\n'
+        html += '    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>\n'
         
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
@@ -5150,7 +5219,7 @@ class ReportGenerator:
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
-        html += '<th style="width:40px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
+        html += '<th style="min-width:60px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
         
         # 数据行
         for i, hap in enumerate(top_haps):
@@ -5211,8 +5280,12 @@ class ReportGenerator:
             else:
                 box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
             
+            # 获取该单倍型的样本列表
+            samples_for_hap = hap_samples_map.get(hap, [])
+            samples_str = ','.join(samples_for_hap) if samples_for_hap else ''
+            
             html += f'''<tr class="{row_class}" data-hap="{hap}">
-    <td class="hap-cell">{hap}{ref_tag}</td>
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('{hap}', '{samples_str}')">{hap}{ref_tag}</td>
     <td class="effect-cell">
         <div class="bar-container">
             <div class="bar-center"></div>
@@ -5234,19 +5307,22 @@ class ReportGenerator:
                     # 获取位置信息
                     pos = display_positions[idx] if idx < len(display_positions) else None
                     
-                    # 对于I/D，根据variant_info的len_diff确定正确的类型和颜色
+                    # **关键修复**：对于+/-或I/D，根据variant_info的len_diff显示具体数值
+                    # 例如：+2bp（插入2个碱基）、-1bp（缺失1个碱基）
+                    # 支持两种格式：新格式(+/-)和旧格式(I/D)
                     display_base = base
                     actual_type = base  # 实际用于确定颜色的类型
-                    if base in ('I', 'D') and pos and variant_info and pos in variant_info:
+                    
+                    if base in ('+', '-', 'I', 'D') and pos and variant_info and pos in variant_info:
                         len_diff = variant_info[pos].get('len_diff', 0)
                         if len_diff > 0:  # 插入: alt比ref长
-                            display_base = f"+{len_diff}bp"
-                            actual_type = 'I'  # 强制为插入类型（红色）
+                            display_base = f"+{len_diff}bp"  # 例如：+2bp
+                            actual_type = '+'  # 强制为插入类型（红色）
                         elif len_diff < 0:  # 缺失: alt比ref短
-                            display_base = f"{len_diff}bp"  # 已经是负数，包含-号
-                            actual_type = 'D'  # 强制为缺失类型（蓝色）
+                            display_base = f"-{abs(len_diff)}bp"  # 例如：-1bp（使用绝对值）
+                            actual_type = '-'  # 强制为缺失类型（蓝色）
                         else:
-                            display_base = "INS" if base == 'I' else "DEL"
+                            display_base = "0bp"  # 理论上不应该出现
                     
                     # 根据实际类型确定颜色（而不是base）
                     color = base_colors.get(actual_type, '#666')
@@ -5268,7 +5344,9 @@ class ReportGenerator:
                     
                     html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
-            html += f'<td class="n-cell">{cnt}</td></tr>\n'
+            html += f'<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">{cnt}</td>\n'
+            
+            html += '</tr>\n'
         
         # 表格底部：共用坐标轴行（三列分开对应）
         html += '<tr style="height:30px;">'
@@ -5308,17 +5386,24 @@ class ReportGenerator:
             html += '</div>'
         html += '</td>\n'
         
-        # 剩余列（序列+n）
-        html += f'<td colspan="{len(display_positions)+1}" style="border:none;"></td>\n'
+        # 序列列（空）
+        html += f'<td colspan="{len(display_positions)}" style="border:none;"></td>\n'
+        
+        # n 列（空）
+        html += '<td style="border:none;"></td>\n'
         html += '</tr>\n'
         
-        html += '''</tbody></table>
+        html += r'''</tbody></table>
+</div><!-- table-scroll-container -->
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
     </div>
     </div>
     
     <div class="footer">
+        <div style="font-size:11px;color:#3498db;font-weight:500;margin-right:20px;">
+            💡 提示：点击“Haplotype”表头复制所有样本 | 点击单倍型标签复制对应样本
+        </div>
         <div class="base-legend">
             <div class="base-legend-item"><div class="base-box" style="background:#9b59b6;">A</div>Adenine</div>
             <div class="base-legend-item"><div class="base-box" style="background:#27AE60;">T</div>Thymine</div>
@@ -5380,6 +5465,52 @@ function toggleSort() {
     rows.forEach(function(r){ tbody.appendChild(r); });
 }
 
+function copyHapSamples(hapName, samplesStr) {
+    if (!samplesStr) {
+        alert('No samples for ' + hapName);
+        return;
+    }
+    navigator.clipboard.writeText(samplesStr).then(function() {
+        console.log('Copied samples for ' + hapName);
+    }).catch(function(err) {
+        var textArea = document.createElement('textarea');
+        textArea.value = samplesStr;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+    });
+}
+
+function copyAllHaplotypes() {
+    var allSamples = [];
+    var cells = document.querySelectorAll('td.hap-cell');
+    cells.forEach(function(cell) {
+        var onclick = cell.getAttribute('onclick');
+        if (onclick) {
+            var match = onclick.match(/copyHapSamples\('[^']+',\s*'([^']*)'\)/);
+            if (match && match[1]) {
+                allSamples.push(match[1]);
+            }
+        }
+    });
+    var allText = allSamples.join(',');
+    if (!allText) {
+        alert('No samples found');
+        return;
+    }
+    navigator.clipboard.writeText(allText).then(function() {
+        console.log('Copied all samples');
+    }).catch(function(err) {
+        var textArea = document.createElement('textarea');
+        textArea.value = allText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+    });
+}
+
 // ==================== D3 数据 ====================
 var gwasData     = {gwas_data_json};
 var networkNodes = {network_nodes_json};
@@ -5402,6 +5533,15 @@ var currentFilter = { maf: 0.05, missingRate: 0.2 };
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
     
+    // **关键修复**：检查启动子变异是否与其他基因CDS重叠
+    // 如果overlaps_cds为true，说明这个"启动子变异"实际位于其他基因的编码区
+    // 应该将其归类为'missense'或'synonymous'（而不是promoter）
+    if (a === 'promoter' && d.overlaps_cds === true) {
+        // 如果overlapping_genes字段存在，说明与其他基因CDS重叠
+        // 将其归类为other，避免被promoter过滤器误选
+        return 'other';
+    }
+    
     // 处理 missense 变体（包括各种亚型）
     if (a.indexOf('missense') !== -1) {
         return 'missense';
@@ -5415,7 +5555,11 @@ function annNorm(d) {
         if (fa.indexOf('synonymous') !== -1) return 'synonymous';
         if (fa.indexOf('utr') !== -1) return 'UTR';
         if (fa.indexOf('intron') !== -1) return 'intron';
-        if (fa.indexOf('promoter') !== -1) return 'promoter';
+        if (fa.indexOf('promoter') !== -1) {
+            // 再次检查overlaps_cds
+            if (d.overlaps_cds === true) return 'other';
+            return 'promoter';
+        }
         return 'other';
     }
     
@@ -6880,7 +7024,7 @@ svg.selectAll('circle')
         sample_groups = []
         
         if 'Haplotype_Seq' in hap_sample_df.columns:
-            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 5, 'N': 6}
+            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': 6}
             
             for _, row in hap_sample_df.iterrows():
                 seq = row['Haplotype_Seq'].replace('|', '')
@@ -7551,7 +7695,7 @@ if (promoterStart < promoterEnd) {{
         if 'Haplotype_Seq' in hap_sample_df.columns and len(hap_sample_df) >= 3:
             try:
                 from sklearn.decomposition import PCA
-                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, 'I': 4, 'D': 5, 'N': 6}
+                base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': 6}
                 samples = []
                 sample_haps = []
                 for _, row in hap_sample_df.iterrows():
@@ -8482,7 +8626,7 @@ class HaplotypePhenotypeAnalyzer:
                                 gt_row[f'POS_{pos}'] = 0  # 纯合参考
                             elif allele == alt:
                                 gt_row[f'POS_{pos}'] = 2  # 纯合变异
-                            elif allele in ['I', 'D']:  # 插入/缺失标记
+                            elif allele in ['+', '-']:  # 插入/缺失标记
                                 gt_row[f'POS_{pos}'] = 1  # 杂合（简化处理）
                             else:
                                 gt_row[f'POS_{pos}'] = -1  # 缺失/未知
@@ -8853,7 +8997,7 @@ class HaplotypePhenotypeAnalyzer:
                     try:
                         variant_info_df = pd.read_csv(variant_info_path)
                         preloaded_data['variant_info'] = {
-                            row['position']: {
+                            int(row['position']): {  # 强制转换为整数，确保与VCF的pos类型一致
                                 'ref': row.get('ref', ''),
                                 'alt': row.get('alt', ''),
                                 'len_diff': row.get('len_diff', 0),
@@ -8964,32 +9108,52 @@ class HaplotypePhenotypeAnalyzer:
         # **优先使用数据库中的VCF文件**（与原始数据完全一致）
         if 'vcf_file' in preloaded_data and preloaded_data['vcf_file']:
             vcf_path = preloaded_data['vcf_file']
-            logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
-            try:
-                # 使用数据库VCF创建临时extractor
-                temp_extractor = HaplotypeExtractor(vcf_path)
-                self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
-                    chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
-                )
-                # 复制variant_info
-                if hasattr(temp_extractor, 'variant_info'):
-                    preloaded_data['variant_info'] = temp_extractor.variant_info
-                    self.variant_info = temp_extractor.variant_info
-                logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
-            except Exception as e:
-                logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
-                # 回退到CSV数据
-                if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
-                    self.hap_df = preloaded_data['hap_df']
-                    self.hap_sample_df = preloaded_data['hap_sample_df']
-                    if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
-                        self.positions = sorted(preloaded_data['variant_info'].keys())
-                    else:
-                        self.positions = []
-                else:
-                    self.positions, self.hap_df, self.hap_sample_df = self.extractor.extract_region(
+            
+            # 检查 VCF 是否为标记文件（< 1KB）
+            is_marker_file = False
+            if os.path.exists(vcf_path):
+                vcf_size = os.path.getsize(vcf_path)
+                if vcf_size < 1024:  # 小于 1KB 视为标记文件
+                    is_marker_file = True
+                    logger.info(f"[数据库] VCF是标记文件 ({vcf_size} bytes)，直接使用CSV数据")
+            
+            if not is_marker_file:
+                logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
+                try:
+                    # 使用数据库VCF创建临时extractor
+                    temp_extractor = HaplotypeExtractor(vcf_path)
+                    self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
                         chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
                     )
+                    # 复制variant_info
+                    if hasattr(temp_extractor, 'variant_info'):
+                        preloaded_data['variant_info'] = temp_extractor.variant_info
+                        self.variant_info = temp_extractor.variant_info
+                    logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
+                except Exception as e:
+                    logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
+                    # 回退到CSV数据
+                    if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
+                        self.hap_df = preloaded_data['hap_df']
+                        self.hap_sample_df = preloaded_data['hap_sample_df']
+                        if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
+                            self.positions = sorted(preloaded_data['variant_info'].keys())
+                        else:
+                            self.positions = []
+                    else:
+                        self.positions, self.hap_df, self.hap_sample_df = self.extractor.extract_region(
+                            chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
+                        )
+            elif 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
+                # VCF是标记文件，直接使用CSV数据
+                logger.info(f"[数据库] 使用CSV数据: {len(preloaded_data['hap_df'])} 个单倍型, {len(preloaded_data['hap_sample_df'])} 个样本")
+                self.hap_df = preloaded_data['hap_df']
+                self.hap_sample_df = preloaded_data['hap_sample_df']
+                if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
+                    self.positions = sorted(preloaded_data['variant_info'].keys())
+                    logger.info(f"[数据库] 加载 {len(self.positions)} 个变异位点")
+                else:
+                    self.positions = []
         elif 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
             # 回退：使用数据库中的CSV数据
             self.hap_df = preloaded_data['hap_df']
@@ -9020,11 +9184,13 @@ class HaplotypePhenotypeAnalyzer:
         
         # 如果数据库中有variant_info，设置到extractor（如果extractor存在）
         # 注意：如果已经从VCF提取了variant_info，这里不再覆盖
-        if self.variant_info is None and 'variant_info' in preloaded_data:
+        if (self.variant_info is None or not self.variant_info) and 'variant_info' in preloaded_data:
             self.variant_info = preloaded_data['variant_info']
             if self.extractor:
                 self.extractor.variant_info = preloaded_data['variant_info']
-            logger.info(f"[数据库] 使用预加载的 variant_info")
+                logger.info(f"[数据库] 使用预加载的 variant_info: {len(self.extractor.variant_info)} 个位点")
+            else:
+                logger.warning(f"[数据库] extractor 不存在，无法设置 variant_info")
         
         step1_time = perf_monitor.step_end("Step_1_Haplotype_Extraction")
         logger.info(f"  - Step 1 耗时：{step1_time:.2f}s")
@@ -9360,7 +9526,7 @@ class HaplotypePhenotypeAnalyzer:
                 chrom=chrom,
                 gene_id=gene_id,
                 cluster_haplotypes=cluster_haplotypes,
-                variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info')) else {},
+                variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info) else (self.variant_info if self.variant_info else {}),
                 variant_pvalues=variant_pvalues,
             )
             

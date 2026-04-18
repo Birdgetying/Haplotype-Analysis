@@ -1,0 +1,39 @@
+启动子区域变异分析报告
+============================================================
+基因: HORVU.MOREX.r3.6HG0542030
+染色体: chr6H
+链方向: -
+启动子区域: 9,443,420-9,445,419
+TSS位置: 9,440,142 (正链) 或 9,443,419 (负链)
+变异总数: 26
+  - 纯启动子变异: 26
+  - 与其他基因CDS重叠: 0
+
+变异详情:
+------------------------------------------------------------
+  位置: 9,443,491 | 距离TSS: 72bp | REF: G | ALT: A | MAF: 0.017
+  位置: 9,443,540 | 距离TSS: 121bp | REF: T | ALT: TCATCATC | MAF: 0.012
+  位置: 9,443,555 | 距离TSS: 136bp | REF: C | ALT: T | MAF: 0.392
+  位置: 9,443,578 | 距离TSS: 159bp | REF: T | ALT: G | MAF: 0.014
+  位置: 9,443,584 | 距离TSS: 165bp | REF: C | ALT: T | MAF: 0.314
+  位置: 9,443,607 | 距离TSS: 188bp | REF: T | ALT: C | MAF: 0.014
+  位置: 9,443,665 | 距离TSS: 246bp | REF: T | ALT: A | MAF: 0.104
+  位置: 9,443,760 | 距离TSS: 341bp | REF: G | ALT: GCC | MAF: 0.265
+  位置: 9,444,571 | 距离TSS: 1,152bp | REF: C | ALT: CCGTA | MAF: 0.249
+  位置: 9,444,587 | 距离TSS: 1,168bp | REF: C | ALT: T | MAF: 0.028
+  位置: 9,444,662 | 距离TSS: 1,243bp | REF: G | ALT: C | MAF: 0.441
+  位置: 9,444,688 | 距离TSS: 1,269bp | REF: T | ALT: G | MAF: 0.189
+  位置: 9,444,737 | 距离TSS: 1,318bp | REF: T | ALT: TTGCA | MAF: 0.406
+  位置: 9,444,752 | 距离TSS: 1,333bp | REF: T | ALT: A | MAF: 0.009
+  位置: 9,444,773 | 距离TSS: 1,354bp | REF: C | ALT: CTGA | MAF: 0.060
+  位置: 9,444,903 | 距离TSS: 1,484bp | REF: C | ALT: A | MAF: 0.026
+  位置: 9,444,958 | 距离TSS: 1,539bp | REF: ATAC | ALT: A | MAF: 0.012
+  位置: 9,445,005 | 距离TSS: 1,586bp | REF: C | ALT: CT | MAF: 0.067
+  位置: 9,445,068 | 距离TSS: 1,649bp | REF: C | ALT: T | MAF: 0.067
+  位置: 9,445,114 | 距离TSS: 1,695bp | REF: CACGT | ALT: C | MAF: 0.311
+  位置: 9,445,140 | 距离TSS: 1,721bp | REF: A | ALT: ATTAT | MAF: 0.173
+  位置: 9,445,172 | 距离TSS: 1,753bp | REF: GTGCA | ALT: G | MAF: 0.172
+  位置: 9,445,385 | 距离TSS: 1,966bp | REF: ATGTCC | ALT: A | MAF: 0.223
+  位置: 9,445,393 | 距离TSS: 1,974bp | REF: AATGAT | ALT: A | MAF: 0.034
+  位置: 9,445,401 | 距离TSS: 1,982bp | REF: T | ALT: TA | MAF: 0.220
+  位置: 9,445,419 | 距离TSS: 2,000bp | REF: T | ALT: TGCGC | MAF: 0.085

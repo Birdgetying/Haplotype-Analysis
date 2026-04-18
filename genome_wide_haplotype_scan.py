@@ -215,17 +215,17 @@ class BuiltinHaplotypeExtractor:
         print(f"[INFO] 内置提取器初始化成功，样本数: {len(self.samples)}")
     
     def extract_region(self, chrom: str, start: int, end: int, 
-                       min_samples: int = 5, snp_only: bool = True) -> tuple:
+                       min_samples: int = 5, snp_only: bool = False) -> tuple:
         """
         提取指定区域的单倍型
         
         Args:
-            snp_only: 是否只保留SNP（默认True，过滤indel和SV）
+            snp_only: 是否只保留SNP（数据库构建阶段必须为False，保留所有变异类型）
         
         Returns:
             tuple: (positions, hap_df, hap_sample_df)
         """
-        # SNP判断函数
+        # SNP判断函数（仅用于日志统计，不过滤）
         def is_snp(ref_allele, alt_allele):
             valid_bases = {'A', 'T', 'G', 'C', 'a', 't', 'g', 'c'}
             return (len(ref_allele) == 1 and len(alt_allele) == 1 and
@@ -233,7 +233,8 @@ class BuiltinHaplotypeExtractor:
         
         positions = []
         genotypes_by_sample = {s: [] for s in self.samples}
-        filtered_count = 0
+        snp_count = 0
+        non_snp_count = 0
         
         try:
             for record in self.vcf.fetch(chrom, start, end):
@@ -241,10 +242,11 @@ class BuiltinHaplotypeExtractor:
                 alts = record.alts if record.alts else []
                 alt0 = alts[0] if alts else ""
                 
-                # SNP过滤
-                if snp_only and not is_snp(ref, alt0):
-                    filtered_count += 1
-                    continue
+                # 数据库构建阶段：保留所有变异类型（SNP/indel/SV），不过滤
+                if is_snp(ref, alt0):
+                    snp_count += 1
+                else:
+                    non_snp_count += 1
                 
                 pos = record.pos
                 positions.append(pos)
@@ -273,6 +275,9 @@ class BuiltinHaplotypeExtractor:
         if len(positions) == 0:
             print(f"[INFO] 区域 {chrom}:{start}-{end} 无变异")
             return positions, None, None
+        
+        # 日志统计：SNP vs 非SNP
+        print(f"[INFO] 变异类型统计: SNP={snp_count}, 非SNP={non_snp_count}, 总计={len(positions)}")
         
         # 过滤无变异位点（所有样本在该位点的等位基因相同）
         invariant_positions = []
@@ -423,7 +428,8 @@ class ScanConfig:
     ]
     
     # 启动子区域参数
-    PROMOTER_LENGTH = 2000  # 启动子长度（bp），在TSS上游扩展
+    PROMOTER_LENGTH = 2000  # 启动子初始长度（bp），在TSS上游扩展（2000bp内无变异时动态增加）
+    PROMOTER_EXTENDED_LENGTH = 5000  # 启动子扩展长度（bp），2000bp内无变异时扩展到5000bp
     
     # 变异类型过滤
     SNP_ONLY = False  # False=包含所有变异类型(SNP/indel/SV)
@@ -595,7 +601,8 @@ def parse_gtf_for_gene(gtf_file: str, target_gene_id: str) -> dict:
 def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         database_dir: str, results_dir: str = None,
                         min_samples: int = 1, test_region_length: int = 0,
-                        gff_file: str = None, all_genes_cds: list = None) -> dict:
+                        gff_file: str = None, all_genes_cds: list = None,
+                        cophe_files: list = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
@@ -615,16 +622,25 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
     gene_end = gene_info['end']      # GFF中的基因体终止
     strand = gene_info['strand']
     
-    # 扩展启动子区域
+    # 扩展启动子区域：先扫2000，没有再扩展到5000，如果还没有扩展到最近变异
     promoter_length = ScanConfig.PROMOTER_LENGTH
+    promoter_extended = ScanConfig.PROMOTER_EXTENDED_LENGTH
+    
+    # 计算初始启动子区域（2000bp）
     if strand == '+':  # +链：TSS在gene_start，启动子在上游(更小坐标)
-        start = max(1, gene_start - promoter_length)  # 向上游扩展
+        promoter_start_2k = max(1, gene_start - promoter_length)  # 2000bp启动子起始
+        start = promoter_start_2k
         end = gene_end
     else:  # -链：TSS在gene_end，启动子在下游(更大坐标)
         start = gene_start
-        end = gene_end + promoter_length  # 向下游扩展
+        promoter_end_2k = gene_end + promoter_length  # 2000bp启动子终止
+        end = promoter_end_2k
     
-    print(f"[INFO] {gene_id}: 基因体={gene_start}-{gene_end}({strand}), 启动子扩展后={start}-{end}")
+    print(f"[INFO] {gene_id}: 基因体={gene_start}-{gene_end}({strand}), 初始启动子={promoter_start_2k if strand=='+' else gene_start}-{promoter_end_2k if strand=='-' else gene_end}")
+    
+    # 记录扩展情况：'none'=2000内有变异, 'extended'=扩展到5000, 'nearest'=扩展到最近变异
+    promoter_expansion_status = 'none'
+    promoter_actual_length = promoter_length  # 默认2000
     
     # 测试模式：限制区间长度
     original_end = end
@@ -666,6 +682,86 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             chrom, start, end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
         )
         
+        # 关键新增：如果没有变异，动态扩展启动子区域
+        if hap_df is None or len(hap_df) == 0:
+            print(f"[INFO] {gene_id}: 当前区域 {start}-{end} 无变异，尝试扩展启动子")
+            
+            # 第一次扩展：从2000扩展到5000
+            if strand == '+':
+                extended_start_5k = max(1, gene_start - promoter_extended)
+                extended_end_5k = gene_end
+            else:
+                extended_start_5k = gene_start
+                extended_end_5k = gene_end + promoter_extended
+            
+            print(f"[INFO] {gene_id}: 扩展到5000bp: {extended_start_5k}-{extended_end_5k}")
+            positions, hap_df, hap_sample_df = extractor.extract_region(
+                chrom, extended_start_5k, extended_end_5k, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
+            )
+            
+            if hap_df is not None and len(hap_df) > 0:
+                print(f"[INFO] {gene_id}: 在5000bp区域找到 {len(hap_df)} 个单倍型")
+                start = extended_start_5k
+                end = extended_end_5k
+                promoter_expansion_status = 'extended'
+                promoter_actual_length = promoter_extended
+            else:
+                # 第二次扩展：扩展到最近的有变异的位置
+                print(f"[INFO] {gene_id}: 5000bp内仍无变异，扩展到最近变异")
+                
+                max_extension = 50000  # 最大扩展 50kb
+                extension_step = 5000  # 每次扩展 5kb
+                current_start = extended_start_5k
+                current_end = extended_end_5k
+                
+                while True:
+                    # 计算扩展后的区域
+                    if strand == '+':
+                        current_start = max(1, gene_start - (current_end - gene_end) - extension_step)
+                    else:
+                        current_end = gene_end + (gene_start - current_start) + extension_step
+                    
+                    # 检查是否超过最大扩展
+                    if strand == '+' and (gene_start - current_start) > max_extension:
+                        print(f"[INFO] {gene_id}: 已达到最大扩展限制 {max_extension}bp，停止扩展")
+                        break
+                    if strand == '-' and (current_end - gene_end) > max_extension:
+                        print(f"[INFO] {gene_id}: 已达到最大扩展限制 {max_extension}bp，停止扩展")
+                        break
+                    
+                    print(f"[INFO] {gene_id}: 扩展到 {current_start}-{current_end}，重新提取变异")
+                    
+                    # 重新提取
+                    positions, hap_df, hap_sample_df = extractor.extract_region(
+                        chrom, current_start, current_end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
+                    )
+                    
+                    # 如果找到变异，退出循环
+                    if hap_df is not None and len(hap_df) > 0:
+                        print(f"[INFO] {gene_id}: 在扩展区域 {current_start}-{current_end} 找到 {len(hap_df)} 个单倍型")
+                        start = current_start
+                        end = current_end
+                        promoter_expansion_status = 'nearest'
+                        # 计算实际扩展长度
+                        if strand == '+':
+                            promoter_actual_length = gene_start - current_start
+                        else:
+                            promoter_actual_length = current_end - gene_end
+                        break
+                    
+                    # 如果没有变异，继续扩展
+                    if (strand == '+' and (gene_start - current_start) >= max_extension) or \
+                       (strand == '-' and (current_end - gene_end) >= max_extension):
+                        print(f"[INFO] {gene_id}: 扩展 {max_extension}bp 后仍无变异，使用原始2000bp区域")
+                        promoter_expansion_status = 'none'  # 回退到2000
+                        promoter_actual_length = promoter_length
+                        # 恢复原始2000bp区域
+                        if strand == '+':
+                            start = promoter_start_2k
+                        else:
+                            end = promoter_end_2k
+                        break
+        
         # 解析GTF获取基因结构信息
         gtf_data = parse_gtf_for_gene(gff_file, gene_id) if gff_file else {'exons': [], 'cds': [], 'strand': strand}
         
@@ -679,7 +775,10 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'gene_end': gene_end,      # 原始基因体终止
             'strand': strand,
             'length': end - start + 1,
-            'promoter_length': promoter_length,
+            'promoter_length': promoter_length,  # 初始启动子长度（2000）
+            'promoter_extended_length': promoter_extended,  # 扩展启动子长度（5000）
+            'promoter_expansion_status': promoter_expansion_status,  # 扩展状态：none/extended/nearest
+            'promoter_actual_length': promoter_actual_length,  # 实际使用的启动子长度
             'vcf_file': vcf_file,
             'vcf_mtime': os.path.getmtime(vcf_file),  # 关键：保存VCF修改时间用于缓存判断
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -692,6 +791,32 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         if hap_df is None or len(hap_df) == 0:
             print(f"[WARNING] hap_df 为空，但 hap_sample_df 有 {len(hap_sample_df) if hap_sample_df is not None else 0} 行")
             result_summary['status'] = 'no_variants'
+            # 修改：即使没有变异，也保存数据以便生成基因结构图
+            if hap_sample_df is not None and len(hap_sample_df) > 0:
+                # 保存空的单倍型数据
+                hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
+                
+                # 合并表型数据
+                merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
+                if len(merged) > 0:
+                    merged.to_csv(os.path.join(gene_data_dir, 'phenotype_data.csv'), index=False)
+                    
+                    # 保存空的单倍型统计
+                    hap_stats_list = []
+                    hap_sample_counts = hap_sample_df['Hap_Name'].value_counts()
+                    for hap_name, count in hap_sample_counts.items():
+                        hap_stats_list.append({
+                            'haplotype_name': hap_name,
+                            'haplotype_count': count,
+                            'haplotype_freq': round(count / len(hap_sample_df), 4),
+                            'phenotype_mean': None,
+                            'phenotype_sd': None
+                        })
+                    hap_stats_df = pd.DataFrame(hap_stats_list)
+                    hap_stats_df.to_csv(os.path.join(gene_data_dir, 'haplotype_stats.csv'), index=False)
+                    
+                    print(f"[INFO] 无变异数据，但已保存基础文件以生成基因结构图")
+            
             return result_summary
         
         # 关键检查：如果 hap_sample_df 为空，直接返回
@@ -938,8 +1063,55 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         else:
             print(f"[INFO] VCF 子集已存在: {subset_vcf_path} ({os.path.getsize(subset_vcf_path)/1024:.1f} KB)")
         
+        # 新增：先合并协变量数据到 pheno_df
+        if cophe_files:
+            valid_cophe_files = [cf for cf in cophe_files if cf is not None]
+            for cophe_file, cophe_title in valid_cophe_files:
+                if cophe_file is None:
+                    continue
+                
+                try:
+                    # 读取协变量文件（第一列基因ID，后续列样本ID）
+                    cophe_df = pd.read_csv(cophe_file, sep='\t', index_col=0)
+                    
+                    # 提取当前基因的表达数据
+                    if gene_id in cophe_df.index:
+                        gene_expr = cophe_df.loc[gene_id]
+                        
+                        # 调试：打印原始样本ID格式
+                        raw_sample_ids = list(gene_expr.index[:5]) if hasattr(gene_expr, 'index') else list(gene_expr.keys())[:5]
+                        print(f"  [DEBUG] {gene_id}: 协变量样本ID示例(前5个): {raw_sample_ids}")
+                        
+                        # 转换为DataFrame：SampleID, expression_value
+                        expr_dict = {'SampleID': [], cophe_title: []}
+                        for sample_id, expr_value in gene_expr.items():
+                            # 关键修复：协变量样本ID没有A后缀，需要添加
+                            # 协变量：M100, M101, M102
+                            # 表型：M100A, M101A, M102A
+                            clean_sample_id = str(sample_id)
+                            # 如果样本ID以数字结尾，添加A后缀
+                            if clean_sample_id[-1].isdigit():
+                                clean_sample_id = clean_sample_id + 'A'
+                            expr_dict['SampleID'].append(clean_sample_id)
+                            expr_dict[cophe_title].append(expr_value)
+                        
+                        expr_df = pd.DataFrame(expr_dict)
+                        
+                        # 合并到 pheno_df
+                        pheno_df = pd.merge(pheno_df, expr_df, on='SampleID', how='left')
+                        
+                        # 统计匹配情况
+                        matched_count = pheno_df[cophe_title].notna().sum()
+                        print(f"  [INFO] {gene_id}: 合并协变量 {cophe_title} ({len(expr_df)} 样本, 匹配 {matched_count} 个)")
+                    else:
+                        print(f"  [WARNING] {gene_id}: 在协变量文件中未找到")
+                        
+                except Exception as e:
+                    print(f"  [WARNING] 加载协变量文件失败: {e}")
+        
+        # 现在合并（pheno_df 已包含协变量）
         merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
-        print(f"[INFO] 表型合并完成: merged 行数={len(merged)}")
+        print(f"[INFO] 表型合并完成: merged 行数={len(merged)}, 列={list(merged.columns)}")
         
         print(f"[DATA FORMAT] 合并后的表型数据 (merged)")
         print(f"  行数: {len(merged)} (hap_sample_df: {len(hap_sample_df)}, pheno_df: {len(pheno_df)})")
@@ -987,7 +1159,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         # 保存合并后的表型数据
         print(f"[INFO] 保存 phenotype_data.csv...")
         merged.to_csv(os.path.join(gene_data_dir, 'phenotype_data.csv'), index=False)
-        print(f"[INFO] phenotype_data.csv 已保存")
+        print(f"[INFO] phenotype_data.csv 已保存（包含协变量）")
         
         # 获取表型列
         pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
@@ -1050,7 +1222,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
 def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                             min_samples: int = 1, pvalue_threshold: float = 0.05,
                             gff_file: str = None, results_dir: str = None,
-                            cluster_haplotypes: bool = False) -> dict:
+                            cluster_haplotypes: bool = False,
+                            cophe_files: list = None) -> dict:
     """
     对单个基因进行单倍型-表型关联分析，并生成综HTML图
     
@@ -1132,6 +1305,40 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
         
         pheno_col = pheno_cols[0]
         
+        # 新增：加载并合并协变量表型数据
+        if cophe_files:
+            # 过滤掉 None 值
+            valid_cophe_files = [cf for cf in cophe_files if cf is not None]
+            
+            for cophe_file, cophe_title in valid_cophe_files:
+                if cophe_file is None:
+                    continue
+                
+                try:
+                    # 读取协变量文件（第一列基因ID，后续列样本ID）
+                    cophe_df = pd.read_csv(cophe_file, sep='\t', index_col=0)
+                    
+                    # 提取当前基因的表达数据
+                    if gene_id in cophe_df.index:
+                        gene_expr = cophe_df.loc[gene_id]
+                        
+                        # 转换为DataFrame：SampleID, expression_value
+                        expr_dict = {'SampleID': [], cophe_title: []}
+                        for sample_id, expr_value in gene_expr.items():
+                            expr_dict['SampleID'].append(sample_id)
+                            expr_dict[cophe_title].append(expr_value)
+                        
+                        expr_df = pd.DataFrame(expr_dict)
+                        
+                        # 合并到主表
+                        merged = pd.merge(merged, expr_df, on='SampleID', how='left')
+                        print(f"[INFO] {gene_id}: 加载协变量 {cophe_title} ({len(expr_df)} 样本)")
+                    else:
+                        print(f"[WARNING] {gene_id}: 在协变量文件 {cophe_file} 中未找到")
+                        
+                except Exception as e:
+                    print(f"[WARNING] 加载协变量文件 {cophe_file} 失败: {e}")
+        
         # 进行关联分析
         hap_col = 'Hap_Name' if 'Hap_Name' in merged.columns else 'Haplotype'
         
@@ -1188,15 +1395,18 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                 analyzer.positions = positions
                 analyzer.hap_df = hap_df
                 analyzer.hap_sample_df = hap_sample_df
-                analyzer.pheno_df = pheno_df
+                # 修改：使用包含协变量的 merged 数据（属性名是 phenotype_df）
+                analyzer.phenotype_df = merged
                 
                 # 运行完整分析流程（会生成综合HTML）
+                # 获取所有表型列（包括协变量）
+                all_pheno_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
                 analysis_result = analyzer.analyze_gene(
                     chrom=chrom,
                     start=start,
                     end=end,
                     gene_id=gene_id,
-                    phenotype_cols=[pheno_col],
+                    phenotype_cols=all_pheno_cols,  # 修改：传入所有表型列
                     cluster_haplotypes=cluster_haplotypes
                 )
                 
@@ -1230,7 +1440,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     pvalue_threshold: float = 0.05,
                     generate_html: bool = True,
                     test_region_length: int = 0,
-                    cluster_haplotypes: bool = False) -> pd.DataFrame:
+                    cluster_haplotypes: bool = False,
+                    cophe_files: list = None) -> pd.DataFrame:
     """
     运行指定基因的单倍型数据集构建
     
@@ -1527,78 +1738,113 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
         gene_data_dir = os.path.join(database_dir, gene_id)
         
         # 检查数据库缓存是否存在
-        if os.path.exists(gene_data_dir) and os.path.exists(os.path.join(gene_data_dir, 'gene_info.json')):
-            # 检查 VCF 是否被修改
-            vcf_mtime = os.path.getmtime(vcf_file)
-            cached_gene_info_file = os.path.join(gene_data_dir, 'gene_info.json')
-            try:
-                with open(cached_gene_info_file, 'r') as f:
-                    cached_info = json.load(f)
-                cached_vcf_mtime = cached_info.get('vcf_mtime', 0)
+        need_reprocess = False
+        required_files = [
+            'gene_info.json',
+            'haplotype_data.csv',
+            'haplotype_samples.csv',
+            'variant_info.csv',
+            'phenotype_data.csv',
+            'haplotype_stats.csv',
+            'variants.vcf.gz'  # 关键：VCF子集文件
+        ]
+        
+        if os.path.exists(gene_data_dir):
+            # 检查缺失哪些文件
+            missing_files = [f for f in required_files if not os.path.exists(os.path.join(gene_data_dir, f))]
+            
+            if missing_files:
+                print(f"  [{processed+1}/{total_genes}] {gene_id}: [INCOMPLETE] 缺少文件 {missing_files}，重新处理")
+                need_reprocess = True
+            else:
+                # 所有文件都存在，检查 phenotype_data.csv 是否包含协变量
+                if cophe_files and any(cf is not None for cf in cophe_files):
+                    pheno_data_file = os.path.join(gene_data_dir, 'phenotype_data.csv')
+                    if os.path.exists(pheno_data_file):
+                        try:
+                            test_pheno = pd.read_csv(pheno_data_file, nrows=1)
+                            # 检查是否包含协变量列
+                            has_covariates = any('WT' in str(c) or 'SA' in str(c) or 'TPM' in str(c) or 'expr' in str(c).lower() for c in test_pheno.columns)
+                            if not has_covariates:
+                                print(f"  [{processed+1}/{total_genes}] {gene_id}: [NO COVARIATES] phenotype_data.csv 不包含协变量，重新处理")
+                                need_reprocess = True
+                        except Exception as e:
+                            print(f"  [{processed+1}/{total_genes}] {gene_id}: 检测协变量失败 ({e})，重新处理")
+                            need_reprocess = True
                 
-                # 关键修复：如果旧缓存没有 vcf_mtime，自动补充
-                if cached_vcf_mtime == 0:
-                    print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHE FIX] 旧缓存缺少 vcf_mtime，自动补充")
-                    cached_info['vcf_mtime'] = vcf_mtime
-                    with open(cached_gene_info_file, 'w') as f:
-                        json.dump(cached_info, f, indent=2)
-                    cached_vcf_mtime = vcf_mtime  # 设置为当前时间，下次就能命中缓存
-                
-                if vcf_mtime <= cached_vcf_mtime:
-                    # 关键：验证缓存文件完整性
-                    required_files = ['gene_info.json', 'haplotype_data.csv', 'haplotype_samples.csv', 'variant_info.csv']
-                    missing_files = [f for f in required_files if not os.path.exists(os.path.join(gene_data_dir, f))]
-                    
-                    if missing_files:
-                        print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHE INCOMPLETE] 缺少文件 {missing_files}，重新处理")
-                    else:
-                        print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHED] 从数据库加载")
-                        # 从缓存加载统计信息
-                        hap_stats_file = os.path.join(gene_data_dir, 'haplotype_stats.csv')
-                        if os.path.exists(hap_stats_file):
-                            hap_stats = pd.read_csv(hap_stats_file)
-                            # 安全检查：确保列存在
-                            n_samples = int(hap_stats['haplotype_count'].sum()) if 'haplotype_count' in hap_stats.columns else 0
-                            result_summary = {
-                                'gene_id': gene_id,
-                                'chrom': cached_info.get('chrom'),
-                                'start': cached_info.get('start'),
-                                'end': cached_info.get('end'),
-                                'strand': cached_info.get('strand'),
-                                'n_variants': len(pd.read_csv(os.path.join(gene_data_dir, 'variant_info.csv'))) if os.path.exists(os.path.join(gene_data_dir, 'variant_info.csv')) else 0,
-                                'n_haplotypes': len(hap_stats),
-                                'n_samples': n_samples,
-                                'data_folder': gene_id,
-                                'results_folder': gene_id if results_dir else None,
-                                'status': 'success'
-                            }
+                if not need_reprocess:
+                    # 所有文件都存在且包含协变量，检查 VCF 是否被修改
+                    vcf_mtime = os.path.getmtime(vcf_file)
+                    cached_gene_info_file = os.path.join(gene_data_dir, 'gene_info.json')
+                    try:
+                        with open(cached_gene_info_file, 'r') as f:
+                            cached_info = json.load(f)
+                        cached_vcf_mtime = cached_info.get('vcf_mtime', 0)
+                        
+                        # 关键修复：如果旧缓存没有 vcf_mtime，自动补充
+                        if cached_vcf_mtime == 0:
+                            print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHE FIX] 旧缓存缺少 vcf_mtime，自动补充")
+                            cached_info['vcf_mtime'] = vcf_mtime
+                            with open(cached_gene_info_file, 'w') as f:
+                                json.dump(cached_info, f, indent=2)
+                            cached_vcf_mtime = vcf_mtime
+                        
+                        if vcf_mtime <= cached_vcf_mtime:
+                            print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHED] 从数据库加载")
+                            # 从缓存加载统计信息
+                            hap_stats_file = os.path.join(gene_data_dir, 'haplotype_stats.csv')
+                            if os.path.exists(hap_stats_file):
+                                hap_stats = pd.read_csv(hap_stats_file)
+                                n_samples = int(hap_stats['haplotype_count'].sum()) if 'haplotype_count' in hap_stats.columns else 0
+                                result_summary = {
+                                    'gene_id': gene_id,
+                                    'chrom': cached_info.get('chrom'),
+                                    'start': cached_info.get('start'),
+                                    'end': cached_info.get('end'),
+                                    'strand': cached_info.get('strand'),
+                                    'n_variants': len(pd.read_csv(os.path.join(gene_data_dir, 'variant_info.csv'))),
+                                    'n_haplotypes': len(hap_stats),
+                                    'n_samples': n_samples,
+                                    'data_folder': gene_id,
+                                    'results_folder': gene_id if results_dir else None,
+                                    'status': 'success'
+                                }
+                            else:
+                                result_summary = {
+                                    'gene_id': gene_id,
+                                    'chrom': cached_info.get('chrom'),
+                                    'start': cached_info.get('start'),
+                                    'end': cached_info.get('end'),
+                                    'strand': cached_info.get('strand'),
+                                    'n_variants': 0,
+                                    'n_haplotypes': 0,
+                                    'n_samples': 0,
+                                    'data_folder': gene_id,
+                                    'results_folder': gene_id if results_dir else None,
+                                    'status': 'cached_no_stats'
+                                }
+                            all_results.append(result_summary)
+                            processed += 1
+                            continue
                         else:
-                            result_summary = {
-                                'gene_id': gene_id,
-                                'chrom': cached_info.get('chrom'),
-                                'start': cached_info.get('start'),
-                                'end': cached_info.get('end'),
-                                'strand': cached_info.get('strand'),
-                                'n_variants': 0,
-                                'n_haplotypes': 0,
-                                'n_samples': 0,
-                                'data_folder': gene_id,
-                                'results_folder': gene_id if results_dir else None,
-                                'status': 'cached_no_stats'
-                            }
-                        all_results.append(result_summary)
-                        processed += 1
-                        continue
-                else:
-                    print(f"  [{processed+1}/{total_genes}] {gene_id}: VCF已更新，重新扫描")
-            except Exception as e:
-                print(f"  [{processed+1}/{total_genes}] {gene_id}: 缓存检测失败 ({e})，重新扫描")
+                            print(f"  [{processed+1}/{total_genes}] {gene_id}: VCF已更新，重新扫描")
+                            need_reprocess = True
+                    except Exception as e:
+                        print(f"  [{processed+1}/{total_genes}] {gene_id}: 缓存检测失败 ({e})，重新扫描")
+                        need_reprocess = True
+        else:
+            print(f"  [{processed+1}/{total_genes}] {gene_id}: 数据库不存在，重新扫描")
+            need_reprocess = True
+        
+        if not need_reprocess:
+            continue
         
         result = process_single_gene(gene_info, vcf_file, pheno_df,
                                      database_dir, results_dir, min_samples,
                                      test_region_length=test_region_length,
                                      gff_file=gff_file,
-                                     all_genes_cds=all_genes_cds)
+                                     all_genes_cds=all_genes_cds,
+                                     cophe_files=cophe_files)
         all_results.append(result)
         processed += 1
         
@@ -1745,14 +1991,58 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 hap_sample_df = pd.read_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'))
                 pheno_data = pd.read_csv(os.path.join(gene_data_dir, 'phenotype_data.csv'))
                 
-                # 获取表型列
-                pheno_cols = [c for c in pheno_df.columns if c != 'SampleID' and pheno_df[c].dtype in ['float64', 'int64']]
+                # 获取表型列（从 pheno_data 而不是 pheno_df）
+                pheno_cols = [c for c in pheno_data.columns if c != 'SampleID' and pheno_data[c].dtype in ['float64', 'int64']]
                 if not pheno_cols:
-                    pheno_cols = [c for c in pheno_df.columns if c != 'SampleID']
+                    pheno_cols = [c for c in pheno_data.columns if c != 'SampleID']
                 pheno_col = pheno_cols[0] if pheno_cols else None
                 
                 if pheno_col is None:
                     continue
+                
+                # 新增：加载并合并协变量表型数据
+                if cophe_files:
+                    # 过滤掉 None 值
+                    valid_cophe_files = [cf for cf in cophe_files if cf is not None]
+                    
+                    # 关键修复：删除旧的协变量列（避免merge时产生_x, _y后缀）
+                    old_covariate_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', pheno_col]]
+                    if old_covariate_cols:
+                        pheno_data = pheno_data.drop(columns=old_covariate_cols)
+                        print(f"  [INFO] {gene_id}: 删除旧协变量列 {old_covariate_cols}")
+                    
+                    for cophe_file, cophe_title in valid_cophe_files:
+                        if cophe_file is None:
+                            continue
+                        
+                        try:
+                            # 读取协变量文件（第一列基因ID，后续列样本ID）
+                            cophe_df = pd.read_csv(cophe_file, sep='\t', index_col=0)
+                            
+                            # 提取当前基因的表达数据
+                            if gene_id in cophe_df.index:
+                                gene_expr = cophe_df.loc[gene_id]
+                                
+                                # 转换为DataFrame：SampleID, expression_value
+                                expr_dict = {'SampleID': [], cophe_title: []}
+                                for sample_id, expr_value in gene_expr.items():
+                                    # 关键修复：协变量样本ID没有A后缀，需要添加
+                                    clean_sample_id = str(sample_id)
+                                    if clean_sample_id[-1].isdigit():
+                                        clean_sample_id = clean_sample_id + 'A'
+                                    expr_dict['SampleID'].append(clean_sample_id)
+                                    expr_dict[cophe_title].append(expr_value)
+                                
+                                expr_df = pd.DataFrame(expr_dict)
+                                
+                                # 合并到主表
+                                pheno_data = pd.merge(pheno_data, expr_df, on='SampleID', how='left')
+                                print(f"  [INFO] {gene_id}: 加载协变量 {cophe_title} ({len(expr_df)} 样本)")
+                            else:
+                                print(f"  [WARNING] {gene_id}: 在协变量文件中未找到")
+                                
+                        except Exception as e:
+                            print(f"  [WARNING] 加载协变量文件失败: {e}")
                 
                 # 进行ANOVA分析
                 from scipy import stats
@@ -1808,25 +2098,73 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                         # 读取单倍型数据
                         hap_df = pd.read_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'))
                         
-                        # 创建分析器并生成HTML
+                        # 创建分析器并生成HTML（不传入 phenotype_file，避免重新加载）
                         analyzer = HaplotypePhenotypeAnalyzer(
                             vcf_file=vcf_file,
-                            phenotype_file=pheno_file,
+                            phenotype_file=None,  # 关键：设为None，使用手动设置的pheno_df
                             output_dir=gene_results_dir,
                             gtf_file=gff_file
                         )
                         
+                        # 设置包含协变量的表型数据（注意：属性名是 phenotype_df 而不是 pheno_df）
+                        analyzer.phenotype_df = pheno_data
+                        
+                        # 从数据库加载单倍型数据
+                        hap_df = pd.read_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'))
+                        analyzer.hap_df = hap_df
+                        
+                        # 读取 gene_info.json 获取基因结构信息
+                        gene_info_file = os.path.join(gene_data_dir, 'gene_info.json')
+                        if os.path.exists(gene_info_file):
+                            with open(gene_info_file, 'r') as f:
+                                gene_info = json.load(f)
+                            analyzer.gene_info = gene_info
+                        
                         # 运行分析生成HTML（传入database_dir以使用预计算数据）
+                        # 获取所有表型列（包括协变量）
+                        all_pheno_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
                         analyzer.analyze_gene(
                             chrom=result['chrom'],
                             start=result['start'],
                             end=result['end'],
                             gene_id=gene_id,
-                            phenotype_cols=[pheno_col],
+                            phenotype_cols=all_pheno_cols,  # 修改：传入所有表型列
                             cluster_haplotypes=cluster_haplotypes,
                             database_dir=database_dir
                         )
                         print(f"  [HTML] {gene_id}: 综合分析图已生成")
+                    except Exception as e:
+                        print(f"  [WARNING] 生成HTML失败 ({gene_id}): {e}")
+                
+                # 新增：即使没有显著性，也生成基因结构图（用于展示基因位置）
+                elif results_dir and HAPLOTYPE_MODULE_AVAILABLE and result.get('status') == 'no_variants':
+                    try:
+                        gene_results_dir = os.path.join(results_dir, gene_id)
+                        os.makedirs(gene_results_dir, exist_ok=True)
+                        
+                        # 创建分析器并生成HTML（不传入 phenotype_file，避免重新加载）
+                        analyzer = HaplotypePhenotypeAnalyzer(
+                            vcf_file=vcf_file,
+                            phenotype_file=None,  # 关键：设为None
+                            output_dir=gene_results_dir,
+                            gtf_file=gff_file
+                        )
+                        
+                        # 运行分析生成HTML
+                        # 获取所有表型列（包括协变量）
+                        all_pheno_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
+                        analyzer.analyze_gene(
+                            chrom=result['chrom'],
+                            start=result['start'],
+                            end=result['end'],
+                            gene_id=gene_id,
+                            phenotype_cols=all_pheno_cols,  # 修改：传入所有表型列
+                            cluster_haplotypes=cluster_haplotypes,
+                            database_dir=database_dir
+                        )
+                        print(f"  [HTML] {gene_id}: 基因结构图已生成（无变异）")
+                    except Exception as e:
+                        print(f"  [WARNING] 生成基因结构图失败 ({gene_id}): {e}")
                         
                         # 保存分析中间数据到数据库，供后续直接使用
                         # 1. 保存 variant_info
@@ -1856,7 +2194,10 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                         print(f"  [WARNING] {gene_id} HTML生成失败: {html_e}")
                 
             except Exception as e:
+                import traceback
+                error_detail = traceback.format_exc()
                 print(f"  [WARNING] {gene_id} 关联分析失败: {e}")
+                print(f"  [DEBUG] 详细错误:\n{error_detail}")
         
         perf.step_end("association_analysis")
     
@@ -1948,6 +2289,20 @@ def main():
     parser.add_argument("--cluster", action="store_true",
                         help="按序列相似度聚类排序单倍型（默认按数量排序）")
     
+    # 新增：协变量表型文件参数（支持多个）
+    parser.add_argument("--cophe1", type=str, default=None,
+                        help="协变量表型文件1路径（第一列基因ID，后续列样本ID）")
+    parser.add_argument("--cophe1-title", type=str, default="Expression1",
+                        help="协变量表型1的标题（用于boxplot列名）")
+    parser.add_argument("--cophe2", type=str, default=None,
+                        help="协变量表型文件2路径")
+    parser.add_argument("--cophe2-title", type=str, default="Expression2",
+                        help="协变量表型2的标题")
+    parser.add_argument("--cophe3", type=str, default=None,
+                        help="协变量表型文件3路径")
+    parser.add_argument("--cophe3-title", type=str, default="Expression3",
+                        help="协变量表型3的标题")
+    
     args = parser.parse_args()
     
     # 运行扫描
@@ -1962,7 +2317,13 @@ def main():
         run_analysis=not args.no_analysis,
         pvalue_threshold=args.pvalue_threshold,
         test_region_length=args.test_region,
-        cluster_haplotypes=args.cluster
+        cluster_haplotypes=args.cluster,
+        # 新增：协变量表型文件
+        cophe_files=[
+            (args.cophe1, args.cophe1_title) if args.cophe1 else None,
+            (args.cophe2, args.cophe2_title) if args.cophe2 else None,
+            (args.cophe3, args.cophe3_title) if args.cophe3 else None,
+        ]
     )
 
 
