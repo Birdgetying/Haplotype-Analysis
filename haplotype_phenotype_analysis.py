@@ -9583,10 +9583,19 @@ class HaplotypePhenotypeAnalyzer:
             # 扩展分析区域以包含启动子（确保启动子在图中可见）
             promoter_start_pos = promoter_report.get('promoter_start')
             promoter_end_pos = promoter_report.get('promoter_end')
-            plot_region_start = min(start, promoter_start_pos) if promoter_start_pos else start
-            plot_region_end = max(end, promoter_end_pos) if promoter_end_pos else end
-                    
-            logger.info(f"  - 绘图区域：{plot_region_start:,}-{plot_region_end:,} (包含启动子 {promoter_start_pos:,}-{promoter_end_pos:,})")
+            
+            # **关键修复**: 绘图区域必须包含启动子区域（无论是否扩展）
+            # 启动子始终需要在图中可见
+            if has_promoter_variants and promoter_start_pos and promoter_end_pos:
+                # 有启动子变异，绘图区域必须包含启动子
+                plot_region_start = min(gene_body_start, promoter_start_pos)
+                plot_region_end = max(gene_body_end, promoter_end_pos)
+                logger.info(f"  - [有启动子变异] 绘图区域：{plot_region_start:,}-{plot_region_end:,} (包含启动子 {promoter_start_pos:,}-{promoter_end_pos:,})")
+            else:
+                # 无启动子变异，使用基因体区间
+                plot_region_start = gene_body_start
+                plot_region_end = gene_body_end
+                logger.info(f"  - [无启动子变异] 绘图区域：{plot_region_start:,}-{plot_region_end:,} (gene_body)")
             
             # SNP 精细分类：优先从数据库重建，如果失败则尝试VCF
             snp_effects = {}
