@@ -1,0 +1,10 @@
+Haplotype_Seq,Count,Hap_Name,Alleles
+A|A|G|G|T|T|A|G|C,249,Hap1,"['A', 'A', 'G', 'G', 'T', 'T', 'A', 'G', 'C']"
+A|A|G|G|T|T|C|G|T,227,Hap2,"['A', 'A', 'G', 'G', 'T', 'T', 'C', 'G', 'T']"
+A|A|C|G|T|T|C|G|C,52,Hap3,"['A', 'A', 'C', 'G', 'T', 'T', 'C', 'G', 'C']"
+A|A|G|A|T|T|C|G|C,36,Hap4,"['A', 'A', 'G', 'A', 'T', 'T', 'C', 'G', 'C']"
+G|A|G|G|T|T|A|G|C,30,Hap5,"['G', 'A', 'G', 'G', 'T', 'T', 'A', 'G', 'C']"
+A|A|G|G|T|C|A|G|C,20,Hap6,"['A', 'A', 'G', 'G', 'T', 'C', 'A', 'G', 'C']"
+A|A|C|G|C|T|C|-|C,12,Hap7,"['A', 'A', 'C', 'G', 'C', 'T', 'C', '-', 'C']"
+A|G|G|G|T|T|A|G|C,10,Hap8,"['A', 'G', 'G', 'G', 'T', 'T', 'A', 'G', 'C']"
+A|A|G|G|T|T|C|G|C,9,Hap9,"['A', 'A', 'G', 'G', 'T', 'T', 'C', 'G', 'C']"
