@@ -1295,7 +1295,8 @@ def _build_coding_context(chrom: str, cds_intervals, strand: str, fasta_path: st
 
 def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: str,
                                      cds_intervals: list, exon_intervals: list,
-                                     gene_strand: str, positions: list) -> dict:
+                                     gene_strand: str, positions: list,
+                                     gene_start: int = None, gene_end: int = None) -> dict:
     """
     计算指定位点列表的 SNP 功能注释
     返回: {pos: 'missense'|'synonymous'|'UTR'|'indel'|'SV'|'other'}
@@ -1331,7 +1332,7 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
         return effects
 
     if not PYSAM_AVAILABLE or not fasta_path or not os.path.exists(fasta_path):
-        # 没有 FASTA，只能判断 UTR vs other
+        # 没有 FASTA，只能判断 UTR / intron / other
         for pos in positions:
             in_cds = _pos_in_any_interval(pos, cds_intervals)
             in_exon = _pos_in_any_interval(pos, exon_intervals)
@@ -1339,6 +1340,9 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                 effects[pos] = 'UTR'
             elif in_cds:
                 effects[pos] = 'other'  # 无法判断 missense/synonymous
+            elif gene_start and gene_end and gene_start <= pos <= gene_end:
+                effects[pos] = 'intron'
+            # else: stays 'other'
         return effects
 
     try:
@@ -1377,7 +1381,7 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         in_cds  = _pos_in_any_interval(pos, cds_intervals)
                         in_exon = _pos_in_any_interval(pos, exon_intervals)
                         
-                        # 先判断SV/indel（不区分位置，统一标记）
+                        # 先判断SV/indel
                         if var_type == 'SV':
                             effects[pos] = 'SV'
                         elif var_type in ('INS', 'DEL'):
@@ -8812,7 +8816,9 @@ class HaplotypePhenotypeAnalyzer:
                                      region_start: int, region_end: int,
                                      cds_intervals: list, exon_intervals: list,
                                      gene_strand: str, promoter_start: int = None, 
-                                     promoter_end: int = None) -> dict:
+                                     promoter_end: int = None,
+                                     gene_body_start: int = None,
+                                     gene_body_end: int = None) -> dict:
         """
         用 tabix 只读目标区间，做 SNP 精细分类 (missense/synonymous/UTR/promoter/SV/indel/other)
         读取范围：gene_chrom:region_start-region_end (含启动子)
@@ -8846,7 +8852,14 @@ class HaplotypePhenotypeAnalyzer:
                 for pos in positions_list:
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
-                    effects[pos] = 'UTR' if (in_exon and not in_cds) else 'other'
+                    in_gene_body = (gene_body_start is not None and
+                                    gene_body_end is not None and
+                                    gene_body_start <= pos <= gene_body_end)
+                    if in_exon and not in_cds:
+                        effects[pos] = 'UTR'
+                    elif not in_exon and in_gene_body:
+                        effects[pos] = 'intron'
+                    # else: stays 'other'
                 return effects
             
             # 构建 CDS 上下文（用于翻译）
@@ -8879,12 +8892,15 @@ class HaplotypePhenotypeAnalyzer:
                     # 计算变异长度差异（用于判断 SV/indel）
                     len_diff = abs(len(ref) - len(alt_allele))
                     
-                    # 优先级判断：exon/CDS > UTR > promoter > SV/indel > other
+                    # 优先级判断：exon/CDS > UTR > promoter > SV/indel > intron > other
                     if not in_exon:
                         # 不在外显子区，检查是否在启动子区
                         in_promoter = (promoter_start is not None and 
                                       promoter_end is not None and 
                                       promoter_start <= pos <= promoter_end)
+                        in_gene_body = (gene_body_start is not None and
+                                       gene_body_end is not None and
+                                       gene_body_start <= pos <= gene_body_end)
                         
                         if in_promoter:
                             # 启动子区域变异
@@ -8892,11 +8908,17 @@ class HaplotypePhenotypeAnalyzer:
                         elif len_diff >= 50:
                             # 结构变异
                             effects[pos] = 'SV'
-                        elif len_diff > 0:
-                            # 小插入缺失
-                            effects[pos] = 'indel'
+                        elif len(alt_allele) > len(ref):
+                            # 插入
+                            effects[pos] = 'INS'
+                        elif len(ref) > len(alt_allele):
+                            # 缺失
+                            effects[pos] = 'DEL'
+                        elif in_gene_body:
+                            # 在基因体内但不在外显子 = 内含子
+                            effects[pos] = 'intron'
                         else:
-                            # 其他区域
+                            # 基因间区
                             effects[pos] = 'other'
                     elif not in_cds:
                         # 在 exon 但不在 CDS（UTR 区域）
@@ -8905,8 +8927,10 @@ class HaplotypePhenotypeAnalyzer:
                         # CDS 区的非单碱基变异
                         if len_diff >= 50:
                             effects[pos] = 'SV'
-                        elif len_diff > 0:
-                            effects[pos] = 'indel'
+                        elif len(alt_allele) > len(ref):
+                            effects[pos] = 'INS'
+                        elif len(ref) > len(alt_allele):
+                            effects[pos] = 'DEL'
                         else:
                             effects[pos] = 'other'
                     elif not cds_seq or pos not in cds_pos_to_idx:
@@ -9632,6 +9656,10 @@ class HaplotypePhenotypeAnalyzer:
                                     in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
                                     if in_exon and not in_cds:
                                         snp_effects[pos] = 'UTR'
+                                    elif in_cds:
+                                        snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
+                                    elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
+                                        snp_effects[pos] = 'intron'
                                     else:
                                         snp_effects[pos] = 'other'
                         logger.info(f"  - 从数据库重建SNP注释: {len(snp_effects)} 个位点")
@@ -9654,7 +9682,9 @@ class HaplotypePhenotypeAnalyzer:
                         exon_intervals=exons_list,
                         gene_strand=strand,
                         promoter_start=promoter_start_pos,
-                        promoter_end=promoter_end_pos
+                        promoter_end=promoter_end_pos,
+                        gene_body_start=gene_body_start,
+                        gene_body_end=gene_body_end
                     )
                 except Exception as e:
                     logger.warning(f"  - VCF注释也失败: {e}")
