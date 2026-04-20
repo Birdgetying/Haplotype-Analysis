@@ -1314,6 +1314,9 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
     # 定义变异类型判断函数
     def classify_variant(ref, alt):
         """根据ref/alt长度判断变异类型: SNP, indel, SV, INS, DEL"""
+        # 首先检查符号等位基因（<DEL>, <INS>等）
+        if isinstance(alt, str) and alt.startswith('<') and alt.endswith('>'):
+            return 'SV'
         len_diff = abs(len(ref) - len(alt))
         if len(ref) == 1 and len(alt) == 1:
             return 'SNP'
@@ -1511,7 +1514,17 @@ class HaplotypeExtractor:
         - 缺失(DEL): 返回 '-' (会在variant_info中记录具体缺失长度)
         """
         # 判断变异类型，确定如何展示ALT
-        if len(ref) == 1 and len(alt0) == 1:
+        # 首先检查符号等位基因（SV表示：<DEL>, <INS>, <DUP>, <INV>等）
+        is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+        if is_symbolic:
+            sym = alt0.strip('<>').upper()
+            if 'DEL' in sym:
+                alt_repr = '-'  # 缺失
+            elif 'INS' in sym or 'DUP' in sym:
+                alt_repr = '+'  # 插入/重复
+            else:
+                alt_repr = 'N'  # INV, BND等无法用单字符表示
+        elif len(ref) == 1 and len(alt0) == 1:
             # SNP: 直接用实际碱基
             alt_repr = alt0.upper()
         elif len(alt0) > len(ref):  # 插入
@@ -1695,12 +1708,34 @@ class HaplotypeExtractor:
                         maf = counts[1] / n_valid  # 次等位基因频率
                 
                 # 存储变异信息
-                len_diff = len(alt0) - len(ref)
+                # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
+                is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+                if is_symbolic:
+                    # 符号等位基因：尝试从INFO字段获取SVLEN
+                    try:
+                        svlen = rec.info.get('SVLEN')
+                        if svlen is not None:
+                            if isinstance(svlen, (list, tuple)):
+                                svlen = svlen[0]
+                            len_diff = int(svlen)  # SVLEN通常为负数表示缺失
+                        else:
+                            # 尝试从END字段推断长度
+                            sv_end = rec.info.get('END')
+                            if sv_end is not None:
+                                len_diff = -(int(sv_end) - pos)  # 缺失为负
+                            else:
+                                len_diff = 0  # 无法确定长度
+                    except Exception:
+                        len_diff = 0
+                    is_sv = True
+                else:
+                    len_diff = len(alt0) - len(ref)
+                    is_sv = abs(len_diff) >= 50
                 variant_info[pos] = {
                     'ref': ref,
                     'alt': alt0,
                     'len_diff': len_diff,
-                    'is_sv': abs(len_diff) >= 50,
+                    'is_sv': is_sv,
                     'maf': maf,
                     'missing_rate': missing_rate
                 }
@@ -1756,12 +1791,32 @@ class HaplotypeExtractor:
                         maf = counts[1] / n_valid  # 次等位基因频率
                 
                 # 存储变异信息
-                len_diff = len(alt0) - len(ref)
+                # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
+                is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+                if is_symbolic:
+                    try:
+                        svlen = rec.info.get('SVLEN')
+                        if svlen is not None:
+                            if isinstance(svlen, (list, tuple)):
+                                svlen = svlen[0]
+                            len_diff = int(svlen)
+                        else:
+                            sv_end = rec.info.get('END')
+                            if sv_end is not None:
+                                len_diff = -(int(sv_end) - pos)
+                            else:
+                                len_diff = 0
+                    except Exception:
+                        len_diff = 0
+                    is_sv = True
+                else:
+                    len_diff = len(alt0) - len(ref)
+                    is_sv = abs(len_diff) >= 50
                 variant_info[pos] = {
                     'ref': ref,
                     'alt': alt0,
                     'len_diff': len_diff,
-                    'is_sv': abs(len_diff) >= 50,
+                    'is_sv': is_sv,
                     'maf': maf,
                     'missing_rate': missing_rate
                 }
@@ -4435,6 +4490,11 @@ class ReportGenerator:
                         vinfo = variant_info[pos]
                         ref = vinfo.get('ref', '')
                         alt = vinfo.get('alt', '')
+                        # 检查符号等位基因
+                        is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
+                        if is_symbolic or vinfo.get('is_sv', False):
+                            print(f"[DEBUG] get_var_color: pos={pos}, snp_effects={ann}, but variant_info shows SV (symbolic={is_symbolic})")
+                            return var_type_colors['SV'], 'SV'
                         len_diff = abs(len(ref) - len(alt))
                         if len_diff > 0 and len_diff < 50:  # indel
                             if len(alt) > len(ref):
@@ -4456,6 +4516,11 @@ class ReportGenerator:
                 ref = vinfo.get('ref', '')
                 alt = vinfo.get('alt', '')
                 print(f"[DEBUG] variant_info fallback: pos={pos}, ref={ref}, alt={alt}, ref_len={len(ref)}, alt_len={len(alt)}")
+                # 检查符号等位基因或is_sv标记
+                is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
+                if is_symbolic or vinfo.get('is_sv', False):
+                    print(f"[DEBUG] -> SV color (symbolic={is_symbolic}, is_sv={vinfo.get('is_sv')})")
+                    return var_type_colors['SV'], 'SV'
                 if len(alt) > len(ref):
                     print(f"[DEBUG] -> INS color")
                     return var_type_colors['INS'], 'INS'
@@ -4611,7 +4676,7 @@ class ReportGenerator:
             # 构建功能注释信息（用于indel分类）
             functional_ann = ann
             # 如果是indel，尝试获取更详细的功能注释
-            if ann in ('indel', 'INS', 'DEL'):
+            if ann in ('indel', 'INS', 'DEL', 'SV'):
                 # 检查位置是否在CDS区域
                 in_cds_check = any(cs <= ip <= ce for cs, ce in cds) if cds else False
                 in_exon_check = any(es <= ip <= ee for es, ee in exons) if exons else False
@@ -8889,6 +8954,20 @@ class HaplotypePhenotypeAnalyzer:
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
                     
+                    # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
+                    is_symbolic = isinstance(alt_allele, str) and alt_allele.startswith('<') and alt_allele.endswith('>')
+                    # 检查INFO字段的SVTYPE
+                    svtype = None
+                    try:
+                        svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
+                    except Exception:
+                        pass
+                    
+                    if is_symbolic or svtype:
+                        # 符号等位基因或有SVTYPE标记 → 直接标记为SV
+                        effects[pos] = 'SV'
+                        continue
+                    
                     # 计算变异长度差异（用于判断 SV/indel）
                     len_diff = abs(len(ref) - len(alt_allele))
                     
@@ -9045,18 +9124,41 @@ class HaplotypePhenotypeAnalyzer:
                     alt = rec.alts[0] if rec.alts else ""
                     
                     # 判断变异类型
-                    len_diff = abs(len(ref) - len(alt))
-                    if len(ref) == 1 and len(alt) == 1:
-                        var_type = "SNP"
-                    elif len_diff >= 50:
-                        var_type = "SV"
-                    else:
-                        var_type = "indel"
-                    
+                    # 检查符号等位基因（<DEL>, <INS>等）
+                    is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
                     # 检查INFO字段是否有SVTYPE
                     svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
-                    if svtype:
-                        var_type = f"SV({svtype})"
+                    
+                    if is_symbolic or svtype:
+                        # 符号等位基因或有SVTYPE → SV
+                        if svtype:
+                            var_type = f"SV({svtype})"
+                        else:
+                            sym = alt.strip('<>').upper()
+                            var_type = f"SV({sym})"
+                        # 从SVLEN或END获取实际长度差
+                        try:
+                            svlen = rec.info.get('SVLEN')
+                            if svlen is not None:
+                                if isinstance(svlen, (list, tuple)):
+                                    svlen = svlen[0]
+                                len_diff = abs(int(svlen))
+                            else:
+                                sv_end = rec.info.get('END')
+                                if sv_end is not None:
+                                    len_diff = abs(int(sv_end) - rec.pos)
+                                else:
+                                    len_diff = 0
+                        except Exception:
+                            len_diff = 0
+                    else:
+                        len_diff = abs(len(ref) - len(alt))
+                        if len(ref) == 1 and len(alt) == 1:
+                            var_type = "SNP"
+                        elif len_diff >= 50:
+                            var_type = "SV"
+                        else:
+                            var_type = "indel"
                     
                     variants.append({
                         'pos': rec.pos,
