@@ -4486,7 +4486,7 @@ class ReportGenerator:
                 if pos in snp_effects:
                     ann = snp_effects[pos]
                     # 对于UTR/other类型，额外检查variant_info看是否是indel
-                    if ann in ('UTR', 'other') and variant_info and pos in variant_info:
+                    if ann in ('UTR', 'other', 'promoter') and variant_info and pos in variant_info:
                         vinfo = variant_info[pos]
                         ref = vinfo.get('ref', '')
                         alt = vinfo.get('alt', '')
@@ -4544,7 +4544,7 @@ class ReportGenerator:
             elif in_cds_b:
                 return var_type_colors['other'], 'other'
             elif g_start and g_end and g_start <= pos <= g_end:
-                return var_type_colors['other'], 'intron'  # 在基因边界内 = 内含子
+                return var_type_colors['intron'], 'intron'  # 在基因边界内 = 内含子
             return var_type_colors['other'], 'other'
         
         # 从 Haplotype_Seq 获取序列 - 显示全部变异位点
@@ -4673,19 +4673,19 @@ class ReportGenerator:
                     ann = snp_effects[ip]
                 elif pos in snp_effects:
                     ann = snp_effects[pos]
-            # 构建功能注释信息（用于indel分类）
+            # 构建功能注释信息（用于indel/SV的位置分类，决定过滤行为）
             functional_ann = ann
-            # 如果是indel，尝试获取更详细的功能注释
             if ann in ('indel', 'INS', 'DEL', 'SV'):
-                # 检查位置是否在CDS区域
                 in_cds_check = any(cs <= ip <= ce for cs, ce in cds) if cds else False
                 in_exon_check = any(es <= ip <= ee for es, ee in exons) if exons else False
                 if in_cds_check:
-                    functional_ann = 'missense'  # 在CDS区域的indel归类为错义
+                    functional_ann = 'missense'
                 elif in_exon_check:
                     functional_ann = 'UTR'
                 elif g_start and g_end and g_start <= ip <= g_end:
                     functional_ann = 'intron'
+                elif promoter_start and promoter_end and promoter_start <= ip <= promoter_end:
+                    functional_ann = 'promoter'
                 else:
                     functional_ann = 'other'
             
@@ -5240,7 +5240,7 @@ class ReportGenerator:
         html += f'<text x="{var_leg_x}" y="{axis_y}" font-size="8.5" fill="#333" font-weight="600">Variant Type</text>\n'
         # 按顺序排列变异类型（包含错义突变分级）
         ordered_types = ['missense_non_conservative', 'missense_semi_conservative', 'missense_conservative', 
-                        'missense', 'synonymous', 'UTR', 'promoter', 'INS', 'DEL', 'SV', 'other']
+                        'missense', 'synonymous', 'UTR', 'promoter', 'intron', 'INS', 'DEL', 'SV', 'other']
         found_types = [t for t in ordered_types if t in var_types_found]
         # 双列布局
         items_per_col = 5
@@ -8989,9 +8989,9 @@ class HaplotypePhenotypeAnalyzer:
                     # 计算变异长度差异（用于判断 SV/indel）
                     len_diff = abs(len(ref) - len(alt_allele))
                     
-                    # 优先级判断：exon/CDS > UTR > promoter > SV/indel > intron > other
+                    # 优先级判断：exon/CDS > UTR > SV/INS/DEL > promoter(SNP) > intron > other
                     if not in_exon:
-                        # 不在外显子区，检查是否在启动子区
+                        # 不在外显子区
                         in_promoter = (promoter_start is not None and 
                                       promoter_end is not None and 
                                       promoter_start <= pos <= promoter_end)
@@ -8999,23 +8999,18 @@ class HaplotypePhenotypeAnalyzer:
                                        gene_body_end is not None and
                                        gene_body_start <= pos <= gene_body_end)
                         
-                        if in_promoter:
-                            # 启动子区域变异
-                            effects[pos] = 'promoter'
-                        elif len_diff >= 50:
-                            # 结构变异
+                        # 结构变异优先保留类型信息（INS/DEL/SV），位置信息由 functional_ann 处理
+                        if len_diff >= 50:
                             effects[pos] = 'SV'
-                        elif len(alt_allele) > len(ref):
-                            # 插入
+                        elif len(alt_allele) > len(ref) and len_diff > 0:
                             effects[pos] = 'INS'
-                        elif len(ref) > len(alt_allele):
-                            # 缺失
+                        elif len(ref) > len(alt_allele) and len_diff > 0:
                             effects[pos] = 'DEL'
+                        elif in_promoter:
+                            effects[pos] = 'promoter'
                         elif in_gene_body:
-                            # 在基因体内但不在外显子 = 内含子
                             effects[pos] = 'intron'
                         else:
-                            # 基因间区
                             effects[pos] = 'other'
                     elif not in_cds:
                         # 在 exon 但不在 CDS（UTR 区域）
