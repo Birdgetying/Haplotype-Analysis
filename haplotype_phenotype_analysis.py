@@ -5700,14 +5700,6 @@ function annNorm(d) {
         return 'other';
     }
     
-    // SV 始终归类为 'SV'
-    if (a === 'SV') {
-        return 'SV';
-    }
-    
-    // INS/DEL/indel 统一归入 SV（由 Indel/SV 复选框控制）
-    if (a === 'INS' || a === 'DEL' || a === 'indel') return 'SV';
-    
     // missense 归一化（包括 missense_conservative 等亚型）
     if (a.indexOf('missense') !== -1) {
         return 'missense';
@@ -5716,6 +5708,23 @@ function annNorm(d) {
     // synonymous 归一化
     if (a.indexOf('synonymous') !== -1) {
         return 'synonymous';
+    }
+    
+    // INS/DEL/SV/indel：按 functional_ann 位置分类，无法归类则走 Indel/SV 复选框
+    // 这样启动子/内含子等区域的 SV/INS/DEL 可被对应位置复选框过滤
+    if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {
+        if (d.functional_ann) {
+            var fa = String(d.functional_ann).toLowerCase();
+            if (fa.indexOf('missense') !== -1) return 'missense';
+            if (fa.indexOf('synonymous') !== -1) return 'synonymous';
+            if (fa.indexOf('utr') !== -1) return 'UTR';
+            if (fa.indexOf('intron') !== -1) return 'intron';
+            if (fa.indexOf('promoter') !== -1) {
+                if (d.overlaps_cds === true) return 'other';
+                return 'promoter';
+            }
+        }
+        return 'SV';  // 兜底：基因间区等无特定位置 → Indel/SV 复选框
     }
     
     // 直接返回原始类型（promoter, intron, UTR, other 等）
