@@ -4970,6 +4970,8 @@ class ReportGenerator:
                 <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
                 <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
                 <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                <label><input type="checkbox" class="ann-cb" value="INS" checked onchange="applyFilters()"> INS</label>
+                <label><input type="checkbox" class="ann-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
                 <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
                 <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
             </span>
@@ -5695,41 +5697,32 @@ var currentFilter = { maf: 0.05, missingRate: 0.2 };
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
     
-    // **关键修复**：检查启动子变异是否与其他基因CDS重叠
+    // 启动子SNP：若与其他基因CDS重叠，归类为other
     if (a === 'promoter' && d.overlaps_cds === true) {
         return 'other';
     }
     
-    // SV 始终归类为 'SV'（不按位置重分类）
+    // SV 始终归类为 'SV'
     if (a === 'SV') {
         return 'SV';
     }
     
-    // 处理 missense 变体（包括各种亚型 missense_conservative 等）
+    // INS/DEL 直接按变异类型归类（由专属复选框控制）
+    if (a === 'INS') return 'INS';
+    if (a === 'DEL') return 'DEL';
+    if (a === 'indel') return 'indel';  // 兼容旧数据（无专属框，回退到other）
+    
+    // missense 归一化（包括 missense_conservative 等亚型）
     if (a.indexOf('missense') !== -1) {
         return 'missense';
     }
     
-    // 处理 synonymous 变体
+    // synonymous 归一化
     if (a.indexOf('synonymous') !== -1) {
         return 'synonymous';
     }
     
-    // 处理 indel/INS/DEL - 根据 functional_ann 按位置功能分类
-    if (d.functional_ann && (a === 'indel' || a === 'INS' || a === 'DEL')) {
-        var fa = String(d.functional_ann).toLowerCase();
-        if (fa.indexOf('missense') !== -1) return 'missense';
-        if (fa.indexOf('synonymous') !== -1) return 'synonymous';
-        if (fa.indexOf('utr') !== -1) return 'UTR';
-        if (fa.indexOf('intron') !== -1) return 'intron';
-        if (fa.indexOf('promoter') !== -1) {
-            if (d.overlaps_cds === true) return 'other';
-            return 'promoter';
-        }
-        return 'other';
-    }
-    
-    // 直接返回原始类型（包括 intron, UTR, synonymous, promoter 等）
+    // 直接返回原始类型（promoter, intron, UTR, other 等）
     return a;
 }
 
