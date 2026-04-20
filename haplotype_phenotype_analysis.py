@@ -4963,15 +4963,23 @@ class ReportGenerator:
             <span class="filter-value" id="missingValue">0.2</span>
         </div>
         <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
-            <label style="width:100%;margin-bottom:4px;">Annotation:</label>
+            <label style="width:100%;margin-bottom:4px;">Position:</label>
             <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
                 <label><input type="checkbox" class="ann-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
                 <label><input type="checkbox" class="ann-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
                 <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
                 <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
                 <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
-                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> Indel/SV</label>
                 <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
+            </span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">Variant Type:</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="type-cb" value="INS" checked onchange="applyFilters()"> INS</label>
+                <label><input type="checkbox" class="type-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
+                <label><input type="checkbox" class="type-cb" value="SV" checked onchange="applyFilters()"> SV</label>
+                <label><input type="checkbox" class="type-cb" value="SNP" checked onchange="applyFilters()"> SNP</label>
             </span>
         </div>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
@@ -5700,7 +5708,7 @@ function annNorm(d) {
         return 'other';
     }
     
-    // missense 归一化（包括 missense_conservative 等亚型）
+    // missense 归一化
     if (a.indexOf('missense') !== -1) {
         return 'missense';
     }
@@ -5710,8 +5718,7 @@ function annNorm(d) {
         return 'synonymous';
     }
     
-    // INS/DEL/SV/indel：按 functional_ann 位置分类，无法归类则走 Indel/SV 复选框
-    // 这样启动子/内含子等区域的 SV/INS/DEL 可被对应位置复选框过滤
+    // INS/DEL/SV/indel：按 functional_ann 确定位置分类，兑底为 'other'
     if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {
         if (d.functional_ann) {
             var fa = String(d.functional_ann).toLowerCase();
@@ -5724,11 +5731,27 @@ function annNorm(d) {
                 return 'promoter';
             }
         }
-        return 'SV';  // 兜底：基因间区等无特定位置 → Indel/SV 复选框
+        return 'other';  // 兑底：基因间区 / 未知位置
     }
     
-    // 直接返回原始类型（promoter, intron, UTR, other 等）
     return a;
+}
+
+// 类型归一化：返回变异的结构类型
+function typeNorm(d) {
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : '';
+    if (a === 'INS') return 'INS';
+    if (a === 'DEL') return 'DEL';
+    if (a === 'SV') return 'SV';
+    if (a === 'indel') return 'INS';  // 兼容旧数据
+    return 'SNP';  // 其余均为SNP
+}
+
+// 类型过滤：检查 type-cb 复选框
+function typeAllowed(d) {
+    var t = typeNorm(d);
+    var cb = document.querySelector('.type-cb[value="' + t + '"]');
+    return cb ? cb.checked : true;
 }
 
 function annAllowed(d) {
@@ -5757,6 +5780,7 @@ function resetFilters() {
     document.getElementById('mafValue').textContent    = '0.05';
     document.getElementById('missingValue').textContent = '0.2';
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
+    document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     applyFilters();
 }
 
@@ -5925,13 +5949,14 @@ function applyFilters() {
         var mafPass = d.maf >= currentFilter.maf;
         var missPass = d.missing_rate <= currentFilter.missingRate;
         var annPass = annAllowed(d);
+        var typePass = typeAllowed(d);
         var normAnn = annNorm(d);
-        if (!mafPass || !missPass || !annPass) {
+        if (!mafPass || !missPass || !annPass || !typePass) {
             console.log('[DEBUG] Filtered OUT pos:', d.pos, 'maf:', d.maf, 'missing:', d.missing_rate, 
                         'ann:', d.annotation, 'normAnn:', normAnn, 'functional_ann:', d.functional_ann,
-                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass);
+                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass, 'typePass:', typePass);
         }
-        return mafPass && missPass && annPass;
+        return mafPass && missPass && annPass && typePass;
     });
     console.log('[DEBUG] Filtered data count:', filtered.length, 'of', gwasData.length);
     
