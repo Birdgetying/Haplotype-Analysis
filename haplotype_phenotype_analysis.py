@@ -5696,29 +5696,33 @@ function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
     
     // **关键修复**：检查启动子变异是否与其他基因CDS重叠
-    // 如果overlaps_cds为true，说明这个"启动子变异"实际位于其他基因的编码区
-    // 应该将其归类为'missense'或'synonymous'（而不是promoter）
     if (a === 'promoter' && d.overlaps_cds === true) {
-        // 如果overlapping_genes字段存在，说明与其他基因CDS重叠
-        // 将其归类为other，避免被promoter过滤器误选
         return 'other';
     }
     
-    // 处理 missense 变体（包括各种亚型）
+    // SV 始终归类为 'SV'（不按位置重分类）
+    if (a === 'SV') {
+        return 'SV';
+    }
+    
+    // 处理 missense 变体（包括各种亚型 missense_conservative 等）
     if (a.indexOf('missense') !== -1) {
         return 'missense';
     }
     
-    // 处理 indel/SV - 根据功能分配到对应分类
-    // 优先使用 functional_ann 字段（由Python端根据位置计算）
-    if (d.functional_ann && (a === 'indel' || a === 'INS' || a === 'DEL' || a === 'SV')) {
+    // 处理 synonymous 变体
+    if (a.indexOf('synonymous') !== -1) {
+        return 'synonymous';
+    }
+    
+    // 处理 indel/INS/DEL - 根据 functional_ann 按位置功能分类
+    if (d.functional_ann && (a === 'indel' || a === 'INS' || a === 'DEL')) {
         var fa = String(d.functional_ann).toLowerCase();
         if (fa.indexOf('missense') !== -1) return 'missense';
         if (fa.indexOf('synonymous') !== -1) return 'synonymous';
         if (fa.indexOf('utr') !== -1) return 'UTR';
         if (fa.indexOf('intron') !== -1) return 'intron';
         if (fa.indexOf('promoter') !== -1) {
-            // 再次检查overlaps_cds
             if (d.overlaps_cds === true) return 'other';
             return 'promoter';
         }
@@ -5987,9 +5991,8 @@ function applyFilters() {
         // 检查是否通过过滤（基于posSet）
         var passed = posSet[pos] !== undefined;
         
-        // 设置显示/隐藏
-        el.style.display = passed ? 'block' : 'none';
-        el.style.opacity = passed ? '1' : '0.1';
+        // 设置显示/隐藏（保留SVG元素原始opacity，如var-up-line的0.5）
+        el.style.display = passed ? '' : 'none';
     });
     
     // 同步更新表格：隐藏被过滤的列，重新排列保留的列
@@ -7867,13 +7870,20 @@ if (promoterStart < promoterEnd) {{
                 pval = 1e-300
             # 添加变异信息用于过滤
             info = variant_info.get(ip, variant_info.get(pos, {}))
+            # 使用 snp_effects 覆盖 annotation（与集成页 gwas_data 保持一致）
+            ann = info.get('annotation', 'other')
+            if snp_effects:
+                if ip in snp_effects:
+                    ann = snp_effects[ip]
+                elif pos in snp_effects:
+                    ann = snp_effects[pos]
             manhattan_points.append({
                 'pos': int(pos),
                 'pvalue': float(pval),
                 'logp': float(-np.log10(pval)),
                 'maf': float(info.get('maf', 0.5)),
                 'missing_rate': float(info.get('missing_rate', 0.0)),
-                'annotation': info.get('annotation', 'other'),
+                'annotation': ann,
                 'ref': info.get('ref', ''),
                 'alt': info.get('alt', '')
             })
@@ -8155,7 +8165,15 @@ function getAnnotationEnabledMp() {{
 }}
 
 function annAllowedMp(d) {{
-    const a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    // 归一化注释类型：SV 保持为 SV
+    if (a === 'SV') {{ /* keep SV */ }}
+    // missense_* 归一化为 missense
+    else if (a.indexOf('missense') !== -1) {{ a = 'missense'; }}
+    // synonymous_* 归一化为 synonymous
+    else if (a.indexOf('synonymous') !== -1) {{ a = 'synonymous'; }}
+    // INS/DEL 归一化为 indel
+    else if (a === 'INS' || a === 'DEL') {{ a = 'indel'; }}
     const cb = document.querySelector('.ann-cb-mp[value="' + a + '"]');
     if (cb) return cb.checked;
     const o = document.querySelector('.ann-cb-mp[value="other"]');
