@@ -4970,9 +4970,7 @@ class ReportGenerator:
                 <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
                 <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
                 <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
-                <label><input type="checkbox" class="ann-cb" value="INS" checked onchange="applyFilters()"> INS</label>
-                <label><input type="checkbox" class="ann-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
-                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
+                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> Indel/SV</label>
                 <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
             </span>
         </div>
@@ -5707,10 +5705,8 @@ function annNorm(d) {
         return 'SV';
     }
     
-    // INS/DEL 直接按变异类型归类（由专属复选框控制）
-    if (a === 'INS') return 'INS';
-    if (a === 'DEL') return 'DEL';
-    if (a === 'indel') return 'indel';  // 兼容旧数据（无专属框，回退到other）
+    // INS/DEL/indel 统一归入 SV（由 Indel/SV 复选框控制）
+    if (a === 'INS' || a === 'DEL' || a === 'indel') return 'SV';
     
     // missense 归一化（包括 missense_conservative 等亚型）
     if (a.indexOf('missense') !== -1) {
