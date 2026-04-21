@@ -5279,13 +5279,14 @@ class ReportGenerator:
         html += f'<col style="width:90px;min-width:90px;max-width:90px;">\n'  # Haplotype
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
-        for _ in display_positions:
-            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
-        # 新增：协变量箱线图列 - 排除已知列后的所有列
+        # 协变量箱线图列（放在序列列前面，与Effect/Phenotype箱线图在一起）
         covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
         for cov_col in covariate_cols:
             html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # 协变量列
+        
+        for _ in display_positions:
+            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
         html += f'<col style="width:auto;min-width:60px;">\n'  # n 列
         html += '</colgroup>\n'
@@ -5295,19 +5296,19 @@ class ReportGenerator:
         html += '    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>\n'
         html += '    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>\n'
         
+        # 协变量表头（放在序列列前面）
+        for cov_col in covariate_cols:
+            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
+        
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
             pos_str = f'{pos:,}'  # 千分位逗号
-            html += (f'<th style="width:20px;min-width:20px;max-width:20px;padding:0;'
+            html += (f'<th class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;'
                      f'vertical-align:top;overflow:hidden;">'
                      f'<div style="writing-mode:vertical-rl;transform:rotate(180deg);'
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
-        
-        # 新增：协变量表头
-        for cov_col in covariate_cols:
-            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
         
         html += '<th class="n-cell" style="min-width:60px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
         
@@ -5387,54 +5388,7 @@ class ReportGenerator:
         {box_html}
     </td>\n'''
             
-            # 序列列
-            if 'Haplotype_Seq' in row.index:
-                seq = row['Haplotype_Seq'].replace('|', '')
-                for idx in range(len(display_positions)):
-                    orig_idx = display_orig_indices[idx] if idx < len(display_orig_indices) else idx
-                    base = seq[orig_idx].upper() if orig_idx < len(seq) else 'N'
-                    
-                    # 获取位置信息
-                    pos = display_positions[idx] if idx < len(display_positions) else None
-                    
-                    # **关键修复**：对于+/-或I/D，根据variant_info的len_diff显示具体数值
-                    # 例如：+2bp（插入2个碱基）、-1bp（缺失1个碱基）
-                    # 支持两种格式：新格式(+/-)和旧格式(I/D)
-                    display_base = base
-                    actual_type = base  # 实际用于确定颜色的类型
-                    
-                    if base in ('+', '-', 'I', 'D') and pos and variant_info and pos in variant_info:
-                        len_diff = variant_info[pos].get('len_diff', 0)
-                        if len_diff > 0:  # 插入: alt比ref长
-                            display_base = f"+{len_diff}bp"  # 例如：+2bp
-                            actual_type = '+'  # 强制为插入类型（红色）
-                        elif len_diff < 0:  # 缺失: alt比ref短
-                            display_base = f"-{abs(len_diff)}bp"  # 例如：-1bp（使用绝对值）
-                            actual_type = '-'  # 强制为缺失类型（蓝色）
-                        else:
-                            display_base = "0bp"  # 理论上不应该出现
-                    
-                    # 根据实际类型确定颜色（而不是base）
-                    color = base_colors.get(actual_type, '#666')
-                    
-                    # DEBUG: 第一列特殊调试
-                    if idx == 0 and i == 0:  # 第一行第一列
-                        print(f"[DEBUG-TABLE-FIRST-COL] hap={hap}, base={base}, actual_type={actual_type}, color={color}, pos={pos}, display_base={display_base}")
-                        if pos and variant_info and pos in variant_info:
-                            vinfo = variant_info[pos]
-                            print(f"[DEBUG-TABLE-FIRST-COL] variant_info: ref={vinfo.get('ref')}, alt={vinfo.get('alt')}, len_diff={vinfo.get('len_diff')}")
-                    
-                    # 根据文本长度调整字体大小，避免重叠
-                    if len(display_base) > 4:
-                        font_size = "7px"
-                    elif len(display_base) > 3:
-                        font_size = "8px"
-                    else:
-                        font_size = "9px"
-                    
-                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
-            
-            # 新增：协变量箱线图列
+            # 协变量箱线图列（放在序列列前面）
             for cov_col in covariate_cols:
                 # 计算该协变量的箱线图数据
                 cov_box_data = {}
@@ -5488,6 +5442,51 @@ class ReportGenerator:
                 
                 html += f'    <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">\n        {cov_box_html}\n    </td>\n'
             
+            # 序列列（放在协变量列后面）
+            if 'Haplotype_Seq' in row.index:
+                seq = row['Haplotype_Seq'].replace('|', '')
+                for idx in range(len(display_positions)):
+                    orig_idx = display_orig_indices[idx] if idx < len(display_orig_indices) else idx
+                    base = seq[orig_idx].upper() if orig_idx < len(seq) else 'N'
+                    
+                    # 获取位置信息
+                    pos = display_positions[idx] if idx < len(display_positions) else None
+                    
+                    # **关键修复**：对于+/-或I/D，根据variant_info的len_diff显示具体数值
+                    display_base = base
+                    actual_type = base  # 实际用于确定颜色的类型
+                    
+                    if base in ('+', '-', 'I', 'D') and pos and variant_info and pos in variant_info:
+                        len_diff = variant_info[pos].get('len_diff', 0)
+                        if len_diff > 0:  # 插入: alt比ref长
+                            display_base = f"+{len_diff}bp"
+                            actual_type = '+'  # 强制为插入类型（红色）
+                        elif len_diff < 0:  # 缺失: alt比ref短
+                            display_base = f"-{abs(len_diff)}bp"
+                            actual_type = '-'  # 强制为缺失类型（蓝色）
+                        else:
+                            display_base = "0bp"
+                    
+                    # 根据实际类型确定颜色
+                    color = base_colors.get(actual_type, '#666')
+                    
+                    # DEBUG: 第一列特殊调试
+                    if idx == 0 and i == 0:  # 第一行第一列
+                        print(f"[DEBUG-TABLE-FIRST-COL] hap={hap}, base={base}, actual_type={actual_type}, color={color}, pos={pos}, display_base={display_base}")
+                        if pos and variant_info and pos in variant_info:
+                            vinfo = variant_info[pos]
+                            print(f"[DEBUG-TABLE-FIRST-COL] variant_info: ref={vinfo.get('ref')}, alt={vinfo.get('alt')}, len_diff={vinfo.get('len_diff')}")
+                    
+                    # 根据文本长度调整字体大小
+                    if len(display_base) > 4:
+                        font_size = "7px"
+                    elif len(display_base) > 3:
+                        font_size = "8px"
+                    else:
+                        font_size = "9px"
+                    
+                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
+            
             html += f'<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">{cnt}</td>\n'
             
             html += '</tr>\n'
@@ -5530,11 +5529,7 @@ class ReportGenerator:
             html += '</div>'
         html += '</td>\n'
         
-        # 序列列（逐个输出空td，与数据行一一对应，确保列对齐）
-        for _ in display_positions:
-            html += '<td style="border:none;"></td>'
-        
-        # 新增：协变量列坐标轴
+        # 协变量列坐标轴（放在Phenotype轴后面）
         for cov_col in covariate_cols:
             # 计算该协变量的箱线图数据
             cov_box_data = {}
@@ -5567,6 +5562,10 @@ class ReportGenerator:
                     html += f'<span style="position:absolute;bottom:-4px;left:{tick_pct}%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">{tick_label}</span>'
                 html += '</div>'
             html += '</td>\n'
+        
+        # 序列列（放在协变量列坐标轴后面）
+        for _ in display_positions:
+            html += '<td style="border:none;"></td>'
         
         # n 列（空）
         html += '<td class="n-cell" style="border:none;"></td>\n'
@@ -5839,9 +5838,8 @@ function updateConnectorLines() {
     console.log('[DEBUG] Total th count:', allThsList.length);
     
     var visibleThs = allThsList.filter(function(th, idx) {
-        // 跳过前3列和最后一列，只保留变异列
-        if (idx < 3) return false;
-        if (idx >= allThsList.length - 1) return false;
+        // 只保留序列列（seq-col-th class）
+        if (!th.classList.contains('seq-col-th')) return false;
         // 只保留可见的列
         var isVisible = th.style.display !== 'none';
         if (isVisible) {
@@ -5994,9 +5992,11 @@ function applyFilters() {
     
     allThs.forEach(function(th, idx) {{
         var thText = th.textContent.trim().substring(0, 30);
-        // 判断是否为固定列（前3列：Haplotype/Effect/Phenotype，或有特殊class的列：box-cell/n-cell）
-        var isFixedCol = (idx < 3) || th.classList.contains('box-cell') || th.classList.contains('n-cell');
-        if (!isFixedCol) {{
+        // 判断是否为序列列（有seq-col-th class的列）
+        var isSeqCol = th.classList.contains('seq-col-th');
+        // 判断是否为固定列（非序列列）
+        var isFixedCol = !isSeqCol;
+        if (isSeqCol) {{
             var posText = th.textContent.trim().replace(/,/g,'');
             var pos = parseInt(posText);
             var inPosSet = posSet[pos] !== undefined;
@@ -6061,16 +6061,16 @@ function updateTableColumns(keepIndices, keepPositions) {
     // 处理表头
     allThs.forEach(function(th, idx) {{
         var text = th.textContent.trim().substring(0, 20);
-        // 判断是否为固定列（前3列 或 有特殊class的列：box-cell/n-cell）
-        var isFixedCol = (idx < 3) || th.classList.contains('box-cell') || th.classList.contains('n-cell');
-        if (isFixedCol) {{
+        // 判断是否为序列列（seq-col-th class）
+        var isSeqCol = th.classList.contains('seq-col-th');
+        if (!isSeqCol) {{
             // 固定列始终显示
             console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - FIXED, showing');
             th.style.display = '';
         }} else {{
-            // 变异列：根据keepIndicesSet决定是否显示
+            // 序列列：根据keepIndicesSet决定是否显示
             var shouldShow = keepIndicesSet.has(idx);
-            console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - var column, shouldShow:', shouldShow);
+            console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - seq column, shouldShow:', shouldShow);
             if (shouldShow) {{
                 th.style.display = '';
             }} else {{
@@ -6083,13 +6083,14 @@ function updateTableColumns(keepIndices, keepPositions) {
     tbodyRows.forEach(function(row) {{
         var tds = Array.from(row.querySelectorAll('td'));
         tds.forEach(function(td, idx) {{
-            // 判断是否为固定列（前3列 或 有特殊class的列：box-cell/n-cell/hap-cell/effect-cell）
-            var isFixedCol = (idx < 3) || td.classList.contains('box-cell') || td.classList.contains('n-cell');
-            if (isFixedCol) {{
+            // 判断是否为序列列：对应表头的seq-col-th列
+            var correspondingTh = allThs[idx];
+            var isSeqCol = correspondingTh && correspondingTh.classList.contains('seq-col-th');
+            if (!isSeqCol) {{
                 // 固定列始终显示
                 td.style.display = '';
             }} else {{
-                // 变异列：根据keepIndicesSet决定是否显示
+                // 序列列：根据keepIndicesSet决定是否显示
                 if (keepIndicesSet.has(idx)) {{
                     td.style.display = '';
                 }} else {{
@@ -6098,7 +6099,7 @@ function updateTableColumns(keepIndices, keepPositions) {
             }}
         }});
     }});
-}
+}}
 
 // ==================== 单倍型网络图（D3 force simulation） ====================
 function drawNetworkPlot() {
