@@ -84,7 +84,7 @@
     <div class="main-header">
         <h1>Integrated Multi-Panel Visualization</h1>
         <div class="main-header-info">
-            <span>Region: chr6H:9,873,004 - 9,875,420</span>
+            <span>Region: chr6H:9,873,004 - 9,878,420</span>
             <span>Gene: 9,873,004 - 9,878,420</span>
             <span>Variants: 0</span>
             <span>Haplotypes: 1</span>
@@ -210,7 +210,7 @@ const manhattanData = [];
 const pcaData = [];
 const varExplained = [30, 20, 10];
 const regionStart = 9873004;
-const regionEnd = 9875420;
+const regionEnd = 9878420;
 const geneStart = 9873004;
 const geneEnd = 9878420;
 
@@ -227,15 +227,7 @@ function getAnnotationEnabledMp() {
 }
 
 function annAllowedMp(d) {
-    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
-    // 归一化注释类型：SV 保持为 SV
-    if (a === 'SV') { /* keep SV */ }
-    // missense_* 归一化为 missense
-    else if (a.indexOf('missense') !== -1) { a = 'missense'; }
-    // synonymous_* 归一化为 synonymous
-    else if (a.indexOf('synonymous') !== -1) { a = 'synonymous'; }
-    // INS/DEL 归一化为 indel
-    else if (a === 'INS' || a === 'DEL') { a = 'indel'; }
+    const a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
     const cb = document.querySelector('.ann-cb-mp[value="' + a + '"]');
     if (cb) return cb.checked;
     const o = document.querySelector('.ann-cb-mp[value="other"]');

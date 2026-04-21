@@ -28,7 +28,7 @@
 <div class="container">
     <div class="header">
         <h1>P-value Heatmap Overlay</h1>
-        <p>Region: chr6H:543,444,087 - 543,447,148 | Gene: 543,444,087 - 543,445,148 | Variants: 29</p>
+        <p>Region: chr6H:543,444,087 - 543,450,148 | Gene: 543,444,087 - 543,450,148 | Variants: 29</p>
     </div>
     
     <div id="heatmap"></div>
@@ -48,9 +48,9 @@
 <script>
 const data = [{"pos": 543444101, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543444288, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445205, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445244, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445382, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445391, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445397, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445409, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445423, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445496, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445505, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445562, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445611, "pvalue": 0.055602713810099035, "logp": 1.254904011223903, "significant": false}, {"pos": 543445651, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445654, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445681, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445731, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445900, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543445911, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446091, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446507, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446568, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446574, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446623, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446640, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543446968, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543447079, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543447103, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 543447114, "pvalue": 1.0, "logp": -0.0, "significant": false}];
 const regionStart = 543444087;
-const regionEnd = 543447148;
+const regionEnd = 543450148;
 const geneStart = 543444087;
-const geneEnd = 543445148;
+const geneEnd = 543450148;
 
 const margin = {top: 50, right: 30, bottom: 50, left: 60};
 const container = document.getElementById('heatmap');
@@ -99,24 +99,20 @@ svg.append('rect')
     .attr('height', geneH)
     .attr('rx', 3);
 
-// 启动子区域（基因5'端上游）- **根据实际扩展情况绘制**
-if (hasPromoter) {
-    // 从 gene_info.json 中读取实际启动子长度
-    var promoterActualLength = 2000;
-    var promoterEnd = geneStart;
-    var promoterStart = Math.max(regionStart, geneStart - promoterActualLength);
-    if (promoterStart < promoterEnd) {
-        svg.append('rect')
-            .attr('class', 'promoter-region')
-            .attr('x', xScale(promoterStart))
-            .attr('y', geneY - geneH/2)
-            .attr('width', xScale(promoterEnd) - xScale(promoterStart))
-            .attr('height', geneH)
-            .attr('rx', 2)
-            .attr('stroke', '#e67e22')
-            .attr('stroke-width', 1)
-            .attr('stroke-dasharray', '3,2');
-    }
+// 启动子区域（基因5'端上游2kb）
+const promoterEnd = geneStart;
+const promoterStart = Math.max(regionStart, geneStart - 2000);
+if (promoterStart < promoterEnd) {
+    svg.append('rect')
+        .attr('class', 'promoter-region')
+        .attr('x', xScale(promoterStart))
+        .attr('y', geneY - geneH/2)
+        .attr('width', xScale(promoterEnd) - xScale(promoterStart))
+        .attr('height', geneH)
+        .attr('rx', 2)
+        .attr('stroke', '#e67e22')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '3,2');
 }
 
 // 坐标轴

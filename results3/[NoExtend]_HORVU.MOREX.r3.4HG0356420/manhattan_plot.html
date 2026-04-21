@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manhattan Plot - Region chr4H:146,936,826-146,943,753</title>
+    <title>Manhattan Plot - Region chr4H:146,933,826-146,943,753</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,7 +29,7 @@
 <div class="container">
     <div class="header">
         <h1>Manhattan Plot</h1>
-        <div class="header-info">Region: chr4H:146,936,826 - 146,943,753 | Variants: 17</div>
+        <div class="header-info">Region: chr4H:146,933,826 - 146,943,753 | Variants: 17</div>
     </div>
     
     <div class="plot-container">
@@ -48,7 +48,7 @@
 <div class="tooltip" id="tooltip" style="display:none;"></div>
 
 <script>
-const data = [{"pos": 146936898, "pvalue": 1.6400524736047648e-06, "logp": 5.785142256444727, "type": "variant"}, {"pos": 146937025, "pvalue": 0.06832247774763296, "logp": 1.165436392134447, "type": "variant"}, {"pos": 146937108, "pvalue": 0.0002994251744314577, "logp": 3.523711688772363, "type": "variant"}, {"pos": 146937332, "pvalue": 0.08966514092683006, "logp": 1.0473763645986232, "type": "variant"}, {"pos": 146937386, "pvalue": 0.01613865765272478, "logp": 1.792132590943468, "type": "variant"}, {"pos": 146937620, "pvalue": 0.00014601347031347137, "logp": 3.83560707700354, "type": "variant"}, {"pos": 146937723, "pvalue": 0.6482905937797381, "logp": 0.1882302796452697, "type": "variant"}, {"pos": 146937780, "pvalue": 0.04147780456862246, "logp": 1.3821842389986612, "type": "variant"}, {"pos": 146937878, "pvalue": 0.01613865765272478, "logp": 1.792132590943468, "type": "variant"}, {"pos": 146938113, "pvalue": 3.4908415750724698e-12, "logp": 11.45706986033307, "type": "variant"}, {"pos": 146938191, "pvalue": 3.4908415750724698e-12, "logp": 11.45706986033307, "type": "variant"}, {"pos": 146938615, "pvalue": 0.003258715381656312, "logp": 2.4869535694440197, "type": "variant"}, {"pos": 146941938, "pvalue": 0.01613865765272478, "logp": 1.792132590943468, "type": "variant"}, {"pos": 146943093, "pvalue": 0.08966514092683006, "logp": 1.0473763645986232, "type": "variant"}, {"pos": 146943428, "pvalue": 0.01613865765272478, "logp": 1.792132590943468, "type": "variant"}, {"pos": 146943510, "pvalue": 2.4805038374124262e-05, "logp": 4.605460096760933, "type": "variant"}, {"pos": 146943635, "pvalue": 3.451582058560406e-11, "logp": 10.461981797154323, "type": "variant"}];
+const data = [{"pos": 146936898, "pvalue": 1.6400524736047648e-06, "logp": 5.785142256444727, "type": "variant"}, {"pos": 146937025, "pvalue": 0.06832247774763296, "logp": 1.165436392134447, "type": "variant"}, {"pos": 146937108, "pvalue": 0.0002994251744314577, "logp": 3.523711688772363, "type": "variant"}, {"pos": 146937332, "pvalue": 0.08966514092683006, "logp": 1.0473763645986232, "type": "variant"}, {"pos": 146937386, "pvalue": 0.016138657652724774, "logp": 1.7921325909434682, "type": "variant"}, {"pos": 146937620, "pvalue": 0.00014601347031347137, "logp": 3.83560707700354, "type": "variant"}, {"pos": 146937723, "pvalue": 0.6482905937797381, "logp": 0.1882302796452697, "type": "variant"}, {"pos": 146937780, "pvalue": 0.04147780456862246, "logp": 1.3821842389986612, "type": "variant"}, {"pos": 146937878, "pvalue": 0.016138657652724774, "logp": 1.7921325909434682, "type": "variant"}, {"pos": 146938113, "pvalue": 3.4908415750724698e-12, "logp": 11.45706986033307, "type": "variant"}, {"pos": 146938191, "pvalue": 3.4908415750724698e-12, "logp": 11.45706986033307, "type": "variant"}, {"pos": 146938615, "pvalue": 0.0032587153816563126, "logp": 2.4869535694440197, "type": "variant"}, {"pos": 146941938, "pvalue": 0.016138657652724774, "logp": 1.7921325909434682, "type": "variant"}, {"pos": 146943093, "pvalue": 0.08966514092683006, "logp": 1.0473763645986232, "type": "variant"}, {"pos": 146943428, "pvalue": 0.016138657652724774, "logp": 1.7921325909434682, "type": "variant"}, {"pos": 146943510, "pvalue": 2.4805038374124262e-05, "logp": 4.605460096760933, "type": "variant"}, {"pos": 146943635, "pvalue": 3.451582058560406e-11, "logp": 10.461981797154323, "type": "variant"}];
 const margin = {top: 30, right: 40, bottom: 60, left: 70};
 const container = document.getElementById('manhattan');
 const width = container.clientWidth - margin.left - margin.right;
@@ -63,7 +63,7 @@ const svg = d3.select('#manhattan')
 
 // 比例尺
 const xScale = d3.scaleLinear()
-    .domain([146936826, 146943753])
+    .domain([146933826, 146943753])
     .range([0, width]);
 
 const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp)) * 1.1 : 5;

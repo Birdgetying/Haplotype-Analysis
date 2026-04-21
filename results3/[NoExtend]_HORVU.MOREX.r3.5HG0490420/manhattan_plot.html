@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manhattan Plot - Region chr5H:476,225,989-476,228,586</title>
+    <title>Manhattan Plot - Region chr5H:476,222,989-476,228,586</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,7 +29,7 @@
 <div class="container">
     <div class="header">
         <h1>Manhattan Plot</h1>
-        <div class="header-info">Region: chr5H:476,225,989 - 476,228,586 | Variants: 4</div>
+        <div class="header-info">Region: chr5H:476,222,989 - 476,228,586 | Variants: 4</div>
     </div>
     
     <div class="plot-container">
@@ -48,7 +48,7 @@
 <div class="tooltip" id="tooltip" style="display:none;"></div>
 
 <script>
-const data = [{"pos": 476226210, "pvalue": 0.2553101279101499, "logp": 0.5929319568046487, "type": "variant"}, {"pos": 476227640, "pvalue": 0.017682132589250783, "logp": 1.752465357202463, "type": "variant"}, {"pos": 476227735, "pvalue": 0.20620016784453096, "logp": 0.6857109855417168, "type": "variant"}, {"pos": 476227866, "pvalue": 0.7257641172328491, "logp": 0.13920450771579038, "type": "variant"}];
+const data = [{"pos": 476226210, "pvalue": 0.2553101279101499, "logp": 0.5929319568046487, "type": "variant"}, {"pos": 476227640, "pvalue": 0.017682132589250783, "logp": 1.752465357202463, "type": "variant"}, {"pos": 476227735, "pvalue": 0.20620016784453093, "logp": 0.6857109855417169, "type": "variant"}, {"pos": 476227866, "pvalue": 0.7257641172328491, "logp": 0.13920450771579038, "type": "variant"}];
 const margin = {top: 30, right: 40, bottom: 60, left: 70};
 const container = document.getElementById('manhattan');
 const width = container.clientWidth - margin.left - margin.right;
@@ -63,7 +63,7 @@ const svg = d3.select('#manhattan')
 
 // 比例尺
 const xScale = d3.scaleLinear()
-    .domain([476225989, 476228586])
+    .domain([476222989, 476228586])
     .range([0, width]);
 
 const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp)) * 1.1 : 5;

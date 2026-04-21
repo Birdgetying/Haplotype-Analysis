@@ -4533,6 +4533,73 @@ class ReportGenerator:
             display_positions = variant_positions if variant_positions else []
             display_orig_indices = list(range(len(display_positions)))  # 顺序索引
         
+        # ==================== 计算LD r²矩阵（用于倒三角图）====================
+        ld_r2_matrix = []
+        ld_positions_list = list(display_positions)  # 与display_positions完全一致
+        n_dp = len(ld_positions_list)
+        if n_dp >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
+            try:
+                # 构建每个样本在每个显示位置的基因型向量（0=参考，1=变异）
+                # 参考碱基：取最多的等位基因作为参考
+                # 使用display_orig_indices从序列中提取正确的索引
+                geno_matrix = []  # shape: (n_samples, n_positions)
+                for _, sample_row in hap_sample_df.iterrows():
+                    seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
+                    geno_vec = []
+                    for pos_i, orig_idx in enumerate(display_orig_indices):
+                        if orig_idx < len(seq):
+                            base = seq[orig_idx].upper()
+                            # 非参考碱基 = 变异（1），参考碱基 = 0
+                            # 用'N'和'R'（参考）作为参考状态
+                            geno_vec.append(0 if base in ('N',) else 1)
+                        else:
+                            geno_vec.append(0)
+                    geno_matrix.append(geno_vec)
+                
+                # 修正：确定每列的参考等位基因（出现最多的碱基 = 参考）
+                # 参考碱基频率最高的作为0
+                geno_array = np.array(geno_matrix, dtype=float)  # (n_samples, n_positions)
+                
+                # 重新确定每列的0/1编码：让列均值<=0.5（即使最多的碱基为参考）
+                for col_i in range(geno_array.shape[1]):
+                    col_mean = np.nanmean(geno_array[:, col_i])
+                    if col_mean > 0.5:
+                        geno_array[:, col_i] = 1 - geno_array[:, col_i]
+                
+                # 计算r²矩阵
+                n_pos = geno_array.shape[1]
+                r2_mat = [[1.0] * n_pos for _ in range(n_pos)]
+                for i in range(n_pos):
+                    for j in range(i + 1, n_pos):
+                        xi = geno_array[:, i]
+                        xj = geno_array[:, j]
+                        # 过滤掉缺失值
+                        mask = (~np.isnan(xi)) & (~np.isnan(xj))
+                        xi_m = xi[mask]
+                        xj_m = xj[mask]
+                        if len(xi_m) < 4:
+                            r2 = 0.0
+                        else:
+                            pi = np.mean(xi_m)
+                            pj = np.mean(xj_m)
+                            if pi <= 0 or pi >= 1 or pj <= 0 or pj >= 1:
+                                r2 = 0.0
+                            else:
+                                cov = np.mean(xi_m * xj_m) - pi * pj
+                                denom = (pi * (1 - pi) * pj * (1 - pj)) ** 0.5
+                                r2 = (cov / denom) ** 2 if denom > 0 else 0.0
+                                r2 = min(1.0, max(0.0, r2))
+                        r2_mat[i][j] = r2
+                        r2_mat[j][i] = r2
+                ld_r2_matrix = r2_mat
+                print(f"[INFO] LD r²矩阵计算完成: {n_pos}x{n_pos}")
+            except Exception as e:
+                print(f"[WARNING] LD r²矩阵计算失败: {e}")
+                ld_r2_matrix = []
+        
+        ld_r2_json = json.dumps(ld_r2_matrix) if ld_r2_matrix else '[]'
+        # ==================== LD计算结束 ====================
+        
         effects = effect_results.get('haplotype_effects', []) if effect_results else []
         grand_mean = effect_results.get('grand_mean', 0) if effect_results else 0
         region_len_kb = (region_end - region_start) / 1000
@@ -5395,6 +5462,19 @@ class ReportGenerator:
         
         html += r'''</tbody></table>
 </div><!-- table-scroll-container -->
+
+<!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:hidden;">
+    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
+    <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
+        <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
+        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
+        <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">→</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
+        <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
+    </div>
+</div>
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
     </div>
@@ -5526,6 +5606,7 @@ var leadVariantPos = __LEAD_POS__;
 var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
 var displayPositions = __DISPLAY_POSITIONS__;  // 显示的变异位置列表
+var ldR2Matrix = __LD_R2_MATRIX__;  // LD r²矩阵（n x n，与displayPositions对应）
 
 // ==================== 过滤功能 ====================
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
@@ -6278,12 +6359,251 @@ function exportSVG() {{
 }}
 
 // ==================== 页面初始化 ====================
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {{
     drawNetworkPlot();
     drawGWASPlot(gwasData);
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
-});
+    // 初始化LD倒三角图
+    setTimeout(function() {{ drawLDTriangle(); }}, 300);
+}});
+
+// ==================== LD 倒三角图绘制（Canvas实现）====================
+// 设计原则：
+// 1. 列数与序列表格的变异列一一对应（通过getBoundingClientRect读取实際列中心x）
+// 2. 倒三角形：上边为对角线，每个菱形格子对应两个位点i,j的r²
+// 3. 取色：白色（r²=0）到深红（r²=1）
+function r2ToColor(r2) {{
+    // 使用经典LD配色：白->黄->橙->红
+    r2 = Math.max(0, Math.min(1, r2));
+    var colors = [
+        [255, 255, 255],  // 0.0 白色
+        [255, 255, 204],  // 0.25 淡黄
+        [253, 204, 92],   // 0.5 黄色
+        [240, 59, 32],    // 0.75 橙红
+        [189, 0, 38],     // 1.0 深红
+    ];
+    var idx = r2 * (colors.length - 1);
+    var lo = Math.floor(idx);
+    var hi = Math.min(lo + 1, colors.length - 1);
+    var t = idx - lo;
+    var r = Math.round(colors[lo][0] + t * (colors[hi][0] - colors[lo][0]));
+    var g = Math.round(colors[lo][1] + t * (colors[hi][1] - colors[lo][1]));
+    var b = Math.round(colors[lo][2] + t * (colors[hi][2] - colors[lo][2]));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+}}
+
+function drawLDTriangle() {{
+    var canvas = document.getElementById('ld-triangle-canvas');
+    if (!canvas) {{ console.log('[LD] canvas not found'); return; }}
+    
+    var matrix = ldR2Matrix;
+    if (!matrix || matrix.length < 2) {{
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        console.log('[LD] no LD data, hiding');
+        return;
+    }}
+    var n = matrix.length;
+    
+    // 获取表格中所有可见变异列的实际屏幕坐标
+    var table = document.querySelector('.data-table');
+    if (!table) {{ console.log('[LD] table not found'); return; }}
+    var allThs = Array.from(table.querySelectorAll('thead th'));
+    var visibleVarThs = allThs.filter(function(th, idx) {{
+        return idx >= 3 && idx < allThs.length - 1 && th.style.display !== 'none';
+    }});
+    
+    if (visibleVarThs.length < 2) {{
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }}
+    
+    // 计算每列的屏幕x坐标（列中心）
+    // 同时需要定位到ldR2Matrix中对应的索引
+    // 每个th的文本是坐标値，与displayPositions对应
+    var colInfos = [];  // {{screenX, matIdx}}
+    var canvasEl = canvas;
+    var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
+        
+    visibleVarThs.forEach(function(th) {{
+        var thRect = th.getBoundingClientRect();
+        var centerX = thRect.left + thRect.width / 2 - wrapRect.left;
+        // 求该列在displayPositions中的索引
+        var posText = th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
+        var posVal = parseInt(posText);
+        var matIdx = -1;
+        for (var pi = 0; pi < displayPositions.length; pi++) {{
+            if (displayPositions[pi] === posVal) {{ matIdx = pi; break; }}
+        }}
+        if (matIdx >= 0) {{
+            colInfos.push({{ screenX: centerX, matIdx: matIdx }});
+        }}
+    }});
+    
+    if (colInfos.length < 2) {{
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }}
+    
+    // 计算canvas尺寸
+    // 倒三角形高度 = 列数 * 半个格子宽
+    // 注意: 此时还未设置canvas内部坐标，先用screenX估算格子宽度
+    var cellW = colInfos.length > 1 ? 
+        (colInfos[colInfos.length-1].screenX - colInfos[0].screenX) / (colInfos.length - 1) : 20;
+    cellW = Math.max(cellW, 10);
+    var halfCell = cellW / 2;
+    
+    // 倒三角的深度 = (n-1) * halfCell，其中n为可见列数
+    var nc = colInfos.length;
+    var triDepth = (nc - 1) * halfCell;
+    var paddingTop = 8;
+    var paddingBottom = 20;  // 为坐标标签留空间
+    var canvasH = Math.ceil(triDepth + paddingTop + paddingBottom);
+    
+    // canvas宽度连接到wrapper的整体宽度
+    var tableRect = table.getBoundingClientRect();
+    var wrapLeft = wrapRect.left;
+    var canvasW = Math.ceil(tableRect.right - wrapLeft + 60);  // 稍微宽一点
+    
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    canvas.style.width = canvasW + 'px';
+    canvas.style.height = canvasH + 'px';
+    
+    // 计算canvas显示尺寸与内部坐标尺寸的比例（居中风格缩放时需要）
+    // 先应用canvas然后再读尺寸
+    var canvasDisplayRect = canvas.getBoundingClientRect();
+    // 屏幕坐标到canvas内部坐标的比例
+    var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
+    
+    // 将所有colInfos的screenX转换为canvas内部坐标
+    for (var ci2 = 0; ci2 < colInfos.length; ci2++) {{
+        colInfos[ci2].canvasX = colInfos[ci2].screenX * canvasScaleX;
+    }}
+    
+    // 用canvas内部坐标重新计算格子宽
+    if (colInfos.length > 1) {{
+        halfCell = (colInfos[colInfos.length-1].canvasX - colInfos[0].canvasX) / (colInfos.length - 1) / 2;
+        halfCell = Math.max(halfCell, 5);
+    }}
+    
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    
+    // 绘制倒三角形内的菱形格子
+    // 菱形处于第i列和j列之间，其中i<j
+    // 菱形中心x = (colInfos[i].screenX + colInfos[j].screenX) / 2
+    // 菱形中心y = paddingTop + (j - i) * halfCell / 2 + ... 实际必须计算
+    // 倒三角坐标系：对角线为最上方，向下展开
+    // 菱形(i,j)的中心坐标：
+    //   cx = (xi + xj) / 2
+    //   cy = paddingTop + (j - i) * halfCell - halfCell/2  (distance from top)
+    //   实际：第一行（j-i=1）的菱形cy = paddingTop + halfCell/2
+    //   第二行（j-i=2）的菱形cy = paddingTop + halfCell*3/2
+    //   ...
+    //   cy = paddingTop + (j-i-1)*halfCell + halfCell/2 = paddingTop + (j-i-0.5)*halfCell
+    
+    for (var i = 0; i < nc; i++) {{
+        for (var j = i + 1; j < nc; j++) {{
+            var mi = colInfos[i].matIdx;
+            var mj = colInfos[j].matIdx;
+            var r2val = (mi >= 0 && mj >= 0 && matrix[mi] && matrix[mi][mj] !== undefined) 
+                        ? matrix[mi][mj] : 0;
+            
+            var cx = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+            var depth = (j - i);  // 第几行
+            var cy = paddingTop + (depth - 0.5) * halfCell;
+            
+            // 菱形半宽 = (j-i) * halfCell / 2，半高 = (j-i) * halfCell / 2 * tan(45°) 
+            // 等边菱形：对角长 = cellW * (j-i)，45°倒置
+            var hw = (j - i) * halfCell;  // 菱形左右对角到中心的距离
+            var hh = hw;  // 等边菱形上下对角到中心的距离
+            
+            ctx.beginPath();
+            ctx.moveTo(cx,      cy - hh);  // 上顶点
+            ctx.lineTo(cx + hw, cy);       // 右顶点
+            ctx.lineTo(cx,      cy + hh);  // 下顶点
+            ctx.lineTo(cx - hw, cy);       // 左顶点
+            ctx.closePath();
+            ctx.fillStyle = r2ToColor(r2val);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(180,180,180,0.4)';
+            ctx.lineWidth = 0.4;
+            ctx.stroke();
+            
+            // 如果r²较高且格子足够大，显示数字
+            if (hw >= 10 && r2val > 0.05) {{
+                var label = r2val >= 0.995 ? '1' : r2val.toFixed(2).replace('0.', '.');
+                ctx.fillStyle = r2val > 0.6 ? 'white' : '#333';
+                var fontSize = Math.min(hw * 0.5, 9);
+                if (fontSize >= 6) {{
+                    ctx.font = 'bold ' + fontSize + 'px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(label, cx, cy);
+                }}
+            }}
+        }}
+    }}
+    
+    // 底部轴标直线（与displayPositions对齐）
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 1;
+    for (var k = 0; k < colInfos.length; k++) {{
+        var tx = colInfos[k].canvasX;
+        ctx.beginPath();
+        ctx.moveTo(tx, paddingTop + (nc - 1) * halfCell);
+        ctx.lineTo(tx, paddingTop + (nc - 1) * halfCell + 4);
+        ctx.stroke();
+    }}
+    
+    // 鼠标悬停显示r²数字
+    canvas.onmousemove = function(e) {{
+        var rect = canvas.getBoundingClientRect();
+        // 将鼠标屏幕坐标转化为canvas内部坐标
+        var scaleX2 = canvas.width / (rect.width || canvas.width);
+        var scaleY2 = canvas.height / (rect.height || canvas.height);
+        var mx = (e.clientX - rect.left) * scaleX2;
+        var my = (e.clientY - rect.top) * scaleY2;
+        var info = '';
+        for (var i = 0; i < nc; i++) {{
+            for (var j = i + 1; j < nc; j++) {{
+                var cx2 = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+                var depth2 = j - i;
+                var cy2 = paddingTop + (depth2 - 0.5) * halfCell;
+                var hw2 = depth2 * halfCell;
+                var hh2 = hw2;
+                var dx = mx - cx2;
+                var dy = my - cy2;
+                if (Math.abs(dx) + Math.abs(dy) <= hw2) {{
+                    var mi2 = colInfos[i].matIdx;
+                    var mj2 = colInfos[j].matIdx;
+                    var r2v = (matrix[mi2] && matrix[mi2][mj2] !== undefined) ? matrix[mi2][mj2] : 0;
+                    var p1 = displayPositions[mi2] ? displayPositions[mi2].toLocaleString() : '?';
+                    var p2 = displayPositions[mj2] ? displayPositions[mj2].toLocaleString() : '?';
+                    info = 'r²(' + p1 + ', ' + p2 + ') = ' + r2v.toFixed(3);
+                    break;
+                }}
+            }}
+            if (info) break;
+        }}
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = info;
+    }};
+    canvas.onmouseleave = function() {{
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = '';
+    }};
+    
+    console.log('[LD] LD倒三角图绘制完成: ' + nc + '个列, 菱形数=' + nc*(nc-1)/2);
+}}
+
+// 过滤更新时重绘LD图
+var _origApplyFilters = applyFilters;
+applyFilters = function() {{
+    _origApplyFilters();
+    requestAnimationFrame(function() {{ drawLDTriangle(); }});
+}};
 </script>
 </body>
 </html>'''
@@ -6319,6 +6639,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__EXON_REGIONS__", _exon_json)
         html = html.replace("__GENE_LABEL__", _glabel)
         html = html.replace("__DISPLAY_POSITIONS__", _display_pos_json)
+        html = html.replace("__LD_R2_MATRIX__", ld_r2_json)
         
         # DEBUG: 检查exportSVG是否存在
         if 'exportSVG' in html:

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manhattan Plot - Region chr2H:3,379,055-3,382,918</title>
+    <title>Manhattan Plot - Region chr2H:3,376,055-3,382,918</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,7 +29,7 @@
 <div class="container">
     <div class="header">
         <h1>Manhattan Plot</h1>
-        <div class="header-info">Region: chr2H:3,379,055 - 3,382,918 | Variants: 3</div>
+        <div class="header-info">Region: chr2H:3,376,055 - 3,382,918 | Variants: 3</div>
     </div>
     
     <div class="plot-container">
@@ -63,7 +63,7 @@ const svg = d3.select('#manhattan')
 
 // 比例尺
 const xScale = d3.scaleLinear()
-    .domain([3379055, 3382918])
+    .domain([3376055, 3382918])
     .range([0, width]);
 
 const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp)) * 1.1 : 5;

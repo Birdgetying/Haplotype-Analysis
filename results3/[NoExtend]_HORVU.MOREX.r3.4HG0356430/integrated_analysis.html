@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Haplotype-Phenotype Association Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 15px; }
+        .container { margin: 0 auto; background: white; border-radius: 10px; 
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color: white; 
+                  padding: 18px 25px; border-radius: 10px 10px 0 0; }
+        .header h1 { font-size: 18px; margin-bottom: 5px; }
+        .header-info { display: flex; gap: 20px; font-size: 11px; opacity: 0.9; flex-wrap: wrap; }
+        
+        /* 过滤控制面板 */
+        .filter-panel { display: flex; align-items: center; gap: 20px; padding: 12px 20px; 
+                        background: #f8f9fa; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label { font-size: 12px; color: #555; font-weight: 500; }
+        .filter-group input[type="range"] { width: 100px; }
+        .filter-group select { padding: 4px 8px; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .filter-value { font-size: 11px; color: #3498db; min-width: 40px; }
+        .filter-btn { padding: 6px 14px; background: #3498db; color: white; border: none;
+                      border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .filter-btn:hover { background: #2980b9; }
+        .filter-reset { background: #95a5a6; }
+        .filter-reset:hover { background: #7f8c8d; }
+        
+        /* 缩放控制栏 */
+        .zoom-controls { display: flex; align-items: center; gap: 10px; padding: 10px 20px; 
+                         background: #f8f9fa; border-bottom: 1px solid #e8e8e8; }
+        .zoom-controls label { font-size: 12px; color: #555; }
+        .zoom-controls button { padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px;
+                                background: white; cursor: pointer; font-size: 14px; }
+        .zoom-controls button:hover { background: #e8e8e8; }
+        .zoom-controls input[type="range"] { width: 150px; }
+        .zoom-controls span { font-size: 12px; color: #333; min-width: 45px; }
+        
+        /* 可缩放内容区 */
+        .content-wrapper { overflow-x: visible; overflow-y: auto; max-height: calc(100vh - 200px); }
+        .content { padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }
+        
+        /* 表格滚动容器 */
+        .table-scroll-container { overflow-x: auto; overflow-y: visible; margin-top: 0; padding-bottom: 10px; min-width: 100%; }
+        
+        /* 整合布局 */
+        .integrated-view { display: flex; flex-direction: column; gap: 10px; }
+        .top-section { display: flex; gap: 15px; position: relative; height: 180px; }
+        .main-data-section { } /* 移除 fit-content，使用滚动容器 */
+        .network-panel { width: 350px; min-width: 350px; height: 280px; 
+                         border: 1px solid #e0e0e0; border-radius: 6px; 
+                         background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; }
+        .network-panel-title { position: absolute; top: 8px; left: 10px; 
+                               font-size: 12px; font-weight: 600; color: #2c3e50; 
+                               background: rgba(255,255,255,0.9); padding: 2px 6px; 
+                               border-radius: 3px; z-index: 10; }
+        .gene-gwas-panel { flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
+                           border-radius: 6px; background: #fafafa; position: relative; }
+        .gene-gwas-title { position: absolute; top: 8px; left: 10px; 
+                           font-size: 12px; font-weight: 600; color: #2c3e50; 
+                           background: rgba(255,255,255,0.9); padding: 2px 6px; 
+                           border-radius: 3px; z-index: 10; }
+        .footer { background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
+                  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+                  border-radius: 0 0 10px 10px; }
+        .base-legend { display: flex; gap: 12px; }
+        .base-legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+        .base-box { width: 18px; height: 18px; border-radius: 3px; display: flex;
+                    align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 11px; }
+        /* 表格样式 */
+        .data-table { border-collapse: collapse; margin-top: 0; table-layout: fixed; }
+        .data-table th { background: #34495e; color: white; padding: 0; font-size: 10px; font-weight: 500; vertical-align: top; }
+        .data-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid #eee; overflow: hidden; }
+        .data-table tr:hover { background: #f8f9fa; }
+        .data-table tr.ref-row { background: #fffbeb; }
+        .hap-cell { width: 90px; min-width: 90px; max-width: 90px; text-align: left !important; padding-left: 10px !important; font-weight: 600; font-size: 12px; }
+        .ref-tag { background: #e74c3c; color: white; font-size: 8px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }
+        .base { font-family: Consolas, monospace; font-weight: 700; font-size: 13px; }
+        .effect-cell { width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }
+        .box-cell { width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }
+        .bar-container { position: relative; height: 20px; background: #f8f9fa; border-radius: 3px; overflow: hidden; }
+        .bar-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #333; border-left: 1px dashed #333; }
+        /* 森林图样式 */
+        .forest-ci { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); }
+        .forest-point { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; border-radius: 50%; }
+        /* 箱线图样式 */
+        .bar-whisker { position: absolute; top: 50%; height: 2px; background: #7f8c8d; transform: translateY(-50%); }
+        .bar-box { position: absolute; top: 3px; height: 14px; border-radius: 2px; border: 2px solid #3498db; background: rgba(52,152,219,0.2); }
+        .bar-median { position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }
+        .data-dot { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }
+        .n-cell { width: auto !important; min-width: 60px !important; overflow: visible !important; font-size: 11px; color: #666; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Haplotype-Phenotype Association Analysis - HORVU.MOREX.r3.4HG0356430</h1>
+        <div class="header-info">
+            <span>Region: chr4H:146,944,089-146,949,975</span>
+            <span>Length: 5.9 kb</span>
+            <span>Variants: 18</span>
+            <span>Haplotypes: 8</span>
+            <span>Samples: 641</span>
+            <span>Grand Mean: 54.654</span>
+        </div>
+    </div>
+    
+    <!-- 过滤控制面板 -->
+    <div class="filter-panel">
+        <div class="filter-group">
+            <label>MAF ≥</label>
+            <input type="range" id="mafSlider" min="0" max="0.5" step="0.01" value="0.05" oninput="updateFilterDisplay('maf', this.value); applyFilters()">
+            <span class="filter-value" id="mafValue">0.05</span>
+        </div>
+        <div class="filter-group">
+            <label>Missing Rate ≤</label>
+            <input type="range" id="missingSlider" min="0" max="1" step="0.05" value="0.2" oninput="updateFilterDisplay('missing', this.value); applyFilters()">
+            <span class="filter-value" id="missingValue">0.2</span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">Annotation:</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="ann-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
+                <label><input type="checkbox" class="ann-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
+                <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
+                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
+                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
+            </span>
+        </div>
+        <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
+        <button class="filter-btn" onclick="applyFilters()">Apply Filter</button>
+    </div>
+    
+    <div class="zoom-controls">
+        <label>Zoom:</label>
+        <button onclick="zoomOut()">-</button>
+        <input type="range" id="zoomSlider" min="20" max="150" value="100" oninput="setZoom(this.value)">
+        <button onclick="zoomIn()">+</button>
+        <span id="zoomLevel">100%</span>
+        <button onclick="resetZoom()" style="margin-left:10px;">Reset</button>
+        <button onclick="fitToWindow()" style="margin-left:5px;">Fit</button>
+        <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
+        <label>Sort:</label>
+        <button id="sortBtn" onclick="toggleSort()" style="min-width:80px;">By Cluster</button>
+        <span style="margin-left:20px;border-left:1px solid #ddd;padding-left:15px;"></span>
+        <label>Export:</label>
+        <button onclick="exportSVG()">SVG</button>
+        <button onclick="window.print()">Print</button>
+    </div>
+    
+    <div class="content-wrapper">
+    <div class="content" id="zoomContent">
+        <div class="integrated-view">
+            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
+            <div class="top-section">
+                <div class="network-panel">
+                    <div class="network-panel-title">Haplotype Network</div>
+                    <div id="network-viz" style="width:100%;height:100%;"></div>
+                </div>
+                <div class="gene-gwas-panel">
+                    <div class="gene-gwas-title">GWAS P-values</div>
+                    <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
+                </div>
+            </div>
+            
+            <!-- 下方区域：原有的效应图、箱线图、单倍型序列 -->
+            <div class="main-data-section">
+<svg id="gene-structure-svg" width="1030" height="200" style="display:block;margin-bottom:0;overflow:visible;">
+<defs>
+            <pattern id="utrPattern" patternUnits="userSpaceOnUse" width="6" height="6">
+                <line x1="0" y1="6" x2="6" y2="0" stroke="#9b59b6" stroke-width="1" opacity="0.5"/>
+            </pattern>
+        </defs>
+<text x="630.0" y="13" font-size="11" fill="#2c3e50" text-anchor="middle" font-weight="600">Relative Position (kb)</text>
+<text x="630.0" y="8" font-size="10" fill="#3498db" text-anchor="middle" font-weight="500">HORVU.MOREX.r3.4HG0356430</text>
+<line x1="450" y1="28" x2="810" y2="28" stroke="#333" stroke-width="1.2"/>
+<line x1="810.0" y1="18" x2="810.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="810.0" y1="26" x2="810.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="810.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.0</text>
+<line x1="765.0" y1="18" x2="765.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="765.0" y1="26" x2="765.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="765.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.7</text>
+<line x1="720.0" y1="18" x2="720.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="720.0" y1="26" x2="720.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="720.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">1.5</text>
+<line x1="675.0" y1="18" x2="675.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="675.0" y1="26" x2="675.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="675.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">2.2</text>
+<line x1="630.0" y1="18" x2="630.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="630.0" y1="26" x2="630.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="630.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">2.9</text>
+<line x1="585.0" y1="18" x2="585.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="585.0" y1="26" x2="585.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="585.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">3.7</text>
+<line x1="540.0" y1="18" x2="540.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="540.0" y1="26" x2="540.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="540.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">4.4</text>
+<line x1="495.0" y1="18" x2="495.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="495.0" y1="26" x2="495.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="495.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">5.2</text>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">5.9</text>
+<line x1="450.0" y1="57" x2="810.0" y2="57" stroke="#2c3e50" stroke-width="2"/>
+<rect x="504.2507645259939" y="48" width="122.26299694189606" height="18" fill="#f39c12" opacity="0.4" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="3,2" rx="2"/>
+<text x="565.3822629969419" y="60.0" font-size="7" fill="#d35400" text-anchor="middle" font-weight="600">Promoter</text>
+<rect x="456.8501529051988" y="48" width="6.2996941896024055" height="18" fill="white" stroke="#3498db" stroke-width="1" rx="1"/>
+<rect x="456.8501529051988" y="48" width="6.2996941896024055" height="18" fill="#3498db" rx="1"/>
+<rect x="470.24464831804283" y="48" width="22.81345565749234" height="18" fill="white" stroke="#3498db" stroke-width="1" rx="1"/>
+<rect x="470.24464831804283" y="48" width="22.81345565749234" height="18" fill="#3498db" rx="1"/>
+<rect x="499.7859327217125" y="48" width="4.403669724770623" height="18" fill="white" stroke="#3498db" stroke-width="1" rx="1"/>
+<rect x="499.7859327217125" y="48" width="4.403669724770623" height="18" fill="#3498db" rx="1"/>
+<line x1="450.0" y1="57" x2="442.0" y2="57" stroke="#2c3e50" stroke-width="2"/>
+<polygon points="432.0,57 442.0,52 442.0,62" fill="#2c3e50"/>
+<line class="var-up-line" data-pos="146944140" data-maf="0.20743034055727555" data-missing="0.0" data-ann="other" x1="453.1192660550459" y1="17" x2="453.1192660550459" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146944140" data-maf="0.20743034055727555" data-missing="0.0" data-ann="other" x1="453.1192660550459" y1="23" x2="453.1192660550459" y2="66" stroke="#95a5a6" stroke-width="1.2" data-idx="0"/>
+<circle class="var-circle" data-pos="146944140" data-maf="0.20743034055727555" data-missing="0.0" data-ann="other" cx="453.1192660550459" cy="20" r="3" fill="#95a5a6" stroke="white" stroke-width="0.5" data-idx="0"/>
+<line class="var-connector js-connector" data-pos="146944140" data-maf="0.20743034055727555" data-missing="0.0" data-ann="other" data-idx="0" data-gene-x="453.1192660550459" data-table-x="460.0" data-gene-y="66" stroke="#95a5a6" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146944409" data-maf="0.0913312693498452" data-missing="0.0" data-ann="other" x1="469.57186544342505" y1="17" x2="469.57186544342505" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146944409" data-maf="0.0913312693498452" data-missing="0.0" data-ann="other" x1="469.57186544342505" y1="23" x2="469.57186544342505" y2="66" stroke="#95a5a6" stroke-width="1.2" data-idx="1"/>
+<circle class="var-circle" data-pos="146944409" data-maf="0.0913312693498452" data-missing="0.0" data-ann="other" cx="469.57186544342505" cy="20" r="3" fill="#95a5a6" stroke="white" stroke-width="0.5" data-idx="1"/>
+<line class="var-connector js-connector" data-pos="146944409" data-maf="0.0913312693498452" data-missing="0.0" data-ann="other" data-idx="1" data-gene-x="469.57186544342505" data-table-x="480.0" data-gene-y="66" stroke="#95a5a6" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945201" data-maf="0.08513931888544891" data-missing="0.0" data-ann="promoter" x1="518.0122324159022" y1="17" x2="518.0122324159022" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945201" data-maf="0.08513931888544891" data-missing="0.0" data-ann="promoter" x1="518.0122324159022" y1="23" x2="518.0122324159022" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="2"/>
+<circle class="var-circle" data-pos="146945201" data-maf="0.08513931888544891" data-missing="0.0" data-ann="promoter" cx="518.0122324159022" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="2"/>
+<line class="var-connector js-connector" data-pos="146945201" data-maf="0.08513931888544891" data-missing="0.0" data-ann="promoter" data-idx="2" data-gene-x="518.0122324159022" data-table-x="500.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945333" data-maf="0.10681114551083591" data-missing="0.0" data-ann="promoter" x1="526.085626911315" y1="17" x2="526.085626911315" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945333" data-maf="0.10681114551083591" data-missing="0.0" data-ann="promoter" x1="526.085626911315" y1="23" x2="526.085626911315" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="3"/>
+<circle class="var-circle" data-pos="146945333" data-maf="0.10681114551083591" data-missing="0.0" data-ann="promoter" cx="526.085626911315" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="3"/>
+<line class="var-connector js-connector" data-pos="146945333" data-maf="0.10681114551083591" data-missing="0.0" data-ann="promoter" data-idx="3" data-gene-x="526.085626911315" data-table-x="520.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945363" data-maf="0.35139318885448917" data-missing="0.0" data-ann="promoter" x1="527.9204892966361" y1="17" x2="527.9204892966361" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945363" data-maf="0.35139318885448917" data-missing="0.0" data-ann="promoter" x1="527.9204892966361" y1="23" x2="527.9204892966361" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="4"/>
+<circle class="var-circle" data-pos="146945363" data-maf="0.35139318885448917" data-missing="0.0" data-ann="promoter" cx="527.9204892966361" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="4"/>
+<line class="var-connector js-connector" data-pos="146945363" data-maf="0.35139318885448917" data-missing="0.0" data-ann="promoter" data-idx="4" data-gene-x="527.9204892966361" data-table-x="540.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945422" data-maf="0.4891640866873065" data-missing="0.0" data-ann="promoter" x1="531.5290519877676" y1="17" x2="531.5290519877676" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945422" data-maf="0.4891640866873065" data-missing="0.0" data-ann="promoter" x1="531.5290519877676" y1="23" x2="531.5290519877676" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="5"/>
+<circle class="var-circle" data-pos="146945422" data-maf="0.4891640866873065" data-missing="0.0" data-ann="promoter" cx="531.5290519877676" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="5"/>
+<line class="var-connector js-connector" data-pos="146945422" data-maf="0.4891640866873065" data-missing="0.0" data-ann="promoter" data-idx="5" data-gene-x="531.5290519877676" data-table-x="560.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945706" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" x1="548.8990825688073" y1="17" x2="548.8990825688073" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945706" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" x1="548.8990825688073" y1="23" x2="548.8990825688073" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="6"/>
+<circle class="var-circle" data-pos="146945706" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" cx="548.8990825688073" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="6"/>
+<line class="var-connector js-connector" data-pos="146945706" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" data-idx="6" data-gene-x="548.8990825688073" data-table-x="580.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945724" data-maf="0.35294117647058826" data-missing="0.0" data-ann="promoter" x1="550.0" y1="17" x2="550.0" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945724" data-maf="0.35294117647058826" data-missing="0.0" data-ann="promoter" x1="550.0" y1="23" x2="550.0" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="7"/>
+<circle class="var-circle" data-pos="146945724" data-maf="0.35294117647058826" data-missing="0.0" data-ann="promoter" cx="550.0" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="7"/>
+<line class="var-connector js-connector" data-pos="146945724" data-maf="0.35294117647058826" data-missing="0.0" data-ann="promoter" data-idx="7" data-gene-x="550.0" data-table-x="600.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945745" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" x1="551.2844036697247" y1="17" x2="551.2844036697247" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945745" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" x1="551.2844036697247" y1="23" x2="551.2844036697247" y2="66" stroke="#2ecc71" stroke-width="2.0" data-idx="8"/>
+<circle class="var-circle" data-pos="146945745" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" cx="551.2844036697247" cy="20" r="5" fill="#2ecc71" stroke="#c0392b" stroke-width="2" data-idx="8"/>
+<text x="551.2844036697247" y="21" font-size="6" fill="white" text-anchor="middle" dominant-baseline="middle" font-weight="bold">★</text>
+<line class="var-connector js-connector" data-pos="146945745" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" data-idx="8" data-gene-x="551.2844036697247" data-table-x="620.0" data-gene-y="66" stroke="#2ecc71" stroke-width="1.5" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945826" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" x1="556.2385321100918" y1="17" x2="556.2385321100918" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945826" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" x1="556.2385321100918" y1="23" x2="556.2385321100918" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="9"/>
+<circle class="var-circle" data-pos="146945826" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" cx="556.2385321100918" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="9"/>
+<line class="var-connector js-connector" data-pos="146945826" data-maf="0.20743034055727555" data-missing="0.0" data-ann="promoter" data-idx="9" data-gene-x="556.2385321100918" data-table-x="640.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945860" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" x1="558.3180428134557" y1="17" x2="558.3180428134557" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945860" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" x1="558.3180428134557" y1="23" x2="558.3180428134557" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="10"/>
+<circle class="var-circle" data-pos="146945860" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" cx="558.3180428134557" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="10"/>
+<line class="var-connector js-connector" data-pos="146945860" data-maf="0.06346749226006192" data-missing="0.0" data-ann="promoter" data-idx="10" data-gene-x="558.3180428134557" data-table-x="660.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945881" data-maf="0.0913312693498452" data-missing="0.0" data-ann="DEL" x1="559.6024464831804" y1="17" x2="559.6024464831804" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945881" data-maf="0.0913312693498452" data-missing="0.0" data-ann="DEL" x1="559.6024464831804" y1="23" x2="559.6024464831804" y2="66" stroke="#3498db" stroke-width="1.2" data-idx="11"/>
+<circle class="var-circle" data-pos="146945881" data-maf="0.0913312693498452" data-missing="0.0" data-ann="DEL" cx="559.6024464831804" cy="20" r="3" fill="#3498db" stroke="white" stroke-width="0.5" data-idx="11"/>
+<line class="var-connector js-connector" data-pos="146945881" data-maf="0.0913312693498452" data-missing="0.0" data-ann="DEL" data-idx="11" data-gene-x="559.6024464831804" data-table-x="680.0" data-gene-y="66" stroke="#3498db" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945927" data-maf="0.10835913312693499" data-missing="0.0" data-ann="promoter" x1="562.4159021406728" y1="17" x2="562.4159021406728" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945927" data-maf="0.10835913312693499" data-missing="0.0" data-ann="promoter" x1="562.4159021406728" y1="23" x2="562.4159021406728" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="12"/>
+<circle class="var-circle" data-pos="146945927" data-maf="0.10835913312693499" data-missing="0.0" data-ann="promoter" cx="562.4159021406728" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="12"/>
+<line class="var-connector js-connector" data-pos="146945927" data-maf="0.10835913312693499" data-missing="0.0" data-ann="promoter" data-idx="12" data-gene-x="562.4159021406728" data-table-x="700.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146945978" data-maf="0.3544891640866873" data-missing="0.0" data-ann="promoter" x1="565.5351681957186" y1="17" x2="565.5351681957186" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146945978" data-maf="0.3544891640866873" data-missing="0.0" data-ann="promoter" x1="565.5351681957186" y1="23" x2="565.5351681957186" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="13"/>
+<circle class="var-circle" data-pos="146945978" data-maf="0.3544891640866873" data-missing="0.0" data-ann="promoter" cx="565.5351681957186" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="13"/>
+<line class="var-connector js-connector" data-pos="146945978" data-maf="0.3544891640866873" data-missing="0.0" data-ann="promoter" data-idx="13" data-gene-x="565.5351681957186" data-table-x="720.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146946322" data-maf="0.47832817337461303" data-missing="0.0" data-ann="promoter" x1="586.5749235474007" y1="17" x2="586.5749235474007" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146946322" data-maf="0.47832817337461303" data-missing="0.0" data-ann="promoter" x1="586.5749235474007" y1="23" x2="586.5749235474007" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="14"/>
+<circle class="var-circle" data-pos="146946322" data-maf="0.47832817337461303" data-missing="0.0" data-ann="promoter" cx="586.5749235474007" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="14"/>
+<line class="var-connector js-connector" data-pos="146946322" data-maf="0.47832817337461303" data-missing="0.0" data-ann="promoter" data-idx="14" data-gene-x="586.5749235474007" data-table-x="740.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146946351" data-maf="0.034055727554179564" data-missing="0.0" data-ann="DEL" x1="588.3486238532109" y1="17" x2="588.3486238532109" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146946351" data-maf="0.034055727554179564" data-missing="0.0" data-ann="DEL" x1="588.3486238532109" y1="23" x2="588.3486238532109" y2="66" stroke="#3498db" stroke-width="1.2" data-idx="15"/>
+<circle class="var-circle" data-pos="146946351" data-maf="0.034055727554179564" data-missing="0.0" data-ann="DEL" cx="588.3486238532109" cy="20" r="3" fill="#3498db" stroke="white" stroke-width="0.5" data-idx="15"/>
+<line class="var-connector js-connector" data-pos="146946351" data-maf="0.034055727554179564" data-missing="0.0" data-ann="DEL" data-idx="15" data-gene-x="588.3486238532109" data-table-x="760.0" data-gene-y="66" stroke="#3498db" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146946757" data-maf="0.43188854489164086" data-missing="0.0" data-ann="promoter" x1="613.1804281345566" y1="17" x2="613.1804281345566" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146946757" data-maf="0.43188854489164086" data-missing="0.0" data-ann="promoter" x1="613.1804281345566" y1="23" x2="613.1804281345566" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="16"/>
+<circle class="var-circle" data-pos="146946757" data-maf="0.43188854489164086" data-missing="0.0" data-ann="promoter" cx="613.1804281345566" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="16"/>
+<line class="var-connector js-connector" data-pos="146946757" data-maf="0.43188854489164086" data-missing="0.0" data-ann="promoter" data-idx="16" data-gene-x="613.1804281345566" data-table-x="780.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<line class="var-up-line" data-pos="146946959" data-maf="0.0913312693498452" data-missing="0.0" data-ann="promoter" x1="625.5351681957186" y1="17" x2="625.5351681957186" y2="-180" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>
+<line class="var-line" data-pos="146946959" data-maf="0.0913312693498452" data-missing="0.0" data-ann="promoter" x1="625.5351681957186" y1="23" x2="625.5351681957186" y2="66" stroke="#2ecc71" stroke-width="1.2" data-idx="17"/>
+<circle class="var-circle" data-pos="146946959" data-maf="0.0913312693498452" data-missing="0.0" data-ann="promoter" cx="625.5351681957186" cy="20" r="3" fill="#2ecc71" stroke="white" stroke-width="0.5" data-idx="17"/>
+<line class="var-connector js-connector" data-pos="146946959" data-maf="0.0913312693498452" data-missing="0.0" data-ann="promoter" data-idx="17" data-gene-x="625.5351681957186" data-table-x="800.0" data-gene-y="66" stroke="#2ecc71" stroke-width="0.8" stroke-dasharray="4,2" style="display:none;"/>
+<text x="820" y="28" font-size="8.5" fill="#333" font-weight="600">Gene Structure</text>
+<rect x="820" y="38" width="12" height="8" fill="#f39c12" opacity="0.35" stroke="#e67e22" stroke-width="1" stroke-dasharray="2,1" rx="1"/>
+<text x="836" y="45" font-size="7" fill="#333">Promoter</text>
+<line x1="820" y1="54" x2="832" y2="54" stroke="#2c3e50" stroke-width="2"/>
+<text x="836" y="57" font-size="7" fill="#333">Intron</text>
+<rect x="820" y="62" width="12" height="8" fill="white" stroke="#3498db" stroke-width="1.5" rx="1"/>
+<text x="836" y="69" font-size="7" fill="#333">5'/3' UTR</text>
+<rect x="820" y="74" width="12" height="8" fill="#3498db" rx="1"/>
+<text x="836" y="81" font-size="7" fill="#333">CDS</text>
+<text x="895" y="28" font-size="8.5" fill="#333" font-weight="600">Variant Type</text>
+<circle cx="901" cy="42" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"/>
+<text x="908" y="45" font-size="7" fill="#333">Promoter</text>
+<circle cx="901" cy="54" r="3.5" fill="#3498db" stroke="white" stroke-width="0.5"/>
+<text x="908" y="57" font-size="7" fill="#333">Deletion</text>
+<circle cx="901" cy="66" r="3.5" fill="#95a5a6" stroke="white" stroke-width="0.5"/>
+<text x="908" y="69" font-size="7" fill="#333">Other</text>
+</svg>
+<div class="table-scroll-container" style="min-width:870px;">
+<table class="data-table" style="width:auto;">
+<colgroup>
+<col style="width:90px;min-width:90px;max-width:90px;">
+<col style="width:180px;min-width:180px;max-width:180px;">
+<col style="width:180px;min-width:180px;max-width:180px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:20px;min-width:20px;max-width:20px;">
+<col style="width:auto;min-width:60px;">
+</colgroup>
+<thead><tr style="height:45px;">
+    <th style="text-align:left;padding-left:10px;vertical-align:middle;cursor:pointer;" title="点击复制所有样本" onclick="copyAllHaplotypes()">Haplotype</th>
+    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>
+    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,944,140</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,944,409</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,201</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,333</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,363</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,422</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,706</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,724</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,745</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,826</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,860</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,881</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,927</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,945,978</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,946,322</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,946,351</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,946,757</div></th>
+<th style="width:20px;min-width:20px;max-width:20px;padding:0;vertical-align:top;overflow:hidden;"><div style="writing-mode:vertical-rl;transform:rotate(180deg);width:20px;height:60px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#f5f5f5;background:#2c3e50;font-weight:600;letter-spacing:0;box-sizing:border-box;">146,946,959</div></th>
+<th style="min-width:60px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>
+<tr class="ref-row" data-hap="Hap1">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap1', 'M108A,M111A,M144A,M145A,M155A,M159A,M180A,M190A,M191A,M192A,M194A,M195A,M196A,M197A,M198A,M1A,M200A,M201A,M203A,M204A,M205A,M206A,M207A,M208A,M209A,M210A,M211A,M212A,M213A,M214A,M216A,M218A,M21A,M221A,M222A,M223A,M224A,M225A,M226A,M227A,M228A,M229A,M230A,M231A,M232A,M234A,M236A,M237A,M238A,M240A,M241A,M243A,M244A,M245A,M246A,M247A,M248A,M249A,M250A,M252A,M253A,M254A,M255A,M257A,M258A,M259A,M260A,M261A,M262A,M263A,M264A,M267A,M268A,M269A,M26A,M270A,M272A,M273A,M274A,M275A,M276A,M277A,M278A,M279A,M283A,M285A,M286A,M287A,M288A,M291A,M292A,M293A,M297A,M298A,M299A,M2A,M300A,M302A,M306A,M307A,M308A,M309A,M310A,M311A,M312A,M313A,M315A,M316A,M317A,M318A,M319A,M320A,M323A,M327A,M328A,M329A,M330A,M331A,M332A,M333A,M335A,M337A,M338A,M339A,M340A,M342A,M343A,M344A,M345A,M346A,M347A,M348A,M349A,M350A,M351A,M352A,M354A,M357A,M358A,M360A,M361A,M362A,M363A,M365A,M366A,M367A,M368A,M369A,M370A,M371A,M372A,M373A,M374A,M376A,M377A,M379A,M37A,M380A,M386A,M387A,M391A,M393A,M394A,M395A,M400A,M402A,M404A,M405A,M406A,M408A,M409A,M40A,M410A,M411A,M413A,M414A,M415A,M416A,M417A,M419A,M420A,M421A,M422A,M423A,M424A,M425A,M426A,M427A,M428A,M429A,M430A,M431A,M432A,M433A,M436A,M437A,M438A,M439A,M440A,M441A,M442A,M444A,M445A,M46A,M485A,M486A,M487A,M488A,M489A,M490A,M491A,M492A,M493A,M495A,M498A,M499A,M500A,M501A,M502A,M503A,M504A,M505A,M506A,M507A,M508A,M510A,M511A,M512A,M513A,M514A,M515A,M516A,M517A,M518A,M519A,M520A,M521A,M523A,M5A,M68A,M69A,M6A,M99A,M9A,WB1032,WB1047,WB1048,WB1050,WB1055,WB1058,WB1063,WB1064,WB1087,WB1126,WB1138')">Hap1<span class="ref-tag">Ref</span></td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:43.86440522442596%;width:12.271189551148083%;background:#95a5a6;"></div>
+            <div class="forest-point" style="left:50.0%;background:#95a5a6;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:4.256349985031271%;width:95.74365001496872%;"></div>
+                    <div class="bar-box" style="left:32.54510841131813%;width:22.693444066193607%;"></div>
+                    <div class="bar-median" style="left:43.285680790078885%;"></div>
+                    <div class="data-dot" style="left:26.0%;top:24%;"></div><div class="data-dot" style="left:32.2%;top:75%;"></div><div class="data-dot" style="left:20.5%;top:23%;"></div><div class="data-dot" style="left:25.1%;top:72%;"></div><div class="data-dot" style="left:44.4%;top:27%;"></div><div class="data-dot" style="left:43.3%;top:22%;"></div><div class="data-dot" style="left:43.5%;top:83%;"></div><div class="data-dot" style="left:13.6%;top:38%;"></div><div class="data-dot" style="left:8.3%;top:48%;"></div><div class="data-dot" style="left:11.0%;top:35%;"></div><div class="data-dot" style="left:5.4%;top:55%;"></div><div class="data-dot" style="left:45.3%;top:43%;"></div><div class="data-dot" style="left:11.2%;top:30%;"></div><div class="data-dot" style="left:30.7%;top:70%;"></div><div class="data-dot" style="left:59.3%;top:62%;"></div><div class="data-dot" style="left:67.3%;top:82%;"></div><div class="data-dot" style="left:42.4%;top:40%;"></div><div class="data-dot" style="left:52.1%;top:28%;"></div><div class="data-dot" style="left:39.3%;top:83%;"></div><div class="data-dot" style="left:36.4%;top:71%;"></div><div class="data-dot" style="left:36.5%;top:38%;"></div><div class="data-dot" style="left:44.1%;top:33%;"></div><div class="data-dot" style="left:28.3%;top:49%;"></div><div class="data-dot" style="left:23.0%;top:57%;"></div><div class="data-dot" style="left:23.0%;top:33%;"></div><div class="data-dot" style="left:18.0%;top:66%;"></div><div class="data-dot" style="left:19.2%;top:72%;"></div><div class="data-dot" style="left:23.7%;top:51%;"></div><div class="data-dot" style="left:33.7%;top:22%;"></div><div class="data-dot" style="left:21.4%;top:82%;"></div><div class="data-dot" style="left:16.7%;top:47%;"></div><div class="data-dot" style="left:21.6%;top:43%;"></div><div class="data-dot" style="left:51.5%;top:57%;"></div><div class="data-dot" style="left:60.4%;top:16%;"></div><div class="data-dot" style="left:47.6%;top:19%;"></div><div class="data-dot" style="left:58.2%;top:53%;"></div><div class="data-dot" style="left:51.9%;top:80%;"></div><div class="data-dot" style="left:37.8%;top:57%;"></div><div class="data-dot" style="left:55.4%;top:54%;"></div><div class="data-dot" style="left:52.2%;top:82%;"></div><div class="data-dot" style="left:56.1%;top:25%;"></div><div class="data-dot" style="left:68.4%;top:56%;"></div><div class="data-dot" style="left:65.7%;top:62%;"></div><div class="data-dot" style="left:73.2%;top:83%;"></div><div class="data-dot" style="left:73.4%;top:41%;"></div><div class="data-dot" style="left:67.4%;top:22%;"></div><div class="data-dot" style="left:61.0%;top:73%;"></div><div class="data-dot" style="left:59.4%;top:18%;"></div><div class="data-dot" style="left:47.6%;top:33%;"></div><div class="data-dot" style="left:38.5%;top:46%;"></div><div class="data-dot" style="left:43.9%;top:51%;"></div><div class="data-dot" style="left:38.8%;top:23%;"></div><div class="data-dot" style="left:37.7%;top:81%;"></div><div class="data-dot" style="left:59.5%;top:41%;"></div><div class="data-dot" style="left:19.9%;top:43%;"></div><div class="data-dot" style="left:35.5%;top:79%;"></div><div class="data-dot" style="left:24.4%;top:57%;"></div><div class="data-dot" style="left:25.0%;top:76%;"></div><div class="data-dot" style="left:18.1%;top:25%;"></div><div class="data-dot" style="left:17.1%;top:16%;"></div><div class="data-dot" style="left:18.3%;top:15%;"></div><div class="data-dot" style="left:35.8%;top:64%;"></div><div class="data-dot" style="left:29.4%;top:77%;"></div><div class="data-dot" style="left:36.2%;top:20%;"></div><div class="data-dot" style="left:38.2%;top:45%;"></div><div class="data-dot" style="left:37.4%;top:44%;"></div><div class="data-dot" style="left:42.8%;top:54%;"></div><div class="data-dot" style="left:42.7%;top:43%;"></div><div class="data-dot" style="left:35.6%;top:72%;"></div><div class="data-dot" style="left:31.0%;top:53%;"></div><div class="data-dot" style="left:45.0%;top:68%;"></div><div class="data-dot" style="left:40.4%;top:65%;"></div><div class="data-dot" style="left:19.4%;top:56%;"></div><div class="data-dot" style="left:41.4%;top:70%;"></div><div class="data-dot" style="left:29.2%;top:49%;"></div><div class="data-dot" style="left:28.1%;top:62%;"></div><div class="data-dot" style="left:31.7%;top:42%;"></div><div class="data-dot" style="left:45.2%;top:77%;"></div><div class="data-dot" style="left:32.5%;top:37%;"></div><div class="data-dot" style="left:24.1%;top:35%;"></div><div class="data-dot" style="left:37.4%;top:77%;"></div><div class="data-dot" style="left:37.3%;top:58%;"></div><div class="data-dot" style="left:28.2%;top:35%;"></div><div class="data-dot" style="left:29.7%;top:68%;"></div><div class="data-dot" style="left:42.9%;top:78%;"></div><div class="data-dot" style="left:57.0%;top:85%;"></div><div class="data-dot" style="left:80.6%;top:65%;"></div><div class="data-dot" style="left:65.8%;top:39%;"></div><div class="data-dot" style="left:42.1%;top:34%;"></div><div class="data-dot" style="left:63.5%;top:15%;"></div><div class="data-dot" style="left:47.8%;top:70%;"></div><div class="data-dot" style="left:70.4%;top:52%;"></div><div class="data-dot" style="left:59.7%;top:18%;"></div><div class="data-dot" style="left:54.4%;top:81%;"></div><div class="data-dot" style="left:42.5%;top:63%;"></div><div class="data-dot" style="left:49.5%;top:17%;"></div><div class="data-dot" style="left:72.1%;top:77%;"></div><div class="data-dot" style="left:22.6%;top:63%;"></div><div class="data-dot" style="left:37.0%;top:25%;"></div><div class="data-dot" style="left:48.7%;top:44%;"></div><div class="data-dot" style="left:56.0%;top:59%;"></div><div class="data-dot" style="left:43.6%;top:28%;"></div><div class="data-dot" style="left:53.2%;top:47%;"></div><div class="data-dot" style="left:63.0%;top:26%;"></div><div class="data-dot" style="left:27.5%;top:50%;"></div><div class="data-dot" style="left:58.7%;top:68%;"></div><div class="data-dot" style="left:59.2%;top:44%;"></div><div class="data-dot" style="left:57.0%;top:71%;"></div><div class="data-dot" style="left:70.4%;top:32%;"></div><div class="data-dot" style="left:60.3%;top:46%;"></div><div class="data-dot" style="left:64.2%;top:81%;"></div><div class="data-dot" style="left:54.8%;top:19%;"></div><div class="data-dot" style="left:55.3%;top:29%;"></div><div class="data-dot" style="left:37.2%;top:24%;"></div><div class="data-dot" style="left:30.5%;top:31%;"></div><div class="data-dot" style="left:51.4%;top:78%;"></div><div class="data-dot" style="left:33.4%;top:64%;"></div><div class="data-dot" style="left:37.0%;top:73%;"></div><div class="data-dot" style="left:41.8%;top:62%;"></div><div class="data-dot" style="left:55.3%;top:17%;"></div><div class="data-dot" style="left:40.9%;top:62%;"></div><div class="data-dot" style="left:46.7%;top:84%;"></div><div class="data-dot" style="left:54.3%;top:61%;"></div><div class="data-dot" style="left:37.3%;top:85%;"></div><div class="data-dot" style="left:71.7%;top:43%;"></div><div class="data-dot" style="left:68.5%;top:27%;"></div><div class="data-dot" style="left:54.1%;top:73%;"></div><div class="data-dot" style="left:60.2%;top:16%;"></div><div class="data-dot" style="left:50.1%;top:19%;"></div><div class="data-dot" style="left:50.3%;top:78%;"></div><div class="data-dot" style="left:45.3%;top:61%;"></div><div class="data-dot" style="left:54.1%;top:25%;"></div><div class="data-dot" style="left:46.5%;top:74%;"></div><div class="data-dot" style="left:39.8%;top:32%;"></div><div class="data-dot" style="left:52.3%;top:69%;"></div><div class="data-dot" style="left:43.2%;top:34%;"></div><div class="data-dot" style="left:43.3%;top:24%;"></div><div class="data-dot" style="left:61.5%;top:60%;"></div><div class="data-dot" style="left:62.7%;top:36%;"></div><div class="data-dot" style="left:59.2%;top:62%;"></div><div class="data-dot" style="left:46.0%;top:20%;"></div><div class="data-dot" style="left:61.6%;top:43%;"></div><div class="data-dot" style="left:55.3%;top:29%;"></div><div class="data-dot" style="left:57.1%;top:24%;"></div><div class="data-dot" style="left:55.8%;top:15%;"></div><div class="data-dot" style="left:53.4%;top:67%;"></div><div class="data-dot" style="left:53.6%;top:25%;"></div><div class="data-dot" style="left:62.8%;top:39%;"></div><div class="data-dot" style="left:50.9%;top:30%;"></div><div class="data-dot" style="left:72.0%;top:62%;"></div><div class="data-dot" style="left:51.3%;top:66%;"></div><div class="data-dot" style="left:73.3%;top:36%;"></div><div class="data-dot" style="left:28.2%;top:85%;"></div><div class="data-dot" style="left:59.1%;top:67%;"></div><div class="data-dot" style="left:71.0%;top:26%;"></div><div class="data-dot" style="left:100.0%;top:28%;"></div><div class="data-dot" style="left:26.9%;top:67%;"></div><div class="data-dot" style="left:73.3%;top:67%;"></div><div class="data-dot" style="left:54.4%;top:41%;"></div><div class="data-dot" style="left:39.0%;top:16%;"></div><div class="data-dot" style="left:35.9%;top:69%;"></div><div class="data-dot" style="left:44.2%;top:15%;"></div><div class="data-dot" style="left:46.1%;top:73%;"></div><div class="data-dot" style="left:38.1%;top:54%;"></div><div class="data-dot" style="left:55.1%;top:76%;"></div><div class="data-dot" style="left:33.8%;top:21%;"></div><div class="data-dot" style="left:53.4%;top:66%;"></div><div class="data-dot" style="left:30.6%;top:44%;"></div><div class="data-dot" style="left:25.3%;top:38%;"></div><div class="data-dot" style="left:41.1%;top:60%;"></div><div class="data-dot" style="left:36.1%;top:20%;"></div><div class="data-dot" style="left:38.8%;top:45%;"></div><div class="data-dot" style="left:36.4%;top:33%;"></div><div class="data-dot" style="left:51.8%;top:39%;"></div><div class="data-dot" style="left:55.1%;top:36%;"></div><div class="data-dot" style="left:43.0%;top:81%;"></div><div class="data-dot" style="left:40.8%;top:29%;"></div><div class="data-dot" style="left:65.6%;top:73%;"></div><div class="data-dot" style="left:44.1%;top:27%;"></div><div class="data-dot" style="left:29.4%;top:82%;"></div><div class="data-dot" style="left:46.3%;top:16%;"></div><div class="data-dot" style="left:42.8%;top:52%;"></div><div class="data-dot" style="left:32.6%;top:65%;"></div><div class="data-dot" style="left:48.4%;top:47%;"></div><div class="data-dot" style="left:52.8%;top:74%;"></div><div class="data-dot" style="left:54.6%;top:21%;"></div><div class="data-dot" style="left:50.1%;top:34%;"></div><div class="data-dot" style="left:51.0%;top:58%;"></div><div class="data-dot" style="left:36.7%;top:48%;"></div><div class="data-dot" style="left:59.5%;top:63%;"></div><div class="data-dot" style="left:55.0%;top:83%;"></div><div class="data-dot" style="left:43.8%;top:58%;"></div><div class="data-dot" style="left:33.3%;top:53%;"></div><div class="data-dot" style="left:27.1%;top:38%;"></div><div class="data-dot" style="left:25.7%;top:28%;"></div><div class="data-dot" style="left:28.6%;top:66%;"></div><div class="data-dot" style="left:34.0%;top:71%;"></div><div class="data-dot" style="left:33.4%;top:25%;"></div><div class="data-dot" style="left:27.1%;top:64%;"></div><div class="data-dot" style="left:35.8%;top:24%;"></div><div class="data-dot" style="left:20.9%;top:65%;"></div><div class="data-dot" style="left:54.2%;top:62%;"></div><div class="data-dot" style="left:30.9%;top:47%;"></div><div class="data-dot" style="left:39.3%;top:61%;"></div><div class="data-dot" style="left:4.3%;top:69%;"></div><div class="data-dot" style="left:62.3%;top:28%;"></div><div class="data-dot" style="left:25.1%;top:52%;"></div><div class="data-dot" style="left:48.0%;top:29%;"></div><div class="data-dot" style="left:20.2%;top:15%;"></div><div class="data-dot" style="left:34.0%;top:81%;"></div><div class="data-dot" style="left:63.6%;top:72%;"></div><div class="data-dot" style="left:51.2%;top:55%;"></div><div class="data-dot" style="left:15.7%;top:34%;"></div><div class="data-dot" style="left:35.0%;top:69%;"></div><div class="data-dot" style="left:67.3%;top:63%;"></div><div class="data-dot" style="left:84.9%;top:67%;"></div><div class="data-dot" style="left:66.9%;top:25%;"></div><div class="data-dot" style="left:56.7%;top:46%;"></div><div class="data-dot" style="left:59.4%;top:59%;"></div><div class="data-dot" style="left:34.9%;top:70%;"></div><div class="data-dot" style="left:55.9%;top:75%;"></div><div class="data-dot" style="left:72.1%;top:27%;"></div><div class="data-dot" style="left:63.3%;top:29%;"></div><div class="data-dot" style="left:61.5%;top:23%;"></div><div class="data-dot" style="left:34.9%;top:80%;"></div><div class="data-dot" style="left:63.3%;top:62%;"></div><div class="data-dot" style="left:49.9%;top:23%;"></div><div class="data-dot" style="left:38.2%;top:27%;"></div><div class="data-dot" style="left:28.6%;top:44%;"></div><div class="data-dot" style="left:35.1%;top:48%;"></div><div class="data-dot" style="left:42.4%;top:29%;"></div><div class="data-dot" style="left:43.8%;top:28%;"></div><div class="data-dot" style="left:44.1%;top:51%;"></div><div class="data-dot" style="left:44.9%;top:79%;"></div><div class="data-dot" style="left:31.6%;top:56%;"></div><div class="data-dot" style="left:56.3%;top:61%;"></div><div class="data-dot" style="left:48.5%;top:56%;"></div><div class="data-dot" style="left:16.1%;top:20%;"></div><div class="data-dot" style="left:37.1%;top:19%;"></div><div class="data-dot" style="left:30.5%;top:22%;"></div><div class="data-dot" style="left:38.5%;top:15%;"></div><div class="data-dot" style="left:31.7%;top:26%;"></div><div class="data-dot" style="left:43.7%;top:26%;"></div><div class="data-dot" style="left:47.8%;top:53%;"></div><div class="data-dot" style="left:23.4%;top:77%;"></div><div class="data-dot" style="left:38.2%;top:43%;"></div><div class="data-dot" style="left:28.5%;top:46%;"></div><div class="data-dot" style="left:28.4%;top:36%;"></div><div class="data-dot" style="left:27.1%;top:36%;"></div><div class="data-dot" style="left:20.7%;top:50%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">255</td>
+</tr>
+<tr class="" data-hap="Hap2">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap2', 'M100A,M101A,M109A,M10A,M110A,M112A,M113A,M114A,M116A,M118A,M119A,M11A,M121A,M122A,M124A,M126A,M127A,M128A,M129A,M12A,M130A,M131A,M132A,M133A,M135A,M139A,M13A,M140A,M141A,M14A,M15A,M16A,M17A,M18A,M19A,M20A,M22A,M23A,M24A,M27A,M28A,M295A,M29A,M3-2A,M30A,M32A,M33A,M34A,M35A,M36A,M382A,M392A,M396A,M397A,M398A,M399A,M401A,M407A,M412A,M418A,M41A,M42A,M434A,M435A,M446A,M447A,M448A,M449A,M44A,M450A,M451A,M452A,M453A,M454A,M455A,M456A,M457A,M458A,M459A,M45A,M460A,M461A,M462A,M463A,M464A,M465A,M466A,M467A,M468A,M469A,M470A,M471A,M472A,M473A,M474A,M475A,M476A,M477A,M478A,M479A,M47A,M48A,M49A,M4A,M50A,M52A,M53A,M54A,M55A,M57A,M58A,M59A,M60A,M63A,M64A,M66A,M70A,M77A,M78A,M7A,M80A,M81A,M84A,M85A,M86A,M89A,M8A,M90A,M92A,M94A,M96A,M98A')">Hap2</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:29.40564499990958%;width:11.075715091404302%;background:#8B0000;"></div>
+            <div class="forest-point" style="left:34.943502545611736%;background:#8B0000;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:14.8732202462727%;width:51.46857505146554%;"></div>
+                    <div class="bar-box" style="left:30.67789502783567%;width:11.525807090073432%;"></div>
+                    <div class="bar-median" style="left:37.327635616123466%;"></div>
+                    <div class="data-dot" style="left:43.9%;top:27%;"></div><div class="data-dot" style="left:41.9%;top:27%;"></div><div class="data-dot" style="left:26.4%;top:32%;"></div><div class="data-dot" style="left:42.6%;top:26%;"></div><div class="data-dot" style="left:24.9%;top:73%;"></div><div class="data-dot" style="left:27.3%;top:28%;"></div><div class="data-dot" style="left:30.4%;top:27%;"></div><div class="data-dot" style="left:31.5%;top:27%;"></div><div class="data-dot" style="left:27.3%;top:85%;"></div><div class="data-dot" style="left:21.4%;top:56%;"></div><div class="data-dot" style="left:21.2%;top:66%;"></div><div class="data-dot" style="left:35.9%;top:70%;"></div><div class="data-dot" style="left:34.1%;top:44%;"></div><div class="data-dot" style="left:33.4%;top:55%;"></div><div class="data-dot" style="left:32.3%;top:71%;"></div><div class="data-dot" style="left:32.6%;top:80%;"></div><div class="data-dot" style="left:55.4%;top:42%;"></div><div class="data-dot" style="left:36.5%;top:56%;"></div><div class="data-dot" style="left:32.5%;top:16%;"></div><div class="data-dot" style="left:26.4%;top:59%;"></div><div class="data-dot" style="left:57.8%;top:82%;"></div><div class="data-dot" style="left:37.3%;top:69%;"></div><div class="data-dot" style="left:48.4%;top:21%;"></div><div class="data-dot" style="left:29.5%;top:77%;"></div><div class="data-dot" style="left:32.1%;top:58%;"></div><div class="data-dot" style="left:38.1%;top:15%;"></div><div class="data-dot" style="left:22.5%;top:37%;"></div><div class="data-dot" style="left:32.8%;top:22%;"></div><div class="data-dot" style="left:26.2%;top:67%;"></div><div class="data-dot" style="left:41.8%;top:58%;"></div><div class="data-dot" style="left:32.1%;top:32%;"></div><div class="data-dot" style="left:38.8%;top:54%;"></div><div class="data-dot" style="left:27.0%;top:79%;"></div><div class="data-dot" style="left:25.2%;top:42%;"></div><div class="data-dot" style="left:36.9%;top:57%;"></div><div class="data-dot" style="left:41.2%;top:21%;"></div><div class="data-dot" style="left:39.9%;top:18%;"></div><div class="data-dot" style="left:41.1%;top:53%;"></div><div class="data-dot" style="left:22.3%;top:51%;"></div><div class="data-dot" style="left:40.5%;top:62%;"></div><div class="data-dot" style="left:41.5%;top:69%;"></div><div class="data-dot" style="left:43.8%;top:48%;"></div><div class="data-dot" style="left:22.1%;top:33%;"></div><div class="data-dot" style="left:42.4%;top:26%;"></div><div class="data-dot" style="left:36.5%;top:74%;"></div><div class="data-dot" style="left:25.0%;top:31%;"></div><div class="data-dot" style="left:25.9%;top:56%;"></div><div class="data-dot" style="left:38.0%;top:44%;"></div><div class="data-dot" style="left:21.0%;top:81%;"></div><div class="data-dot" style="left:66.3%;top:54%;"></div><div class="data-dot" style="left:37.8%;top:49%;"></div><div class="data-dot" style="left:29.5%;top:77%;"></div><div class="data-dot" style="left:44.7%;top:20%;"></div><div class="data-dot" style="left:38.2%;top:25%;"></div><div class="data-dot" style="left:32.5%;top:46%;"></div><div class="data-dot" style="left:41.6%;top:20%;"></div><div class="data-dot" style="left:36.6%;top:82%;"></div><div class="data-dot" style="left:36.6%;top:73%;"></div><div class="data-dot" style="left:33.6%;top:62%;"></div><div class="data-dot" style="left:54.6%;top:38%;"></div><div class="data-dot" style="left:39.2%;top:29%;"></div><div class="data-dot" style="left:40.9%;top:21%;"></div><div class="data-dot" style="left:41.3%;top:26%;"></div><div class="data-dot" style="left:43.7%;top:55%;"></div><div class="data-dot" style="left:28.4%;top:69%;"></div><div class="data-dot" style="left:30.7%;top:70%;"></div><div class="data-dot" style="left:32.2%;top:37%;"></div><div class="data-dot" style="left:34.8%;top:39%;"></div><div class="data-dot" style="left:27.9%;top:68%;"></div><div class="data-dot" style="left:36.8%;top:16%;"></div><div class="data-dot" style="left:38.8%;top:44%;"></div><div class="data-dot" style="left:37.4%;top:59%;"></div><div class="data-dot" style="left:49.9%;top:22%;"></div><div class="data-dot" style="left:46.8%;top:68%;"></div><div class="data-dot" style="left:48.4%;top:56%;"></div><div class="data-dot" style="left:50.3%;top:41%;"></div><div class="data-dot" style="left:50.1%;top:34%;"></div><div class="data-dot" style="left:46.6%;top:17%;"></div><div class="data-dot" style="left:41.4%;top:41%;"></div><div class="data-dot" style="left:39.4%;top:53%;"></div><div class="data-dot" style="left:31.3%;top:72%;"></div><div class="data-dot" style="left:30.3%;top:44%;"></div><div class="data-dot" style="left:38.6%;top:17%;"></div><div class="data-dot" style="left:47.4%;top:20%;"></div><div class="data-dot" style="left:42.0%;top:66%;"></div><div class="data-dot" style="left:33.8%;top:42%;"></div><div class="data-dot" style="left:41.7%;top:19%;"></div><div class="data-dot" style="left:48.7%;top:50%;"></div><div class="data-dot" style="left:35.5%;top:43%;"></div><div class="data-dot" style="left:29.5%;top:58%;"></div><div class="data-dot" style="left:30.6%;top:82%;"></div><div class="data-dot" style="left:27.0%;top:60%;"></div><div class="data-dot" style="left:36.6%;top:74%;"></div><div class="data-dot" style="left:26.2%;top:65%;"></div><div class="data-dot" style="left:21.6%;top:39%;"></div><div class="data-dot" style="left:35.7%;top:19%;"></div><div class="data-dot" style="left:38.9%;top:33%;"></div><div class="data-dot" style="left:24.6%;top:68%;"></div><div class="data-dot" style="left:37.4%;top:84%;"></div><div class="data-dot" style="left:32.8%;top:82%;"></div><div class="data-dot" style="left:23.8%;top:82%;"></div><div class="data-dot" style="left:42.8%;top:69%;"></div><div class="data-dot" style="left:31.1%;top:69%;"></div><div class="data-dot" style="left:35.6%;top:53%;"></div><div class="data-dot" style="left:41.3%;top:75%;"></div><div class="data-dot" style="left:46.4%;top:49%;"></div><div class="data-dot" style="left:47.4%;top:79%;"></div><div class="data-dot" style="left:43.0%;top:68%;"></div><div class="data-dot" style="left:44.0%;top:38%;"></div><div class="data-dot" style="left:40.4%;top:39%;"></div><div class="data-dot" style="left:40.3%;top:50%;"></div><div class="data-dot" style="left:36.9%;top:58%;"></div><div class="data-dot" style="left:16.7%;top:38%;"></div><div class="data-dot" style="left:38.0%;top:41%;"></div><div class="data-dot" style="left:47.5%;top:53%;"></div><div class="data-dot" style="left:27.9%;top:34%;"></div><div class="data-dot" style="left:41.9%;top:32%;"></div><div class="data-dot" style="left:44.7%;top:33%;"></div><div class="data-dot" style="left:21.7%;top:18%;"></div><div class="data-dot" style="left:53.3%;top:23%;"></div><div class="data-dot" style="left:47.8%;top:70%;"></div><div class="data-dot" style="left:51.3%;top:50%;"></div><div class="data-dot" style="left:31.3%;top:50%;"></div><div class="data-dot" style="left:47.1%;top:57%;"></div><div class="data-dot" style="left:46.3%;top:29%;"></div><div class="data-dot" style="left:14.9%;top:78%;"></div><div class="data-dot" style="left:49.7%;top:29%;"></div><div class="data-dot" style="left:39.3%;top:20%;"></div><div class="data-dot" style="left:41.3%;top:55%;"></div><div class="data-dot" style="left:37.3%;top:80%;"></div><div class="data-dot" style="left:53.5%;top:45%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">132</td>
+</tr>
+<tr class="" data-hap="Hap3">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap3', 'M102A,M103A,M104A,M123A,M134A,M136A,M137A,M142A,M156A,M160A,M167A,M169A,M170A,M171A,M172A,M174A,M175A,M176A,M177A,M178A,M179A,M185A,M186A,M187A,M193A,M199A,M481A,M484A,M72A,M79A,M82A,M93A,M97A,WB1029,WB1040,WB1044,WB1045,WB1046,WB1052,WB1054,WB1057,WB1059,WB1061,WB1062,WB1065,WB1068,WB1088,WB1105,WB1118,WB1127,WB1128,WB1131,WB1136,WB1143')">Hap3</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:22.174893183581098%;width:21.648877102190816%;background:#8B0000;"></div>
+            <div class="forest-point" style="left:32.9993317346765%;background:#8B0000;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:0.21428502795874885%;width:76.63082413285413%;"></div>
+                    <div class="bar-box" style="left:26.551443414644048%;width:20.69775564182174%;"></div>
+                    <div class="bar-median" style="left:34.380346454656305%;"></div>
+                    <div class="data-dot" style="left:48.3%;top:73%;"></div><div class="data-dot" style="left:76.8%;top:65%;"></div><div class="data-dot" style="left:55.2%;top:23%;"></div><div class="data-dot" style="left:72.2%;top:81%;"></div><div class="data-dot" style="left:49.3%;top:82%;"></div><div class="data-dot" style="left:55.8%;top:66%;"></div><div class="data-dot" style="left:67.1%;top:33%;"></div><div class="data-dot" style="left:35.1%;top:57%;"></div><div class="data-dot" style="left:52.5%;top:66%;"></div><div class="data-dot" style="left:47.0%;top:54%;"></div><div class="data-dot" style="left:50.5%;top:57%;"></div><div class="data-dot" style="left:32.6%;top:66%;"></div><div class="data-dot" style="left:35.4%;top:31%;"></div><div class="data-dot" style="left:29.6%;top:68%;"></div><div class="data-dot" style="left:33.7%;top:24%;"></div><div class="data-dot" style="left:27.4%;top:45%;"></div><div class="data-dot" style="left:16.7%;top:35%;"></div><div class="data-dot" style="left:19.7%;top:54%;"></div><div class="data-dot" style="left:17.2%;top:60%;"></div><div class="data-dot" style="left:21.0%;top:59%;"></div><div class="data-dot" style="left:12.2%;top:25%;"></div><div class="data-dot" style="left:47.2%;top:16%;"></div><div class="data-dot" style="left:42.9%;top:41%;"></div><div class="data-dot" style="left:51.1%;top:79%;"></div><div class="data-dot" style="left:21.9%;top:63%;"></div><div class="data-dot" style="left:30.6%;top:16%;"></div><div class="data-dot" style="left:4.5%;top:54%;"></div><div class="data-dot" style="left:22.1%;top:34%;"></div><div class="data-dot" style="left:45.9%;top:38%;"></div><div class="data-dot" style="left:45.3%;top:73%;"></div><div class="data-dot" style="left:44.7%;top:33%;"></div><div class="data-dot" style="left:49.6%;top:59%;"></div><div class="data-dot" style="left:48.1%;top:47%;"></div><div class="data-dot" style="left:36.1%;top:73%;"></div><div class="data-dot" style="left:31.9%;top:60%;"></div><div class="data-dot" style="left:22.2%;top:46%;"></div><div class="data-dot" style="left:28.4%;top:80%;"></div><div class="data-dot" style="left:37.5%;top:39%;"></div><div class="data-dot" style="left:41.6%;top:56%;"></div><div class="data-dot" style="left:27.7%;top:62%;"></div><div class="data-dot" style="left:27.3%;top:63%;"></div><div class="data-dot" style="left:30.2%;top:65%;"></div><div class="data-dot" style="left:26.6%;top:30%;"></div><div class="data-dot" style="left:18.6%;top:67%;"></div><div class="data-dot" style="left:18.9%;top:54%;"></div><div class="data-dot" style="left:34.4%;top:52%;"></div><div class="data-dot" style="left:0.2%;top:84%;"></div><div class="data-dot" style="left:30.5%;top:51%;"></div><div class="data-dot" style="left:44.3%;top:74%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">54</td>
+</tr>
+<tr class="" data-hap="Hap4">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap4', 'M115A,M239A,M304A,M305A,M341A,M378A,M75A,M76A,WB1034,WB1041,WB1049,WB1051,WB1053,WB1056,WB1060,WB1066,WB1067,WB1070,WB1071,WB1074,WB1075,WB1076,WB1077,WB1078,WB1080,WB1081,WB1082,WB1083,WB1084,WB1085,WB1086,WB1089,WB1091,WB1092,WB1093,WB1094,WB1096,WB1129,WB1130,WB1132,WB1133')">Hap4</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:13.972826915571758%;width:20.32816524980182%;background:#8B0000;"></div>
+            <div class="forest-point" style="left:24.13690954047267%;background:#8B0000;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:13.107658142658495%;width:63.75473565545401%;"></div>
+                    <div class="bar-box" style="left:24.66765692974921%;width:10.99918791864763%;"></div>
+                    <div class="bar-median" style="left:29.572754597499017%;"></div>
+                    <div class="data-dot" style="left:39.3%;top:46%;"></div><div class="data-dot" style="left:31.6%;top:79%;"></div><div class="data-dot" style="left:22.7%;top:85%;"></div><div class="data-dot" style="left:17.3%;top:35%;"></div><div class="data-dot" style="left:25.2%;top:46%;"></div><div class="data-dot" style="left:41.3%;top:44%;"></div><div class="data-dot" style="left:32.9%;top:85%;"></div><div class="data-dot" style="left:28.9%;top:47%;"></div><div class="data-dot" style="left:27.9%;top:65%;"></div><div class="data-dot" style="left:24.9%;top:85%;"></div><div class="data-dot" style="left:31.0%;top:74%;"></div><div class="data-dot" style="left:35.9%;top:85%;"></div><div class="data-dot" style="left:35.4%;top:82%;"></div><div class="data-dot" style="left:24.8%;top:58%;"></div><div class="data-dot" style="left:35.4%;top:61%;"></div><div class="data-dot" style="left:27.8%;top:64%;"></div><div class="data-dot" style="left:28.6%;top:50%;"></div><div class="data-dot" style="left:15.4%;top:66%;"></div><div class="data-dot" style="left:21.7%;top:15%;"></div><div class="data-dot" style="left:24.5%;top:29%;"></div><div class="data-dot" style="left:33.3%;top:18%;"></div><div class="data-dot" style="left:35.9%;top:83%;"></div><div class="data-dot" style="left:21.3%;top:48%;"></div><div class="data-dot" style="left:22.8%;top:19%;"></div><div class="data-dot" style="left:19.7%;top:76%;"></div><div class="data-dot" style="left:34.3%;top:37%;"></div><div class="data-dot" style="left:33.6%;top:59%;"></div><div class="data-dot" style="left:28.1%;top:53%;"></div><div class="data-dot" style="left:37.9%;top:62%;"></div><div class="data-dot" style="left:76.9%;top:72%;"></div><div class="data-dot" style="left:48.0%;top:39%;"></div><div class="data-dot" style="left:13.1%;top:18%;"></div><div class="data-dot" style="left:29.6%;top:71%;"></div><div class="data-dot" style="left:51.8%;top:36%;"></div><div class="data-dot" style="left:61.2%;top:75%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498db;font-size:8px;white-space:nowrap;">-1bp</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">41</td>
+</tr>
+<tr class="" data-hap="Hap5">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap5', 'M105A,M120A,M125A,M143A,M148A,M152A,M153A,M157A,M158A,M163A,M181A,M183A,M184A,M188A,M202A,M271A,M281A,M294A,M482A,M494A,M496A,M71A,M83A,M87A,M91A,M95A,WB1026,WB1072,WB1090,WB1102,WB1113,WB1123')">Hap5</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:8.989578703480767%;width:21.527411499891237%;background:#8B0000;"></div>
+            <div class="forest-point" style="left:19.753284453426385%;background:#8B0000;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:9.112542953438657%;width:52.461438261040236%;"></div>
+                    <div class="bar-box" style="left:22.236655634976472%;width:11.563662049539095%;"></div>
+                    <div class="bar-median" style="left:27.73154838485687%;"></div>
+                    <div class="data-dot" style="left:39.3%;top:19%;"></div><div class="data-dot" style="left:28.7%;top:58%;"></div><div class="data-dot" style="left:32.1%;top:30%;"></div><div class="data-dot" style="left:25.5%;top:70%;"></div><div class="data-dot" style="left:40.8%;top:22%;"></div><div class="data-dot" style="left:24.1%;top:53%;"></div><div class="data-dot" style="left:16.0%;top:31%;"></div><div class="data-dot" style="left:9.1%;top:48%;"></div><div class="data-dot" style="left:22.6%;top:27%;"></div><div class="data-dot" style="left:22.4%;top:21%;"></div><div class="data-dot" style="left:29.5%;top:38%;"></div><div class="data-dot" style="left:19.1%;top:29%;"></div><div class="data-dot" style="left:15.5%;top:53%;"></div><div class="data-dot" style="left:38.6%;top:25%;"></div><div class="data-dot" style="left:29.7%;top:56%;"></div><div class="data-dot" style="left:32.0%;top:23%;"></div><div class="data-dot" style="left:55.4%;top:16%;"></div><div class="data-dot" style="left:61.6%;top:38%;"></div><div class="data-dot" style="left:26.3%;top:66%;"></div><div class="data-dot" style="left:27.7%;top:38%;"></div><div class="data-dot" style="left:60.8%;top:17%;"></div><div class="data-dot" style="left:24.4%;top:57%;"></div><div class="data-dot" style="left:21.0%;top:84%;"></div><div class="data-dot" style="left:47.1%;top:49%;"></div><div class="data-dot" style="left:20.2%;top:85%;"></div><div class="data-dot" style="left:29.3%;top:59%;"></div><div class="data-dot" style="left:27.2%;top:51%;"></div><div class="data-dot" style="left:22.1%;top:28%;"></div><div class="data-dot" style="left:34.1%;top:42%;"></div><div class="data-dot" style="left:33.5%;top:27%;"></div><div class="data-dot" style="left:14.4%;top:58%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">32</td>
+</tr>
+<tr class="" data-hap="Hap6">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap6', 'M151A,M162A,M189A,M217A,M251A,M256A,M265A,M381A,WB1042,WB1043,WB1106,WB1109,WB1122,WB1125,WB1135,WB1141,WB1142')">Hap6</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:-11.454022908685147%;width:32.9080458173703%;background:#8B0000;"></div>
+            <div class="forest-point" style="left:5.0%;background:#8B0000;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:0.0%;width:58.642220100830336%;"></div>
+                    <div class="bar-box" style="left:14.751488465648983%;width:14.98419225801871%;"></div>
+                    <div class="bar-median" style="left:24.194548176400378%;"></div>
+                    <div class="data-dot" style="left:26.2%;top:70%;"></div><div class="data-dot" style="left:15.4%;top:51%;"></div><div class="data-dot" style="left:24.0%;top:67%;"></div><div class="data-dot" style="left:26.7%;top:21%;"></div><div class="data-dot" style="left:30.7%;top:23%;"></div><div class="data-dot" style="left:32.3%;top:35%;"></div><div class="data-dot" style="left:31.9%;top:43%;"></div><div class="data-dot" style="left:58.6%;top:32%;"></div><div class="data-dot" style="left:0.0%;top:40%;"></div><div class="data-dot" style="left:9.1%;top:49%;"></div><div class="data-dot" style="left:18.1%;top:58%;"></div><div class="data-dot" style="left:14.5%;top:17%;"></div><div class="data-dot" style="left:24.4%;top:69%;"></div><div class="data-dot" style="left:14.0%;top:42%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">17</td>
+</tr>
+<tr class="" data-hap="Hap7">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap7', 'M242A,M266A,M284A,M289A,M290A,M296A,M314A,M321A,M322A,M324A,M325A,M326A,M336A,M509A,M522A')">Hap7</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:50.349214580617605%;width:35.48055049191907%;background:#3498db;"></div>
+            <div class="forest-point" style="left:68.08948982657714%;background:#3498db;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:16.872622684885922%;width:49.96725924133254%;"></div>
+                    <div class="bar-box" style="left:42.694827959926855%;width:22.26153353047523%;"></div>
+                    <div class="bar-median" style="left:60.50378778146188%;"></div>
+                    <div class="data-dot" style="left:32.0%;top:32%;"></div><div class="data-dot" style="left:36.7%;top:25%;"></div><div class="data-dot" style="left:60.5%;top:41%;"></div><div class="data-dot" style="left:63.3%;top:74%;"></div><div class="data-dot" style="left:46.2%;top:43%;"></div><div class="data-dot" style="left:48.3%;top:37%;"></div><div class="data-dot" style="left:63.9%;top:82%;"></div><div class="data-dot" style="left:66.8%;top:18%;"></div><div class="data-dot" style="left:61.9%;top:65%;"></div><div class="data-dot" style="left:66.3%;top:67%;"></div><div class="data-dot" style="left:41.1%;top:23%;"></div><div class="data-dot" style="left:66.0%;top:29%;"></div><div class="data-dot" style="left:44.3%;top:72%;"></div><div class="data-dot" style="left:66.3%;top:63%;"></div><div class="data-dot" style="left:16.9%;top:85%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498db;font-size:8px;white-space:nowrap;">-1bp</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">15</td>
+</tr>
+<tr class="" data-hap="Hap8">
+    <td class="hap-cell" style="cursor:pointer;" title="点击复制样本" onclick="copyHapSamples('Hap8', 'M282A,M353A,M375A,WB1095,WB1097,WB1098,WB1099,WB1100,WB1101,WB1103,WB1104,WB1107,WB1112,WB1139')">Hap8</td>
+    <td class="effect-cell">
+        <div class="bar-container">
+            <div class="bar-center"></div>
+            <div class="forest-ci" style="left:37.1740309312028%;width:31.427626952403166%;background:#3498db;"></div>
+            <div class="forest-point" style="left:52.88784440740438%;background:#3498db;"></div>
+        </div>
+    </td>
+    <td class="box-cell">
+        <div class="bar-container">
+                    <div class="bar-whisker" style="left:22.847393257100787%;width:38.164589835980905%;"></div>
+                    <div class="bar-box" style="left:33.7903776729462%;width:19.59822965255849%;"></div>
+                    <div class="bar-median" style="left:48.540868628198744%;"></div>
+                    <div class="data-dot" style="left:31.9%;top:79%;"></div><div class="data-dot" style="left:59.4%;top:53%;"></div><div class="data-dot" style="left:61.0%;top:33%;"></div><div class="data-dot" style="left:48.5%;top:63%;"></div><div class="data-dot" style="left:29.1%;top:83%;"></div><div class="data-dot" style="left:52.7%;top:24%;"></div><div class="data-dot" style="left:46.4%;top:43%;"></div><div class="data-dot" style="left:53.4%;top:20%;"></div><div class="data-dot" style="left:59.0%;top:39%;"></div><div class="data-dot" style="left:50.4%;top:75%;"></div><div class="data-dot" style="left:22.8%;top:50%;"></div><div class="data-dot" style="left:37.9%;top:81%;"></div><div class="data-dot" style="left:33.8%;top:15%;"></div>
+                </div>
+    </td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#3498DB;font-size:9px;white-space:nowrap;">C</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
+<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#27AE60;font-size:9px;white-space:nowrap;">T</span></td>
+<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">14</td>
+</tr>
+<tr style="height:30px;"><td style="border:none;"></td><td style="border:none;position:relative;"><div style="position:relative;height:25px;"><div style="position:absolute;bottom:10px;left:0;right:0;height:1px;background:#bdc3c7;"></div><div style="position:absolute;bottom:6px;left:5.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:5.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">-9.89</span><div style="position:absolute;bottom:6px;left:20.772372456644284%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:20.772372456644284%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">-6.42</span><div style="position:absolute;bottom:6px;left:36.54474491328857%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:36.54474491328857%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">-2.96</span><div style="position:absolute;bottom:6px;left:52.31711736993285%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:52.31711736993285%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+0.51</span><div style="position:absolute;bottom:6px;left:68.08948982657714%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:68.08948982657714%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">+3.98</span></div></td>
+<td style="border:none;position:relative;"><div style="position:relative;height:25px;"><div style="position:absolute;bottom:10px;left:0;right:0;height:1px;background:#bdc3c7;"></div><div style="position:absolute;bottom:6px;left:0.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:0.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">35.86</span><div style="position:absolute;bottom:6px;left:50.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:50.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">59.98</span><div style="position:absolute;bottom:6px;left:100.0%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div><span style="position:absolute;bottom:-4px;left:100.0%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">84.09</span></div></td>
+<td colspan="18" style="border:none;"></td>
+<td style="border:none;"></td>
+</tr>
+</tbody></table>
+</div><!-- table-scroll-container -->
+
+<!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:hidden;">
+    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
+    <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
+        <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
+        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
+        <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">→</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
+        <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
+    </div>
+</div>
+            </div><!-- main-data-section -->
+        </div><!-- integrated-view -->
+    </div>
+    </div>
+    
+    <div class="footer">
+        <div style="font-size:11px;color:#3498db;font-weight:500;margin-right:20px;">
+            💡 提示：点击“Haplotype”表头复制所有样本 | 点击单倍型标签复制对应样本
+        </div>
+        <div class="base-legend">
+            <div class="base-legend-item"><div class="base-box" style="background:#9b59b6;">A</div>Adenine</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#27AE60;">T</div>Thymine</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#3498DB;">C</div>Cytosine</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#F1C40F;">G</div>Guanine</div>
+            <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
+            <div class="base-legend-item"><div class="base-box" style="background:#e74c3c;">+</div>Insertion (+nbp)</div>
+            <div class="base-legend-item"><div class="base-box" style="background:#3498db;">-</div>Deletion (-nbp)</div>
+            <span style="margin-left:15px;border-left:1px solid #ddd;padding-left:15px;"></span>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#95a5a6;"></div>Reference</div>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#8B0000;"></div>P &lt; 0.01</div>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#e74c3c;"></div>P &lt; 0.05</div>
+            <div class="base-legend-item"><div style="width:10px;height:10px;border-radius:50%;background:#3498db;"></div>Not sig.</div>
+        </div>
+        <div style="font-size:10px;color:#7f8c8d;">Effect: point = estimate, line = 95% CI</div>
+    </div>
+</div>
+<!-- tooltip 平面容器 -->
+<div id="d3-tooltip" style="position:fixed;pointer-events:none;background:rgba(44,62,80,0.92);color:#fff;padding:7px 11px;border-radius:5px;font-size:11px;display:none;z-index:9999;"></div>
+
+<script>
+// ==================== 缩放功能 ====================
+var zc = document.getElementById('zoomContent');
+var zs = document.getElementById('zoomSlider');
+var zl = document.getElementById('zoomLevel');
+var cz = 100;
+function applyZoom() {
+    if (zc) { zc.style.transform = 'scale(' + (cz/100) + ')'; zc.style.transformOrigin = 'top left'; }
+    if (zs) zs.value = cz;
+    if (zl) zl.innerText = cz + '%';
+}
+function zoomIn()  { cz = Math.min(150, cz + 10); applyZoom(); }
+function zoomOut() { cz = Math.max(20,  cz - 10); applyZoom(); }
+function resetZoom() { cz = 100; applyZoom(); }
+function setZoom(v)  { cz = parseInt(v); applyZoom(); }
+function fitToWindow() {
+    var w = document.querySelector('.content-wrapper');
+    if (zc && w) { cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100))); applyZoom(); }
+}
+applyZoom();
+
+// ==================== 排序功能 ====================
+var countOrder   = ["Hap1", "Hap2", "Hap3", "Hap4", "Hap5", "Hap6", "Hap7", "Hap8"];
+var clusterOrder = ["Hap2", "Hap6", "Hap13", "Hap3", "Hap8", "Hap4", "Hap9", "Hap17"];
+var currentSort  = 'cluster';
+function toggleSort() {
+    var tbody = document.querySelector('.data-table tbody');
+    var rows  = Array.from(tbody.querySelectorAll('tr[data-hap]'));
+    var btn   = document.getElementById('sortBtn');
+    if (currentSort === 'count') {
+        currentSort = 'cluster'; btn.innerText = 'By Cluster';
+        var om = {}; clusterOrder.forEach(function(h,i){ om[h]=i; });
+        rows.sort(function(a,b){ return (om[a.getAttribute('data-hap')]||999)-(om[b.getAttribute('data-hap')]||999); });
+    } else {
+        currentSort = 'count'; btn.innerText = 'By Count';
+        var om = {}; countOrder.forEach(function(h,i){ om[h]=i; });
+        rows.sort(function(a,b){ return (om[a.getAttribute('data-hap')]||999)-(om[b.getAttribute('data-hap')]||999); });
+    }
+    rows.forEach(function(r){ tbody.appendChild(r); });
+}
+
+function copyHapSamples(hapName, samplesStr) {
+    if (!samplesStr) {
+        alert('No samples for ' + hapName);
+        return;
+    }
+    navigator.clipboard.writeText(samplesStr).then(function() {
+        console.log('Copied samples for ' + hapName);
+    }).catch(function(err) {
+        var textArea = document.createElement('textarea');
+        textArea.value = samplesStr;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+    });
+}
+
+function copyAllHaplotypes() {
+    var allSamples = [];
+    var cells = document.querySelectorAll('td.hap-cell');
+    cells.forEach(function(cell) {
+        var onclick = cell.getAttribute('onclick');
+        if (onclick) {
+            var match = onclick.match(/copyHapSamples\('[^']+',\s*'([^']*)'\)/);
+            if (match && match[1]) {
+                allSamples.push(match[1]);
+            }
+        }
+    });
+    var allText = allSamples.join(',');
+    if (!allText) {
+        alert('No samples found');
+        return;
+    }
+    navigator.clipboard.writeText(allText).then(function() {
+        console.log('Copied all samples');
+    }).catch(function(err) {
+        var textArea = document.createElement('textarea');
+        textArea.value = allText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+    });
+}
+
+// ==================== D3 数据 ====================
+var gwasData     = [{"pos": 146944140, "pvalue": 0.017487388405367628, "logp": 1.757275043913279, "maf": 0.20743034055727555, "missing_rate": 0.0, "annotation": "other", "functional_ann": "other", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.017721021611001815, "vtype": "SNP"}, {"pos": 146944409, "pvalue": 1.0, "logp": -0.0, "maf": 0.0913312693498452, "missing_rate": 0.0, "annotation": "other", "functional_ann": "other", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.6740677966101695, "vtype": "SNP"}, {"pos": 146945201, "pvalue": 1.0, "logp": -0.0, "maf": 0.08513931888544891, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.006286201022146503, "vtype": "promoter"}, {"pos": 146945333, "pvalue": 0.00013269472788795882, "logp": 3.877146331805135, "maf": 0.10681114551083591, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.008109365910412983, "vtype": "promoter"}, {"pos": 146945363, "pvalue": 0.18945346957149786, "logp": 0.7224974368289014, "maf": 0.35139318885448917, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.03670663469224618, "vtype": "promoter"}, {"pos": 146945422, "pvalue": 0.5926942774457459, "logp": 0.2271692659206457, "maf": 0.4891640866873065, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.06644102564102569, "vtype": "promoter"}, {"pos": 146945706, "pvalue": 1.0, "logp": -0.0, "maf": 0.06346749226006192, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.0027732683982683937, "vtype": "promoter"}, {"pos": 146945724, "pvalue": 0.00021483271149541652, "logp": 3.6678995901031657, "maf": 0.35294117647058826, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.0017493333333333276, "vtype": "promoter"}, {"pos": 146945745, "pvalue": 3.79048419130303e-11, "logp": 10.421305310301063, "maf": 0.20743034055727555, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 1.0, "vtype": "promoter"}, {"pos": 146945826, "pvalue": 0.01260754165618431, "logp": 1.8993695882276356, "maf": 0.20743034055727555, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.03670663469224618, "vtype": "promoter"}, {"pos": 146945860, "pvalue": 1.0, "logp": -0.0, "maf": 0.06346749226006192, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.017721021611001808, "vtype": "promoter"}, {"pos": 146945881, "pvalue": 1.0, "logp": -0.0, "maf": 0.0913312693498452, "missing_rate": 0.0, "annotation": "DEL", "functional_ann": "intron", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.0007544689800210321, "vtype": "indel"}, {"pos": 146945927, "pvalue": 0.10681253894938997, "logp": 0.9713777615688727, "maf": 0.10835913312693499, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.0007544689800210311, "vtype": "promoter"}, {"pos": 146945978, "pvalue": 0.001946319538529882, "logp": 2.710785857578453, "maf": 0.3544891640866873, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.017721021611001808, "vtype": "promoter"}, {"pos": 146946322, "pvalue": 0.00021483271149541652, "logp": 3.6678995901031657, "maf": 0.47832817337461303, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 1.0, "vtype": "promoter"}, {"pos": 146946351, "pvalue": 1.0, "logp": -0.0, "maf": 0.034055727554179564, "missing_rate": 0.0, "annotation": "DEL", "functional_ann": "intron", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.6740677966101695, "vtype": "indel"}, {"pos": 146946757, "pvalue": 0.017487388405367628, "logp": 1.757275043913279, "maf": 0.43188854489164086, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.008109365910412983, "vtype": "promoter"}, {"pos": 146946959, "pvalue": 1.0, "logp": -0.0, "maf": 0.0913312693498452, "missing_rate": 0.0, "annotation": "promoter", "functional_ann": "promoter", "overlaps_cds": false, "overlapping_genes": "", "r2": 0.03670663469224618, "vtype": "promoter"}];
+var networkNodes = [{"id": "Hap1", "count": 255, "size": 60, "color": "rgb(187, 83, 129)", "phenoMean": 56.984, "isLead": false}, {"id": "Hap2", "count": 132, "size": 60, "color": "rgb(149, 92, 183)", "phenoMean": 53.675, "isLead": true}, {"id": "Hap3", "count": 54, "size": 59.090815370097204, "color": "rgb(143, 96, 186)", "phenoMean": 53.248, "isLead": false}, {"id": "Hap4", "count": 41, "size": 53.41874542459709, "color": "rgb(114, 113, 196)", "phenoMean": 51.3, "isLead": false}, {"id": "Hap5", "count": 32, "size": 48.941125496954285, "color": "rgb(100, 122, 201)", "phenoMean": 50.337, "isLead": false}, {"id": "Hap6", "count": 17, "size": 39.73863375370596, "color": "rgb(52, 152, 219)", "phenoMean": 47.095, "isLead": false}, {"id": "Hap7", "count": 15, "size": 38.237900077244504, "color": "rgb(231, 76, 60)", "phenoMean": 60.959, "isLead": false}, {"id": "Hap8", "count": 14, "size": 37.44994432064365, "color": "rgb(194, 82, 118)", "phenoMean": 57.618, "isLead": false}];
+var networkEdges = [{"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}, {"source": "Hap1", "target": "Hap2", "distance": 9}, {"source": "Hap1", "target": "Hap3", "distance": 9}, {"source": "Hap1", "target": "Hap4", "distance": 8}, {"source": "Hap1", "target": "Hap5", "distance": 1}, {"source": "Hap1", "target": "Hap6", "distance": 6}, {"source": "Hap1", "target": "Hap7", "distance": 1}, {"source": "Hap1", "target": "Hap8", "distance": 8}, {"source": "Hap2", "target": "Hap3", "distance": 6}, {"source": "Hap2", "target": "Hap4", "distance": 11}, {"source": "Hap2", "target": "Hap5", "distance": 8}, {"source": "Hap2", "target": "Hap6", "distance": 3}, {"source": "Hap2", "target": "Hap7", "distance": 10}, {"source": "Hap2", "target": "Hap8", "distance": 5}, {"source": "Hap3", "target": "Hap4", "distance": 11}, {"source": "Hap3", "target": "Hap5", "distance": 8}, {"source": "Hap3", "target": "Hap6", "distance": 3}, {"source": "Hap3", "target": "Hap7", "distance": 10}, {"source": "Hap3", "target": "Hap8", "distance": 1}, {"source": "Hap4", "target": "Hap5", "distance": 7}, {"source": "Hap4", "target": "Hap6", "distance": 8}, {"source": "Hap4", "target": "Hap7", "distance": 9}, {"source": "Hap4", "target": "Hap8", "distance": 10}, {"source": "Hap5", "target": "Hap6", "distance": 5}, {"source": "Hap5", "target": "Hap7", "distance": 2}, {"source": "Hap5", "target": "Hap8", "distance": 7}, {"source": "Hap6", "target": "Hap7", "distance": 7}, {"source": "Hap6", "target": "Hap8", "distance": 2}, {"source": "Hap7", "target": "Hap8", "distance": 9}];
+var regionStart  = 146944089;
+var regionEnd    = 146949975;
+var geneStart    = 146944089;
+var geneEnd      = 146949975;
+var svgTotalWidth = 545;  // 与基因结构图相同的总宽度
+var gwasPlotWidth = 460;  // GWAS图绘图区域宽度（基因区域+图例）
+var gwasLeftMargin = 86;  // GWAS图左边距（与基因结构图基因区域起始对齐）
+var leadVariantPos = 146945745;
+var exonRegions = [[146944089, 146944101], [146944201, 146944304], [146944420, 146944793], [146944903, 146944975]];
+var geneLabelText = "HORVU.MOREX.r3.4HG0356430";
+var displayPositions = [146944140, 146944409, 146945201, 146945333, 146945363, 146945422, 146945706, 146945724, 146945745, 146945826, 146945860, 146945881, 146945927, 146945978, 146946322, 146946351, 146946757, 146946959];  // 显示的变异位置列表
+var ldR2Matrix = [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]];  // LD r²矩阵（n x n，与displayPositions对应）
+
+// ==================== 过滤功能 ====================
+var currentFilter = { maf: 0.05, missingRate: 0.2 };
+
+function annNorm(d) {
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    
+    // **关键修复**：检查启动子变异是否与其他基因CDS重叠
+    // 如果overlaps_cds为true，说明这个"启动子变异"实际位于其他基因的编码区
+    // 应该将其归类为'missense'或'synonymous'（而不是promoter）
+    if (a === 'promoter' && d.overlaps_cds === true) {
+        // 如果overlapping_genes字段存在，说明与其他基因CDS重叠
+        // 将其归类为other，避免被promoter过滤器误选
+        return 'other';
+    }
+    
+    // 处理 missense 变体（包括各种亚型）
+    if (a.indexOf('missense') !== -1) {
+        return 'missense';
+    }
+    
+    // 处理 indel/SV - 根据功能分配到对应分类
+    // 优先使用 functional_ann 字段（由Python端根据位置计算）
+    if (d.functional_ann && (a === 'indel' || a === 'INS' || a === 'DEL' || a === 'SV')) {
+        var fa = String(d.functional_ann).toLowerCase();
+        if (fa.indexOf('missense') !== -1) return 'missense';
+        if (fa.indexOf('synonymous') !== -1) return 'synonymous';
+        if (fa.indexOf('utr') !== -1) return 'UTR';
+        if (fa.indexOf('intron') !== -1) return 'intron';
+        if (fa.indexOf('promoter') !== -1) {
+            // 再次检查overlaps_cds
+            if (d.overlaps_cds === true) return 'other';
+            return 'promoter';
+        }
+        return 'other';
+    }
+    
+    // 直接返回原始类型（包括 intron, UTR, synonymous, promoter 等）
+    return a;
+}
+
+function annAllowed(d) {
+    var a = annNorm(d);
+    var cb = document.querySelector('.ann-cb[value="' + a + '"]');
+    if (cb) return cb.checked;
+    var o = document.querySelector('.ann-cb[value="other"]');
+    return o ? o.checked : true;
+}
+
+function updateFilterDisplay(type, value) {
+    if (type === 'maf') {
+        currentFilter.maf = parseFloat(value);
+        document.getElementById('mafValue').textContent = parseFloat(value).toFixed(2);
+    } else if (type === 'missing') {
+        currentFilter.missingRate = parseFloat(value);
+        document.getElementById('missingValue').textContent = parseFloat(value).toFixed(2);
+    }
+}
+
+function resetFilters() {
+    // Reset 时恢复默认参数
+    document.getElementById('mafSlider').value     = 0.05;
+    document.getElementById('missingSlider').value = 0.2;
+    currentFilter = { maf: 0.05, missingRate: 0.2 };
+    document.getElementById('mafValue').textContent    = '0.05';
+    document.getElementById('missingValue').textContent = '0.2';
+    document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
+    applyFilters();
+}
+
+window.addEventListener('message', function(ev) {
+    if (!ev.data || ev.data.type !== 'filter' || !ev.data.filters) return;
+    var f = ev.data.filters;
+    if (f.maf !== undefined) {
+        currentFilter.maf = f.maf;
+        var ms = document.getElementById('mafSlider');
+        if (ms) { ms.value = f.maf; document.getElementById('mafValue').textContent = parseFloat(f.maf).toFixed(2); }
+    }
+    if (f.missingRate !== undefined) {
+        currentFilter.missingRate = f.missingRate;
+        var mx = document.getElementById('missingSlider');
+        if (mx) { mx.value = f.missingRate; document.getElementById('missingValue').textContent = parseFloat(f.missingRate).toFixed(2); }
+    }
+    if (f.annotationEnabled) {
+        Object.keys(f.annotationEnabled).forEach(function(k) {
+            var cb = document.querySelector('.ann-cb[value="' + k + '"]');
+            if (cb) cb.checked = f.annotationEnabled[k];
+        });
+    }
+    applyFilters();
+});
+
+// ==================== 动态计算基因结构到表格的连线 ====================
+// 缓存表格列的实际位置（避免每次重新计算）
+var tableColumnPositions = null;
+
+function updateConnectorLines() {
+    console.log('[DEBUG] updateConnectorLines called');
+    
+    // 获取SVG和表格的相对位置
+    var svg = document.querySelector('#gene-structure-svg');
+    var table = document.querySelector('.data-table');
+    if (!svg || !table) {
+        console.log('[DEBUG] SVG or table not found');
+        return;
+    }
+    
+    var svgRect = svg.getBoundingClientRect();
+    console.log('[DEBUG] SVG rect:', svgRect.left, svgRect.top, svgRect.width, svgRect.height);
+    
+    // 获取所有th，然后过滤出可见的变异列
+    var allThsList = Array.from(table.querySelectorAll('thead th'));
+    console.log('[DEBUG] Total th count:', allThsList.length);
+    
+    var visibleThs = allThsList.filter(function(th, idx) {
+        // 跳过前3列和最后一列，只保留变异列
+        if (idx < 3) return false;
+        if (idx >= allThsList.length - 1) return false;
+        // 只保留可见的列
+        var isVisible = th.style.display !== 'none';
+        if (isVisible) {
+            console.log('[DEBUG] Visible th idx:', idx, 'text:', th.textContent.trim().substring(0, 20));
+        }
+        return isVisible;
+    });
+    
+    console.log('[DEBUG] Visible th count:', visibleThs.length);
+    
+    // 如果没有可见的变异列，隐藏所有连线
+    if (visibleThs.length === 0) {
+        console.log('[DEBUG] No visible columns, hiding all connectors');
+        document.querySelectorAll('.js-connector').forEach(function(line) {
+            line.style.display = 'none';
+        });
+        return;
+    }
+    
+    // 获取所有连线
+    var allConnectors = document.querySelectorAll('.js-connector');
+    console.log('[DEBUG] Total connectors:', allConnectors.length);
+    
+    // 建立位置到连线的映射（统一使用字符串格式）
+    var posToConnector = {};
+    var missingDataPos = 0;
+    allConnectors.forEach(function(line, idx) {
+        var pos = line.getAttribute('data-pos');
+        if (pos) {
+            // 统一转换为字符串格式
+            var posKey = String(parseInt(pos));
+            posToConnector[posKey] = line;
+        } else {
+            missingDataPos++;
+            if (missingDataPos <= 5) {
+                console.log('[DEBUG] Connector', idx, 'missing data-pos:', line.outerHTML.substring(0, 100));
+            }
+        }
+    });
+    console.log('[DEBUG] Connectors missing data-pos:', missingDataPos);
+    console.log('[DEBUG] posToConnector keys count:', Object.keys(posToConnector).length);
+    console.log('[DEBUG] posToConnector keys:', Object.keys(posToConnector));
+    
+    // 隐藏所有连线
+    allConnectors.forEach(function(line) {
+        line.style.display = 'none';
+    });
+    
+    // 为每个可见列计算连线位置
+    // 使用getBoundingClientRect获取实际的列位置（更准确）
+    var connectedCount = 0;
+    
+    visibleThs.forEach(function(th, visibleIdx) {
+        // 从th的文本中提取位置
+        var posText = th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
+        var posStr = String(parseInt(posText));
+        
+        // 查找对应的连线
+        var line = posToConnector[posStr];
+        if (!line) {
+            console.log('[DEBUG] No connector for pos:', posStr);
+            return;
+        }
+        
+        // 获取连线起点（基因结构上的真实位置）
+        var geneX = parseFloat(line.getAttribute('data-gene-x'));
+        var geneY = parseFloat(line.getAttribute('data-gene-y'));
+        
+        // 获取th的实际位置（相对于视口）
+        var thRect = th.getBoundingClientRect();
+        
+        // 计算缩放比例（基于SVG的实际宽度与逻辑宽度的比值）
+        var svgElement = document.querySelector('#gene-structure-svg');
+        var svgLogicalWidth = svgElement.width.baseVal.value;
+        var svgLogicalHeight = svgElement.height.baseVal.value;
+        var scaleFactor = svgRect.width / svgLogicalWidth;
+        
+        // 计算表格列中心相对于SVG的位置（考虑缩放）
+        var tableX = (thRect.left + thRect.width / 2 - svgRect.left) / scaleFactor;
+        var tableY = svgLogicalHeight - 2;  // SVG底部附近
+        
+        console.log('[DEBUG] Connecting pos:', posStr, 'geneX:', geneX, 'tableX:', tableX, 'scaleFactor:', scaleFactor);
+        
+        // 更新连线坐标
+        line.setAttribute('x1', geneX);
+        line.setAttribute('y1', geneY);
+        line.setAttribute('x2', tableX);
+        line.setAttribute('y2', tableY);
+        line.style.display = 'block';
+        connectedCount++;
+    });
+    
+    console.log('[DEBUG] Connected', connectedCount, 'of', visibleThs.length, 'visible columns');
+}
+
+// 页面加载完成后计算连线
+window.addEventListener('load', updateConnectorLines);
+// 窗口大小改变时重新计算
+window.addEventListener('resize', updateConnectorLines);
+
+function applyFilters() {
+    console.log('[DEBUG] ==================== applyFilters START ====================');
+    console.log('[DEBUG] applyFilters called at:', new Date().toISOString());
+    console.log('[DEBUG] currentFilter:', JSON.stringify(currentFilter));
+    
+    // 获取所有选中的annotation类型
+    var checkedTypes = [];
+    document.querySelectorAll('.ann-cb:checked').forEach(function(cb) {
+        checkedTypes.push(cb.value);
+    });
+    console.log('[DEBUG] Checked annotation types:', checkedTypes);
+    
+    // 过滤数据（基于MAF、Missing Rate和Annotation）
+    var filtered = gwasData.filter(function(d) {
+        var mafPass = d.maf >= currentFilter.maf;
+        var missPass = d.missing_rate <= currentFilter.missingRate;
+        var annPass = annAllowed(d);
+        var normAnn = annNorm(d);
+        if (!mafPass || !missPass || !annPass) {
+            console.log('[DEBUG] Filtered OUT pos:', d.pos, 'maf:', d.maf, 'missing:', d.missing_rate, 
+                        'ann:', d.annotation, 'normAnn:', normAnn, 'functional_ann:', d.functional_ann,
+                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass);
+        }
+        return mafPass && missPass && annPass;
+    });
+    console.log('[DEBUG] Filtered data count:', filtered.length, 'of', gwasData.length);
+    
+    drawGWASPlot(filtered);
+    
+    // 构建通过过滤的位置集合
+    var posSet = {};
+    filtered.forEach(function(d){ posSet[d.pos] = true; });
+    console.log('[DEBUG] posSet all keys:', Object.keys(posSet));
+    
+    // 获取所有变异列的位置（从第4列开始，前3列是Haplotype/Effect/Phenotype）
+    var allThs = document.querySelectorAll('.data-table thead th');
+    console.log('[DEBUG] Total th count:', allThs.length);
+    
+    // 打印所有th的内容和索引
+    allThs.forEach(function(th, idx) {
+        var text = th.textContent.trim().substring(0, 30);
+        var display = th.style.display;
+        console.log('[DEBUG] th idx:', idx, 'text:', text, 'display:', display);
+    });
+    
+    var varIndices = [];  // 记录保留的列索引
+    var varPositions = [];  // 记录保留的位置
+    var totalThs = allThs.length;
+    
+    allThs.forEach(function(th, idx) {
+        var thText = th.textContent.trim().substring(0, 30);
+        if (idx >= 3 && idx < totalThs - 1) {  // 跳过前3列和最后一列(n)
+            var posText = th.textContent.trim().replace(/,/g,'');
+            var pos = parseInt(posText);
+            var inPosSet = posSet[pos] !== undefined;
+            console.log('[DEBUG] Checking column idx:', idx, 'text:', thText, 'posText:', posText, 'parsedPos:', pos, 'inPosSet:', inPosSet);
+            // 检查该位置是否通过过滤
+            if (inPosSet) {
+                varIndices.push(idx);
+                varPositions.push(pos);
+                console.log('[DEBUG] >>> KEEPING column idx:', idx, 'pos:', pos);
+            } else {
+                console.log('[DEBUG] --- SKIPPING column idx:', idx, 'pos:', pos, '(not in posSet)');
+            }
+        } else {
+            console.log('[DEBUG] --- SKIPPING column idx:', idx, 'text:', thText, '(fixed column: <3 or last)');
+        }
+    });
+    console.log('[DEBUG] Final varIndices:', varIndices);
+    console.log('[DEBUG] Final varPositions:', varPositions);
+    console.log('[DEBUG] ==================== applyFilters END ====================');
+    
+    // 更新基因结构图上的变异元素（竖线、圆圈、斜线、向上虚线）
+    document.querySelectorAll('.var-line, .var-circle, .var-connector, .var-up-line').forEach(function(el) {
+        var pos = parseInt(el.getAttribute('data-pos'));
+        
+        // 检查是否通过过滤（基于posSet）
+        var passed = posSet[pos] !== undefined;
+        
+        // 设置显示/隐藏
+        el.style.display = passed ? 'block' : 'none';
+        el.style.opacity = passed ? '1' : '0.1';
+    });
+    
+    // 同步更新表格：隐藏被过滤的列，重新排列保留的列
+    updateTableColumns(varIndices, varPositions);
+    
+    // 更新连线（在表格更新完成后，使用requestAnimationFrame确保DOM已更新）
+    requestAnimationFrame(function() {
+        updateConnectorLines();
+    });
+}
+
+// 同步更新表格列：隐藏被过滤的列，重新排列保留的列
+function updateTableColumns(keepIndices, keepPositions) {
+    console.log('[DEBUG] updateTableColumns called with keepIndices:', keepIndices, 'keepPositions:', keepPositions);
+    
+    var table = document.querySelector('.data-table');
+    if (!table) {
+        console.log('[DEBUG] Table not found!');
+        return;
+    }
+    
+    var theadRow = table.querySelector('thead tr');
+    var tbodyRows = table.querySelectorAll('tbody tr');
+    
+    // 获取所有th和td
+    var allThs = Array.from(theadRow.querySelectorAll('th'));
+    console.log('[DEBUG] updateTableColumns: total th count:', allThs.length);
+    
+    // 将keepIndices转换为Set以便快速查找
+    var keepIndicesSet = new Set(keepIndices);
+    console.log('[DEBUG] updateTableColumns: keepIndicesSet:', Array.from(keepIndicesSet));
+    
+    // 处理表头
+    allThs.forEach(function(th, idx) {
+        var text = th.textContent.trim().substring(0, 20);
+        if (idx < 3 || idx >= allThs.length - 1) {
+            // 前3列和最后一列始终显示
+            console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - FIXED, showing');
+            th.style.display = '';
+        } else {
+            // 变异列：根据keepIndicesSet决定是否显示
+            var shouldShow = keepIndicesSet.has(idx);
+            console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - var column, shouldShow:', shouldShow);
+            if (shouldShow) {
+                th.style.display = '';
+            } else {
+                th.style.display = 'none';
+            }
+        }
+    });
+    
+    // 处理数据行
+    tbodyRows.forEach(function(row) {
+        var tds = Array.from(row.querySelectorAll('td'));
+        tds.forEach(function(td, idx) {
+            if (idx < 3 || idx >= tds.length - 1) {
+                // 前3列和最后一列始终显示
+                td.style.display = '';
+            } else {
+                // 变异列：根据keepIndicesSet决定是否显示
+                if (keepIndicesSet.has(idx)) {
+                    td.style.display = '';
+                } else {
+                    td.style.display = 'none';
+                }
+            }
+        });
+    });
+}
+
+// ==================== 单倍型网络图（D3 force simulation） ====================
+function drawNetworkPlot() {
+    var container = document.getElementById('network-viz');
+    if (!container || networkNodes.length === 0) return;
+    var W = container.clientWidth || 800;
+    var H = container.clientHeight || 350;
+    d3.select('#network-viz').selectAll('*').remove();
+
+    var svg = d3.select('#network-viz').append('svg')
+        .attr('width', W).attr('height', H)
+        .style('display','block');
+
+    // 添加clipPath限制显示范围（容器边界固定）
+    svg.append('defs').append('clipPath')
+        .attr('id', 'network-clip')
+        .append('rect')
+        .attr('x', 0).attr('y', 0)
+        .attr('width', W).attr('height', H);
+
+    // 主绘图组 - 应用clipPath
+    var g = svg.append('g').attr('clip-path', 'url(#network-clip)');
+    
+    // 内部缩放组（用于滚轮缩放内部节点）
+    var zoomG = g.append('g').attr('class', 'zoom-group');
+    
+    // 缩放比例状态
+    var currentScale = 1;
+    var minScale = 0.5, maxScale = 2.5;
+    
+    // 滚轮缩放内部节点（容器边界不变）— 使用passive:false确保preventDefault生效
+    svg.node().addEventListener('wheel', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var delta = e.deltaY > 0 ? 0.9 : 1.1;  // 缩放因子
+        var newScale = Math.max(minScale, Math.min(maxScale, currentScale * delta));
+        if (newScale !== currentScale) {
+            currentScale = newScale;
+            // 以容器中心为基准缩放
+            zoomG.attr('transform', 'translate('+W/2+','+H/2+') scale('+currentScale+') translate('+-W/2+','+-H/2+')');
+        }
+    }, {passive: false});
+
+    // 深拷贝节点
+    var nodes = networkNodes.map(function(d) { return Object.assign({}, d); });
+    var nodeById = {};
+    nodes.forEach(function(d) { nodeById[d.id] = d; });
+
+    // 构建连线
+    var links = networkEdges
+        .filter(function(e) { return nodeById[e.source] && nodeById[e.target]; })
+        .map(function(e) { return { source: nodeById[e.source], target: nodeById[e.target], distance: e.distance || 1 }; });
+
+    // 若没有边，尝试按序列连接相邻节点
+    if (links.length === 0 && nodes.length > 1) {
+        for (var i = 0; i < nodes.length - 1; i++) {
+            links.push({ source: nodes[i], target: nodes[i+1], distance: 1 });
+        }
+    }
+
+    // 力导向模拟 - 优化参数使节点分布更清晰，拓扑关系更明显
+    var sim = d3.forceSimulation(nodes)
+        .force('link',      d3.forceLink(links).distance(function(d) { return Math.min(150, 60 + d.distance * 20); }).strength(0.6))
+        .force('charge',    d3.forceManyBody().strength(-350))
+        .force('center',    d3.forceCenter(W / 2, H / 2).strength(0.03))
+        .force('collision', d3.forceCollide().radius(function(d) { return d.size * 0.5 + 8; }))
+        .force('x', d3.forceX(W / 2).strength(0.02))
+        .force('y', d3.forceY(H / 2).strength(0.02));
+
+    var linkSel = zoomG.append('g').selectAll('line').data(links).join('line')
+        .attr('stroke', '#99aabb').attr('stroke-opacity', 0.75)
+        .attr('stroke-width', function(d) { return Math.max(1.5, 4 - d.distance * 0.3); });
+
+    // 连线标签：显示两两之间的SNP差异数量
+    var linkLabelSel = zoomG.append('g').selectAll('text').data(links).join('text')
+        .attr('font-size','9px').attr('fill','#2c3e50').attr('text-anchor','middle')
+        .attr('font-weight', '600')
+        .text(function(d) { return 'SNP=' + d.distance; });
+
+    var nodeG = zoomG.append('g').selectAll('g').data(nodes).join('g')
+        .style('cursor','pointer')
+        .call(d3.drag()
+            .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+            .on('drag',  function(e,d) {
+                // 限制拖拽范围在容器内
+                var r = d.size * 0.5 + 5;
+                d.fx = Math.max(r, Math.min(W - r, e.x));
+                d.fy = Math.max(r, Math.min(H - r, e.y));
+            })
+            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+        );
+
+    nodeG.append('circle')
+        .attr('r',      function(d) { return d.size * 0.5; })
+        .attr('fill',   function(d) { return d.color; })
+        .attr('stroke', '#fff').attr('stroke-width', 2.5);
+
+    // 节点内部显示样本数量（n=count）
+    nodeG.append('text')
+        .attr('text-anchor','middle').attr('dy', function(d) { return -d.size * 0.15; })
+        .attr('font-size', function(d) { return Math.min(13, Math.max(8, d.size * 0.3)) + 'px'; })
+        .attr('fill','#fff').attr('font-weight','bold').attr('pointer-events','none')
+        .text(function(d) { return 'n=' + d.count; });
+
+    // 节点内部显示单倍型ID
+    nodeG.append('text')
+        .attr('text-anchor','middle').attr('dy', function(d) { return d.size * 0.2; })
+        .attr('font-size', function(d) { return Math.min(10, Math.max(6, d.size * 0.22)) + 'px'; })
+        .attr('fill','#fff').attr('font-weight','bold').attr('pointer-events','none')
+        .text(function(d) { return d.id.replace('Hap','H'); });
+
+    // 添加颜色图例（表型高低）- 美观设计，放在左上角
+    var legendG = svg.append('g').attr('class', 'pheno-legend')
+        .attr('transform', 'translate(15, 15)');
+    // 背景框
+    legendG.append('rect').attr('x', -5).attr('y', -5)
+        .attr('width', 50).attr('height', 75)
+        .attr('fill', 'rgba(255,255,255,0.9)').attr('rx', 4)
+        .attr('stroke', '#ddd').attr('stroke-width', 0.5);
+    // 渐变条 - 使用更美观的配色（蓝到红的渐变）
+    var gradId = 'pheno-grad-' + Math.random().toString(36).substr(2, 9);
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient').attr('id', gradId)
+        .attr('x1', '0%').attr('y1', '100%').attr('x2', '0%').attr('y2', '0%');
+    grad.append('stop').attr('offset', '0%').attr('stop-color', '#3498db');  // 蓝色-低
+    grad.append('stop').attr('offset', '50%').attr('stop-color', '#9b59b6'); // 紫色-中
+    grad.append('stop').attr('offset', '100%').attr('stop-color', '#e74c3c'); // 红色-高
+    legendG.append('rect').attr('width', 10).attr('height', 50).attr('x', 5).attr('y', 12)
+        .attr('fill', 'url(#' + gradId + ')').attr('rx', 2);
+    // 标题
+    legendG.append('text').attr('x', 5).attr('y', 8)
+        .attr('font-size', '9px').attr('fill', '#2c3e50').attr('font-weight', 'bold')
+        .text('Pheno');
+    // 标签
+    legendG.append('text').attr('x', 20).attr('y', 22)
+        .attr('font-size', '8px').attr('fill', '#e74c3c').attr('font-weight', '600')
+        .text('High');
+    legendG.append('text').attr('x', 20).attr('y', 60)
+        .attr('font-size', '8px').attr('fill', '#3498db').attr('font-weight', '600')
+        .text('Low');
+
+    var tip = document.getElementById('d3-tooltip');
+    nodeG.on('mouseover', function(e,d) {
+        d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
+        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean;
+        tip.style.display = 'block';
+    }).on('mousemove', function(e) {
+        tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY-10)+'px';
+    }).on('mouseout', function(e) {
+        d3.select(this).select('circle').attr('stroke','#fff').attr('stroke-width',2.5);
+        tip.style.display = 'none';
+    });
+
+    sim.on('tick', function() {
+        linkSel
+            .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
+            .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
+        linkLabelSel
+            .attr('x', function(d) { return (d.source.x + d.target.x)/2; })
+            .attr('y', function(d) { return (d.source.y + d.target.y)/2 - 3; });
+        nodeG.attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; });
+    });
+}
+
+// ==================== GWAS -log10(P) 散点图（仅P值图，基因结构在下方SVG中） ====================
+function drawGWASPlot(data) {
+    var container = document.getElementById('gwas-gene-viz');
+    if (!container) return;
+    // GWAS图SVG宽度与基因结构图总宽度相同
+    // 基因结构图: svg_width = 450 + gene_area_width + 100
+    // GWAS图使用相同的总宽度，但绘图区域从gene_area_start(450)开始
+    var W = svgTotalWidth || (container.clientWidth || 680);
+    var H = 180;  // 减小高度，只显示P值图
+    // 左边距 = gene_area_start = 450，与基因结构图的基因区域起始对齐
+    var ml = gwasLeftMargin || 54;
+    var mr = 98, mt = 26, mb = 34;
+    var iW = W - ml - mr, iH = H - mt - mb;
+
+    // 动态计算当前数据中的lead variant（P值最小）
+    var currentLeadPos = null;
+    if (data.length > 0) {
+        var leadVariant = data.reduce(function(min, d) {
+            return d.pvalue < min.pvalue ? d : min;
+        });
+        currentLeadPos = leadVariant.pos;
+    }
+    console.log('[DEBUG] drawGWASPlot currentLeadPos:', currentLeadPos);
+
+    d3.select('#gwas-gene-viz').selectAll('*').remove();
+
+    var svg = d3.select('#gwas-gene-viz').append('svg')
+        .attr('width', W).attr('height', H).style('display','block').style('overflow','visible');
+    var g = svg.append('g').attr('transform','translate('+ml+','+mt+')');
+
+    var xSc = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, iW]);
+
+    // 只使用全部高度显示P值图
+    var gwasH = iH;
+
+    var maxLogP = data.length > 0 ? Math.max(1.4, d3.max(data, function(d){ return d.logp; })) : 1.4;
+    var ySc = d3.scaleLinear().domain([0, maxLogP * 1.1]).range([gwasH, 0]);
+
+    // 颜色映射：根据r²（与lead variant的连锁不平衡）设置颜色
+    var colorR2 = d3.scaleSequential(function(t) { 
+        // t=0 (低r²) -> 蓝色, t=1 (高r²) -> 红色
+        return d3.interpolateRdBu(1 - t); 
+    }).domain([0, 1]);
+
+    // 显著性阈值线（p=0.05和p=0.01）用更醒目的样式
+    var sigY05 = ySc(-Math.log10(0.05));
+    if (sigY05 > 0 && sigY05 < gwasH) {
+        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY05).attr('y2', sigY05)
+            .attr('stroke', '#e74c3c').attr('stroke-width', 2).attr('stroke-dasharray', '6,4')
+            .attr('opacity', 0.9);
+        g.append('text').attr('x', iW - 4).attr('y', sigY05 - 5).attr('text-anchor', 'end')
+            .attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', '#e74c3c').text('p=0.05');
+    }
+    var sigY01 = ySc(-Math.log10(0.01));
+    if (sigY01 > 0 && sigY01 < gwasH) {
+        g.append('line').attr('x1', 0).attr('x2', iW).attr('y1', sigY01).attr('y2', sigY01)
+            .attr('stroke', '#c0392b').attr('stroke-width', 2.5).attr('stroke-dasharray', '8,4')
+            .attr('opacity', 0.95);
+        g.append('text').attr('x', iW - 4).attr('y', sigY01 - 5).attr('text-anchor', 'end')
+            .attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', '#c0392b').text('p=0.01');
+    }
+
+    // Lead Variant标记（加粗红色竖线+标签）- 使用当前过滤后的lead
+    if (currentLeadPos != null && !isNaN(+currentLeadPos)) {
+        var leadX = xSc(+currentLeadPos);
+        // 背景高亮条
+        g.append('rect')
+            .attr('x', leadX - 8).attr('y', -5)
+            .attr('width', 16).attr('height', gwasH + 10)
+            .attr('fill', '#ffebee').attr('opacity', 0.4).attr('pointer-events', 'none');
+        // 红色虚线
+        g.append('line')
+            .attr('x1', leadX).attr('x2', leadX)
+            .attr('y1', -5).attr('y2', gwasH + 5)
+            .attr('stroke', '#c0392b').attr('stroke-width', 3)
+            .attr('stroke-dasharray', '4,3')
+            .attr('opacity', 1).attr('pointer-events', 'none');
+        // 顶部标签
+        g.append('text')
+            .attr('x', leadX).attr('y', -12)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '11px').attr('font-weight', 'bold').attr('fill', '#c0392b')
+            .text('Lead: ' + (+currentLeadPos).toLocaleString());
+    }
+
+    var symTypes = { SNP: d3.symbolCircle, indel: d3.symbolSquare, SV: d3.symbolTriangle };
+    var symSize = { SNP: 38, indel: 42, SV: 46 };
+
+    var tip = document.getElementById('d3-tooltip');
+    g.append('g').attr('class', 'gwas-scatter-layer').selectAll('path.gwas-pt')
+        .data(data).join('path').attr('class', 'gwas-pt')
+        .attr('d', function(d) {
+            var isLead = (currentLeadPos != null && +d.pos === +currentLeadPos);
+            var vt = (d.vtype || 'SNP');
+            var ty = isLead ? d3.symbolDiamond : (symTypes[vt] || d3.symbolCircle);
+            var sz = isLead ? 88 : (symSize[vt] || 38);
+            return d3.symbol().type(ty).size(sz)();
+        })
+        .attr('transform', function(d) {
+            return 'translate(' + xSc(d.pos) + ',' + ySc(d.logp) + ')';
+        })
+        .attr('fill', function(d) {
+            if (currentLeadPos != null && +d.pos === +currentLeadPos) return '#c0392b';
+            // 根据r²（与lead variant的连锁不平衡）设置颜色
+            var r = (d.r2 !== undefined && d.r2 !== null) ? +d.r2 : 0;
+            return colorR2(Math.max(0, Math.min(1, r)));
+        })
+        .attr('stroke', '#fff').attr('stroke-width', 0.65)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(e, d) {
+            d3.select(this).attr('stroke', '#2c3e50').attr('stroke-width', 1.3);
+            tip.innerHTML = '<b>Pos: ' + d.pos.toLocaleString() + '</b><br/>'
+                + 'P = ' + d.pvalue.toExponential(2) + '<br/>'
+                + '-log<sub>10</sub>(P) = ' + d.logp.toFixed(2) + '<br/>'
+                + 'Beta = ' + (d.beta != null ? (+d.beta).toFixed(3) : 'NA') + '<br/>'
+                + 'r<sup>2</sup> to lead = ' + (d.r2 != null ? (+d.r2).toFixed(3) : 'NA') + '<br/>'
+                + 'Type: ' + (d.vtype || 'SNP') + ' &nbsp;|&nbsp; ' + (d.annotation || '');
+            tip.style.display = 'block';
+        })
+        .on('mousemove', function(e) {
+            tip.style.left = (e.clientX + 14) + 'px';
+            tip.style.top = (e.clientY - 10) + 'px';
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('stroke', '#fff').attr('stroke-width', 0.65);
+            tip.style.display = 'none';
+        });
+
+    g.append('g').call(d3.axisLeft(ySc).ticks(6).tickFormat(function(d) { return d.toFixed(1); }))
+        .selectAll('text').attr('font-size', '9px');
+    g.append('text').attr('transform', 'rotate(-90)').attr('y', -40).attr('x', -gwasH / 2)
+        .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
+        .text('-log10(P)');
+
+    g.append('g').attr('transform', 'translate(0,' + iH + ')')
+        .call(d3.axisBottom(xSc).ticks(6).tickFormat(function(d) { return (d / 1e6).toFixed(3) + ' Mb'; }))
+        .selectAll('text').attr('font-size', '9px').attr('transform', 'rotate(-18)').attr('text-anchor', 'end');
+
+    // 在GWAS图底部画竖虚线，与下方基因结构图的变异位置对齐，并向上延伸到散点
+    // 由于GWAS图和基因结构图使用相同的x坐标系，只需画竖线即可
+    g.append('g').attr('class', 'gwas-vertical-lines')
+        .selectAll('line')
+        .data(data)
+        .join('line')
+        .attr('x1', function(d) { return xSc(d.pos); })
+        .attr('y1', iH+50)  // 从GWAS图底部开始
+        .attr('x2', function(d) { return xSc(d.pos); })
+        .attr('y2', function(d) { return ySc(d.logp); }) // 向上延伸到散点位置
+        .attr('stroke', '#999')
+        .attr('stroke-width', 0.8)
+        .attr('stroke-dasharray', '4,2')
+        .attr('opacity', 0.5);
+
+    var leg = g.append('g').attr('transform', 'translate(' + (iW + 6) + ',0)');
+    leg.append('text').attr('x', 0).attr('y', -2).attr('font-size', '9px').attr('fill', '#333').text('r\u00b2 to lead');
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient').attr('id', 'r2-grad-int').attr('x1', '0%').attr('x2', '100%');
+    grad.append('stop').attr('offset', '0%').attr('stop-color', d3.interpolateRdBu(1));
+    grad.append('stop').attr('offset', '100%').attr('stop-color', d3.interpolateRdBu(0));
+    leg.append('rect').attr('x', 0).attr('y', 4).attr('width', 72).attr('height', 10).attr('fill', 'url(#r2-grad-int)').attr('rx', 2);
+    leg.append('text').attr('x', 0).attr('y', 22).attr('font-size', '7px').attr('fill', '#666').text('0');
+    leg.append('text').attr('x', 72).attr('y', 22).attr('font-size', '7px').attr('fill', '#666').attr('text-anchor', 'end').text('1');
+
+    var ly = 34;
+    [['SNP', d3.symbolCircle], ['InDel', d3.symbolSquare], ['SV', d3.symbolTriangle]].forEach(function(item, i) {
+        leg.append('path')
+            .attr('d', d3.symbol().type(item[1]).size(36)())
+            .attr('transform', 'translate(8,' + (ly + i * 16) + ')')
+            .attr('fill', '#555').attr('stroke', '#fff').attr('stroke-width', 0.5);
+        leg.append('text').attr('x', 18).attr('y', ly + i * 16 + 4).attr('font-size', '8px').attr('fill', '#444').text(item[0]);
+    });
+}
+
+function exportSVG() {
+    var content = document.getElementById('zoomContent');
+    var svgElements = content.querySelectorAll('svg');
+    if (svgElements.length === 0) { alert('No SVG'); return; }
+    var svgNS = "http://www.w3.org/2000/svg";
+    var combinedSVG = document.createElementNS(svgNS, "svg");
+    var totalWidth = 0, totalHeight = 0;
+    for (var i = 0; i < svgElements.length; i++) {
+        var rect = svgElements[i].getBoundingClientRect();
+        totalWidth = Math.max(totalWidth, rect.width);
+        totalHeight += rect.height + 20;
+    }
+    combinedSVG.setAttribute("width", totalWidth);
+    combinedSVG.setAttribute("height", totalHeight);
+    combinedSVG.setAttribute("xmlns", svgNS);
+    var bg = document.createElementNS(svgNS, "rect");
+    bg.setAttribute("width", "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("fill", "white");
+    combinedSVG.appendChild(bg);
+    var currentY = 0;
+    for (var j = 0; j < svgElements.length; j++) {
+        var rect = svgElements[j].getBoundingClientRect();
+        var clonedSVG = svgElements[j].cloneNode(true);
+        var g = document.createElementNS(svgNS, "g");
+        g.setAttribute("transform", "translate(0," + currentY + ")");
+        while (clonedSVG.firstChild) {
+            g.appendChild(clonedSVG.firstChild);
+        }
+        combinedSVG.appendChild(g);
+        currentY += rect.height + 20;
+    }
+    var serializer = new XMLSerializer();
+    var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
+    var blob = new Blob([svgString], {type: "image/svg+xml"});
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "haplotype_analysis.svg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// ==================== 页面初始化 ====================
+document.addEventListener('DOMContentLoaded', function() {
+    drawNetworkPlot();
+    drawGWASPlot(gwasData);
+    // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
+    applyFilters();
+    // 初始化LD倒三角图
+    setTimeout(function() { drawLDTriangle(); }, 300);
+});
+
+// ==================== LD 倒三角图绘制（Canvas实现）====================
+// 设计原则：
+// 1. 列数与序列表格的变异列一一对应（通过getBoundingClientRect读取实際列中心x）
+// 2. 倒三角形：上边为对角线，每个菱形格子对应两个位点i,j的r²
+// 3. 取色：白色（r²=0）到深红（r²=1）
+function r2ToColor(r2) {
+    // 使用经典LD配色：白->黄->橙->红
+    r2 = Math.max(0, Math.min(1, r2));
+    var colors = [
+        [255, 255, 255],  // 0.0 白色
+        [255, 255, 204],  // 0.25 淡黄
+        [253, 204, 92],   // 0.5 黄色
+        [240, 59, 32],    // 0.75 橙红
+        [189, 0, 38],     // 1.0 深红
+    ];
+    var idx = r2 * (colors.length - 1);
+    var lo = Math.floor(idx);
+    var hi = Math.min(lo + 1, colors.length - 1);
+    var t = idx - lo;
+    var r = Math.round(colors[lo][0] + t * (colors[hi][0] - colors[lo][0]));
+    var g = Math.round(colors[lo][1] + t * (colors[hi][1] - colors[lo][1]));
+    var b = Math.round(colors[lo][2] + t * (colors[hi][2] - colors[lo][2]));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+function drawLDTriangle() {
+    var canvas = document.getElementById('ld-triangle-canvas');
+    if (!canvas) { console.log('[LD] canvas not found'); return; }
+    
+    var matrix = ldR2Matrix;
+    if (!matrix || matrix.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        console.log('[LD] no LD data, hiding');
+        return;
+    }
+    var n = matrix.length;
+    
+    // 获取表格中所有可见变异列的实际屏幕坐标
+    var table = document.querySelector('.data-table');
+    if (!table) { console.log('[LD] table not found'); return; }
+    var allThs = Array.from(table.querySelectorAll('thead th'));
+    var visibleVarThs = allThs.filter(function(th, idx) {
+        return idx >= 3 && idx < allThs.length - 1 && th.style.display !== 'none';
+    });
+    
+    if (visibleVarThs.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }
+    
+    // 计算每列的屏幕x坐标（列中心）
+    // 同时需要定位到ldR2Matrix中对应的索引
+    // 每个th的文本是坐标値，与displayPositions对应
+    var colInfos = [];  // {screenX, matIdx}
+    var canvasEl = canvas;
+    var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
+        
+    visibleVarThs.forEach(function(th) {
+        var thRect = th.getBoundingClientRect();
+        var centerX = thRect.left + thRect.width / 2 - wrapRect.left;
+        // 求该列在displayPositions中的索引
+        var posText = th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
+        var posVal = parseInt(posText);
+        var matIdx = -1;
+        for (var pi = 0; pi < displayPositions.length; pi++) {
+            if (displayPositions[pi] === posVal) { matIdx = pi; break; }
+        }
+        if (matIdx >= 0) {
+            colInfos.push({ screenX: centerX, matIdx: matIdx });
+        }
+    });
+    
+    if (colInfos.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }
+    
+    // 计算canvas尺寸
+    // 倒三角形高度 = 列数 * 半个格子宽
+    // 注意: 此时还未设置canvas内部坐标，先用screenX估算格子宽度
+    var cellW = colInfos.length > 1 ? 
+        (colInfos[colInfos.length-1].screenX - colInfos[0].screenX) / (colInfos.length - 1) : 20;
+    cellW = Math.max(cellW, 10);
+    var halfCell = cellW / 2;
+    
+    // 倒三角的深度 = (n-1) * halfCell，其中n为可见列数
+    var nc = colInfos.length;
+    var triDepth = (nc - 1) * halfCell;
+    var paddingTop = 8;
+    var paddingBottom = 20;  // 为坐标标签留空间
+    var canvasH = Math.ceil(triDepth + paddingTop + paddingBottom);
+    
+    // canvas宽度连接到wrapper的整体宽度
+    var tableRect = table.getBoundingClientRect();
+    var wrapLeft = wrapRect.left;
+    var canvasW = Math.ceil(tableRect.right - wrapLeft + 60);  // 稍微宽一点
+    
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    canvas.style.width = canvasW + 'px';
+    canvas.style.height = canvasH + 'px';
+    
+    // 计算canvas显示尺寸与内部坐标尺寸的比例（居中风格缩放时需要）
+    // 先应用canvas然后再读尺寸
+    var canvasDisplayRect = canvas.getBoundingClientRect();
+    // 屏幕坐标到canvas内部坐标的比例
+    var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
+    
+    // 将所有colInfos的screenX转换为canvas内部坐标
+    for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
+        colInfos[ci2].canvasX = colInfos[ci2].screenX * canvasScaleX;
+    }
+    
+    // 用canvas内部坐标重新计算格子宽
+    if (colInfos.length > 1) {
+        halfCell = (colInfos[colInfos.length-1].canvasX - colInfos[0].canvasX) / (colInfos.length - 1) / 2;
+        halfCell = Math.max(halfCell, 5);
+    }
+    
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    
+    // 绘制倒三角形内的菱形格子
+    // 菱形处于第i列和j列之间，其中i<j
+    // 菱形中心x = (colInfos[i].screenX + colInfos[j].screenX) / 2
+    // 菱形中心y = paddingTop + (j - i) * halfCell / 2 + ... 实际必须计算
+    // 倒三角坐标系：对角线为最上方，向下展开
+    // 菱形(i,j)的中心坐标：
+    //   cx = (xi + xj) / 2
+    //   cy = paddingTop + (j - i) * halfCell - halfCell/2  (distance from top)
+    //   实际：第一行（j-i=1）的菱形cy = paddingTop + halfCell/2
+    //   第二行（j-i=2）的菱形cy = paddingTop + halfCell*3/2
+    //   ...
+    //   cy = paddingTop + (j-i-1)*halfCell + halfCell/2 = paddingTop + (j-i-0.5)*halfCell
+    
+    for (var i = 0; i < nc; i++) {
+        for (var j = i + 1; j < nc; j++) {
+            var mi = colInfos[i].matIdx;
+            var mj = colInfos[j].matIdx;
+            var r2val = (mi >= 0 && mj >= 0 && matrix[mi] && matrix[mi][mj] !== undefined) 
+                        ? matrix[mi][mj] : 0;
+            
+            var cx = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+            var depth = (j - i);  // 第几行
+            var cy = paddingTop + (depth - 0.5) * halfCell;
+            
+            // 菱形半宽 = (j-i) * halfCell / 2，半高 = (j-i) * halfCell / 2 * tan(45°) 
+            // 等边菱形：对角长 = cellW * (j-i)，45°倒置
+            var hw = (j - i) * halfCell;  // 菱形左右对角到中心的距离
+            var hh = hw;  // 等边菱形上下对角到中心的距离
+            
+            ctx.beginPath();
+            ctx.moveTo(cx,      cy - hh);  // 上顶点
+            ctx.lineTo(cx + hw, cy);       // 右顶点
+            ctx.lineTo(cx,      cy + hh);  // 下顶点
+            ctx.lineTo(cx - hw, cy);       // 左顶点
+            ctx.closePath();
+            ctx.fillStyle = r2ToColor(r2val);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(180,180,180,0.4)';
+            ctx.lineWidth = 0.4;
+            ctx.stroke();
+            
+            // 如果r²较高且格子足够大，显示数字
+            if (hw >= 10 && r2val > 0.05) {
+                var label = r2val >= 0.995 ? '1' : r2val.toFixed(2).replace('0.', '.');
+                ctx.fillStyle = r2val > 0.6 ? 'white' : '#333';
+                var fontSize = Math.min(hw * 0.5, 9);
+                if (fontSize >= 6) {
+                    ctx.font = 'bold ' + fontSize + 'px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(label, cx, cy);
+                }
+            }
+        }
+    }
+    
+    // 底部轴标直线（与displayPositions对齐）
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 1;
+    for (var k = 0; k < colInfos.length; k++) {
+        var tx = colInfos[k].canvasX;
+        ctx.beginPath();
+        ctx.moveTo(tx, paddingTop + (nc - 1) * halfCell);
+        ctx.lineTo(tx, paddingTop + (nc - 1) * halfCell + 4);
+        ctx.stroke();
+    }
+    
+    // 鼠标悬停显示r²数字
+    canvas.onmousemove = function(e) {
+        var rect = canvas.getBoundingClientRect();
+        // 将鼠标屏幕坐标转化为canvas内部坐标
+        var scaleX2 = canvas.width / (rect.width || canvas.width);
+        var scaleY2 = canvas.height / (rect.height || canvas.height);
+        var mx = (e.clientX - rect.left) * scaleX2;
+        var my = (e.clientY - rect.top) * scaleY2;
+        var info = '';
+        for (var i = 0; i < nc; i++) {
+            for (var j = i + 1; j < nc; j++) {
+                var cx2 = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+                var depth2 = j - i;
+                var cy2 = paddingTop + (depth2 - 0.5) * halfCell;
+                var hw2 = depth2 * halfCell;
+                var hh2 = hw2;
+                var dx = mx - cx2;
+                var dy = my - cy2;
+                if (Math.abs(dx) + Math.abs(dy) <= hw2) {
+                    var mi2 = colInfos[i].matIdx;
+                    var mj2 = colInfos[j].matIdx;
+                    var r2v = (matrix[mi2] && matrix[mi2][mj2] !== undefined) ? matrix[mi2][mj2] : 0;
+                    var p1 = displayPositions[mi2] ? displayPositions[mi2].toLocaleString() : '?';
+                    var p2 = displayPositions[mj2] ? displayPositions[mj2].toLocaleString() : '?';
+                    info = 'r²(' + p1 + ', ' + p2 + ') = ' + r2v.toFixed(3);
+                    break;
+                }
+            }
+            if (info) break;
+        }
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = info;
+    };
+    canvas.onmouseleave = function() {
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = '';
+    };
+    
+    console.log('[LD] LD倒三角图绘制完成: ' + nc + '个列, 菱形数=' + nc*(nc-1)/2);
+}
+
+// 过滤更新时重绘LD图
+var _origApplyFilters = applyFilters;
+applyFilters = function() {
+    _origApplyFilters();
+    requestAnimationFrame(function() { drawLDTriangle(); });
+};
+</script>
+</body>
+</html>

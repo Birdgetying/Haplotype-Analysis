@@ -28,7 +28,7 @@
 <div class="container">
     <div class="header">
         <h1>P-value Heatmap Overlay</h1>
-        <p>Region: chr6H:9,440,142 - 9,445,419 | Gene: 9,440,142 - 9,443,419 | Variants: 50</p>
+        <p>Region: chr6H:9,440,142 - 9,448,419 | Gene: 9,440,142 - 9,448,419 | Variants: 50</p>
     </div>
     
     <div id="heatmap"></div>
@@ -46,11 +46,11 @@
 <div class="tooltip" id="tooltip" style="display:none;"></div>
 
 <script>
-const data = [{"pos": 9440194, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9440343, "pvalue": 0.007240451318380291, "logp": 2.1402343621214674, "significant": true}, {"pos": 9440458, "pvalue": 6.855348527942395e-05, "logp": 4.163970460653547, "significant": true}, {"pos": 9440500, "pvalue": 0.0004422419387717678, "logp": 3.3543400747073204, "significant": true}, {"pos": 9440746, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9440986, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9440989, "pvalue": 0.10431736753864583, "logp": 0.9816433809475175, "significant": false}, {"pos": 9441144, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9441224, "pvalue": 0.4054818134255036, "logp": 0.392028619889503, "significant": false}, {"pos": 9441417, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9441755, "pvalue": 0.0025043150773955813, "logp": 2.601311031785106, "significant": true}, {"pos": 9441789, "pvalue": 1.6884273595321652e-06, "logp": 5.772517619087177, "significant": true}, {"pos": 9441975, "pvalue": 0.40230841548692775, "logp": 0.3954408827622971, "significant": false}, {"pos": 9442296, "pvalue": 0.0070519017343677465, "logp": 2.151693748062901, "significant": true}, {"pos": 9442740, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9442816, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9442942, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443005, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443047, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443053, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443152, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443227, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443239, "pvalue": 0.0698721248266542, "logp": 1.1556960495543087, "significant": false}, {"pos": 9443331, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443491, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443540, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443555, "pvalue": 0.011506787023620752, "logp": 1.9390459250848637, "significant": true}, {"pos": 9443578, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443584, "pvalue": 0.9896261601669999, "logp": 0.0045288329161134394, "significant": false}, {"pos": 9443607, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443665, "pvalue": 0.009111363369774273, "logp": 2.040416632942687, "significant": true}, {"pos": 9443760, "pvalue": 0.00017051718473777588, "logp": 3.7682318462274744, "significant": true}, {"pos": 9444571, "pvalue": 0.4450462551845922, "logp": 0.35159484895734944, "significant": false}, {"pos": 9444587, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444662, "pvalue": 0.4450462551845922, "logp": 0.35159484895734944, "significant": false}, {"pos": 9444688, "pvalue": 0.784914856235714, "logp": 0.10517745086301966, "significant": false}, {"pos": 9444737, "pvalue": 0.1500522836793615, "logp": 0.8237573905637007, "significant": false}, {"pos": 9444752, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444773, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444903, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444958, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445005, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445068, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445114, "pvalue": 0.9824690247199861, "logp": 0.007681133171616325, "significant": false}, {"pos": 9445140, "pvalue": 0.49612992852316107, "logp": 0.3044045738095848, "significant": false}, {"pos": 9445172, "pvalue": 0.5117073447778211, "logp": 0.29097834934880107, "significant": false}, {"pos": 9445385, "pvalue": 0.18513561739863255, "logp": 0.7325100212706557, "significant": false}, {"pos": 9445393, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445401, "pvalue": 0.7916394543782765, "logp": 0.10147256920063916, "significant": false}, {"pos": 9445419, "pvalue": 1.0, "logp": -0.0, "significant": false}];
+const data = [{"pos": 9440194, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9440343, "pvalue": 0.00724045131838029, "logp": 2.1402343621214674, "significant": true}, {"pos": 9440458, "pvalue": 6.855348527942395e-05, "logp": 4.163970460653547, "significant": true}, {"pos": 9440500, "pvalue": 0.00044224193877176763, "logp": 3.354340074707321, "significant": true}, {"pos": 9440746, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9440986, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9440989, "pvalue": 0.10431736753864586, "logp": 0.9816433809475174, "significant": false}, {"pos": 9441144, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9441224, "pvalue": 0.4054818134255036, "logp": 0.392028619889503, "significant": false}, {"pos": 9441417, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9441755, "pvalue": 0.0025043150773955813, "logp": 2.601311031785106, "significant": true}, {"pos": 9441789, "pvalue": 1.6884273595321652e-06, "logp": 5.772517619087177, "significant": true}, {"pos": 9441975, "pvalue": 0.40230841548692775, "logp": 0.3954408827622971, "significant": false}, {"pos": 9442296, "pvalue": 0.0070519017343677465, "logp": 2.151693748062901, "significant": true}, {"pos": 9442740, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9442816, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9442942, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443005, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443047, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443053, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443152, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443227, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443239, "pvalue": 0.0698721248266542, "logp": 1.1556960495543087, "significant": false}, {"pos": 9443331, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443491, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443540, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443555, "pvalue": 0.011506787023620752, "logp": 1.9390459250848637, "significant": true}, {"pos": 9443578, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443584, "pvalue": 0.9896261601669999, "logp": 0.0045288329161134394, "significant": false}, {"pos": 9443607, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9443665, "pvalue": 0.009111363369774273, "logp": 2.040416632942687, "significant": true}, {"pos": 9443760, "pvalue": 0.00017051718473777588, "logp": 3.7682318462274744, "significant": true}, {"pos": 9444571, "pvalue": 0.4450462551845922, "logp": 0.35159484895734944, "significant": false}, {"pos": 9444587, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444662, "pvalue": 0.4450462551845922, "logp": 0.35159484895734944, "significant": false}, {"pos": 9444688, "pvalue": 0.784914856235714, "logp": 0.10517745086301966, "significant": false}, {"pos": 9444737, "pvalue": 0.1500522836793615, "logp": 0.8237573905637007, "significant": false}, {"pos": 9444752, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444773, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444903, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9444958, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445005, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445068, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445114, "pvalue": 0.9824690247199861, "logp": 0.007681133171616325, "significant": false}, {"pos": 9445140, "pvalue": 0.49612992852316107, "logp": 0.3044045738095848, "significant": false}, {"pos": 9445172, "pvalue": 0.5117073447778211, "logp": 0.29097834934880107, "significant": false}, {"pos": 9445385, "pvalue": 0.18513561739863255, "logp": 0.7325100212706557, "significant": false}, {"pos": 9445393, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 9445401, "pvalue": 0.7916394543782765, "logp": 0.10147256920063916, "significant": false}, {"pos": 9445419, "pvalue": 1.0, "logp": -0.0, "significant": false}];
 const regionStart = 9440142;
-const regionEnd = 9445419;
+const regionEnd = 9448419;
 const geneStart = 9440142;
-const geneEnd = 9443419;
+const geneEnd = 9448419;
 
 const margin = {top: 50, right: 30, bottom: 50, left: 60};
 const container = document.getElementById('heatmap');
@@ -99,24 +99,20 @@ svg.append('rect')
     .attr('height', geneH)
     .attr('rx', 3);
 
-// 启动子区域（基因5'端上游）- **根据实际扩展情况绘制**
-if (hasPromoter) {
-    // 从 gene_info.json 中读取实际启动子长度
-    var promoterActualLength = 2000;
-    var promoterEnd = geneStart;
-    var promoterStart = Math.max(regionStart, geneStart - promoterActualLength);
-    if (promoterStart < promoterEnd) {
-        svg.append('rect')
-            .attr('class', 'promoter-region')
-            .attr('x', xScale(promoterStart))
-            .attr('y', geneY - geneH/2)
-            .attr('width', xScale(promoterEnd) - xScale(promoterStart))
-            .attr('height', geneH)
-            .attr('rx', 2)
-            .attr('stroke', '#e67e22')
-            .attr('stroke-width', 1)
-            .attr('stroke-dasharray', '3,2');
-    }
+// 启动子区域（基因5'端上游2kb）
+const promoterEnd = geneStart;
+const promoterStart = Math.max(regionStart, geneStart - 2000);
+if (promoterStart < promoterEnd) {
+    svg.append('rect')
+        .attr('class', 'promoter-region')
+        .attr('x', xScale(promoterStart))
+        .attr('y', geneY - geneH/2)
+        .attr('width', xScale(promoterEnd) - xScale(promoterStart))
+        .attr('height', geneH)
+        .attr('rx', 2)
+        .attr('stroke', '#e67e22')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '3,2');
 }
 
 // 坐标轴
