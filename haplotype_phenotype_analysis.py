@@ -5446,7 +5446,8 @@ class ReportGenerator:
                             cov_box_data[h] = {
                                 'mean': np.mean(values), 'median': np.median(values),
                                 'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
-                                'min': min(values), 'max': max(values), 'n': len(values)
+                                'min': min(values), 'max': max(values), 'n': len(values),
+                                'values': values
                             }
                 
                 # 计算全局范围
@@ -5467,10 +5468,20 @@ class ReportGenerator:
                     cov_b_width = ((cov_bd['q3'] - cov_bd['q1']) / cov_global_range) * 100
                     cov_m_pos = ((cov_bd['median'] - cov_global_min) / cov_global_range) * 100
                     
+                    # 数据点（随机竖向抖动）
+                    import random
+                    random.seed(hash(hap + cov_col) % 9999)
+                    cov_dots_html = ''
+                    for val in cov_bd.get('values', []):
+                        cov_x_pct = ((val - cov_global_min) / cov_global_range) * 100
+                        cov_top_pct = random.randint(15, 85)  # 竖向随机抖动
+                        cov_dots_html += f'<div class="data-dot" style="left:{cov_x_pct:.1f}%;top:{cov_top_pct}%;"></div>'
+                    
                     cov_box_html = f'''<div class="bar-container">
                         <div class="bar-whisker" style="left:{cov_w_left}%;width:{max(cov_w_right-cov_w_left,1)}%;"></div>
                         <div class="bar-box" style="left:{cov_b_left}%;width:{max(cov_b_width,2)}%;"></div>
                         <div class="bar-median" style="left:{cov_m_pos}%;"></div>
+                        {cov_dots_html}
                     </div>'''
                 else:
                     cov_box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
