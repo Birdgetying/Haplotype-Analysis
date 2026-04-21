@@ -4978,7 +4978,6 @@ class ReportGenerator:
             <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
                 <label><input type="checkbox" class="type-cb" value="INS" checked onchange="applyFilters()"> INS</label>
                 <label><input type="checkbox" class="type-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
-                <label><input type="checkbox" class="type-cb" value="SV" checked onchange="applyFilters()"> SV</label>
                 <label><input type="checkbox" class="type-cb" value="SNP" checked onchange="applyFilters()"> SNP</label>
             </span>
         </div>
@@ -9805,28 +9804,42 @@ class HaplotypePhenotypeAnalyzer:
                         logger.warning(f"  - 从数据库重建SNP注释失败: {e}")
                         snp_effects = {}
             
-            # **如果数据库重建失败，尝试VCF**
-            if not snp_effects:
-                logger.info("  - 尝试从VCF获取SNP注释...")
-                fasta_path = getattr(self, 'fasta_file', DataConfig.FASTA_PATH)
-                try:
-                    snp_effects = self._annotate_snp_effects_tabix(
-                        vcf_file=self.vcf_file,
-                        fasta_path=fasta_path,
-                        gene_chrom=gene_chrom,
-                        region_start=plot_region_start,
-                        region_end=plot_region_end,
-                        cds_intervals=cds_list,
-                        exon_intervals=exons_list,
-                        gene_strand=strand,
-                        promoter_start=promoter_start_pos,
-                        promoter_end=promoter_end_pos,
-                        gene_body_start=gene_body_start,
-                        gene_body_end=gene_body_end
-                    )
-                except Exception as e:
-                    logger.warning(f"  - VCF注释也失败: {e}")
-                    # 最后的回退：全设为other
+            # **用VCF精化CDS区SNP注释（错义/同义突变需要FASTA序列判断）**
+            # 无论数据库重建是否成功，都尝试精化——数据库路径对CDS SNP只能给出'other'，
+            # 而 _annotate_snp_effects_tabix + FASTA 可以区分 missense/synonymous
+            logger.info("  - 尝试从VCF精化SNP注释（错义/同义突变）...")
+            fasta_path = getattr(self, 'fasta_file', DataConfig.FASTA_PATH)
+            try:
+                snp_effects_refined = self._annotate_snp_effects_tabix(
+                    vcf_file=self.vcf_file,
+                    fasta_path=fasta_path,
+                    gene_chrom=gene_chrom,
+                    region_start=plot_region_start,
+                    region_end=plot_region_end,
+                    cds_intervals=cds_list,
+                    exon_intervals=exons_list,
+                    gene_strand=strand,
+                    promoter_start=promoter_start_pos,
+                    promoter_end=promoter_end_pos,
+                    gene_body_start=gene_body_start,
+                    gene_body_end=gene_body_end
+                )
+                if snp_effects:
+                    # 数据库重建已有基础注释：仅用tabix覆盖'other'位置
+                    # （INS/DEL/SV/promoter/intron等已由数据库正确标注，无需覆盖）
+                    refined_count = 0
+                    for pos, eff in snp_effects_refined.items():
+                        if eff != 'other':
+                            snp_effects[pos] = eff
+                            refined_count += 1
+                    logger.info(f"  - 精化了 {refined_count} 个位点的注释")
+                else:
+                    # 数据库重建失败：直接使用tabix结果
+                    snp_effects = snp_effects_refined
+            except Exception as e:
+                logger.warning(f"  - VCF精化注释失败: {e}")
+                if not snp_effects:
+                    # 最后回退：全设为other
                     for pos in self.positions or []:
                         snp_effects[pos] = 'other'
             
