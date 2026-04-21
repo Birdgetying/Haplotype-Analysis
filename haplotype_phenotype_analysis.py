@@ -4674,12 +4674,13 @@ class ReportGenerator:
                 elif pos in snp_effects:
                     ann = snp_effects[pos]
             # 构建功能注释信息（用于indel/SV的位置分类，决定过滤行为）
+            # 注意：INS/DEL 在 CDS 内不标为 missense，missense 仅用于 CDS SNP 且氨基酸改变
             functional_ann = ann
             if ann in ('indel', 'INS', 'DEL', 'SV'):
                 in_cds_check = any(cs <= ip <= ce for cs, ce in cds) if cds else False
                 in_exon_check = any(es <= ip <= ee for es, ee in exons) if exons else False
                 if in_cds_check:
-                    functional_ann = 'missense'
+                    functional_ann = ann  # 保留 INS/DEL/SV 原始类型，不错误映射为 missense
                 elif in_exon_check:
                     functional_ann = 'UTR'
                 elif g_start and g_end and g_start <= ip <= g_end:
@@ -9784,76 +9785,101 @@ class HaplotypePhenotypeAnalyzer:
                 if os.path.exists(variant_info_path):
                     try:
                         variant_info_df = pd.read_csv(variant_info_path)
+                        has_annotation_col = 'annotation' in variant_info_df.columns
+                        if has_annotation_col:
+                            logger.info("  - variant_info.csv 含 annotation 列，直接使用预计算注释")
                         for _, row in variant_info_df.iterrows():
                             pos = row['position']
                             len_diff = row.get('len_diff', 0)
                             is_sv = row.get('is_sv', False)
                             
-                            # 基于变异类型和位置分类
-                            if is_sv or abs(len_diff) >= 50:
-                                snp_effects[pos] = 'SV'
-                            elif len_diff > 0:
-                                snp_effects[pos] = 'INS'
-                            elif len_diff < 0:
-                                snp_effects[pos] = 'DEL'
+                            if has_annotation_col:
+                                # **直接使用建库时预计算的 annotation（含 missense/synonymous）**
+                                ann_val = row.get('annotation', 'other')
+                                if pd.isna(ann_val) or ann_val == '':
+                                    ann_val = 'other'
+                                snp_effects[pos] = str(ann_val)
                             else:
-                                # 根据位置判断：启动子、UTR、内含子
-                                if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
-                                    snp_effects[pos] = 'promoter'
+                                # 旧版数据库（无 annotation 列）：基于变异类型和位置分类
+                                if is_sv or abs(len_diff) >= 50:
+                                    snp_effects[pos] = 'SV'
+                                elif len_diff > 0:
+                                    snp_effects[pos] = 'INS'
+                                elif len_diff < 0:
+                                    snp_effects[pos] = 'DEL'
                                 else:
-                                    in_exon = any(es <= pos <= ee for es, ee in exons_list)
-                                    in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
-                                    if in_exon and not in_cds:
-                                        snp_effects[pos] = 'UTR'
-                                    elif in_cds:
-                                        snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
-                                    elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
-                                        snp_effects[pos] = 'intron'
+                                    # 根据位置判断：启动子、UTR、内含子
+                                    if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
+                                        snp_effects[pos] = 'promoter'
                                     else:
-                                        snp_effects[pos] = 'other'
+                                        in_exon = any(es <= pos <= ee for es, ee in exons_list)
+                                        in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
+                                        if in_exon and not in_cds:
+                                            snp_effects[pos] = 'UTR'
+                                        elif in_cds:
+                                            snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
+                                        elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
+                                            snp_effects[pos] = 'intron'
+                                        else:
+                                            snp_effects[pos] = 'other'
                         logger.info(f"  - 从数据库重建SNP注释: {len(snp_effects)} 个位点")
                     except Exception as e:
                         logger.warning(f"  - 从数据库重建SNP注释失败: {e}")
                         snp_effects = {}
             
             # **用VCF精化CDS区SNP注释（错义/同义突变需要FASTA序列判断）**
-            # 无论数据库重建是否成功，都尝试精化——数据库路径对CDS SNP只能给出'other'，
-            # 而 _annotate_snp_effects_tabix + FASTA 可以区分 missense/synonymous
-            logger.info("  - 尝试从VCF精化SNP注释（错义/同义突变）...")
-            fasta_path = getattr(self, 'fasta_file', DataConfig.FASTA_PATH)
-            try:
-                snp_effects_refined = self._annotate_snp_effects_tabix(
-                    vcf_file=self.vcf_file,
-                    fasta_path=fasta_path,
-                    gene_chrom=gene_chrom,
-                    region_start=plot_region_start,
-                    region_end=plot_region_end,
-                    cds_intervals=cds_list,
-                    exon_intervals=exons_list,
-                    gene_strand=strand,
-                    promoter_start=promoter_start_pos,
-                    promoter_end=promoter_end_pos,
-                    gene_body_start=gene_body_start,
-                    gene_body_end=gene_body_end
-                )
-                if snp_effects:
-                    # 数据库重建已有基础注释：仅用tabix覆盖'other'位置
-                    # （INS/DEL/SV/promoter/intron等已由数据库正确标注，无需覆盖）
-                    refined_count = 0
-                    for pos, eff in snp_effects_refined.items():
-                        if eff != 'other':
-                            snp_effects[pos] = eff
-                            refined_count += 1
-                    logger.info(f"  - 精化了 {refined_count} 个位点的注释")
-                else:
-                    # 数据库重建失败：直接使用tabix结果
-                    snp_effects = snp_effects_refined
-            except Exception as e:
-                logger.warning(f"  - VCF精化注释失败: {e}")
-                if not snp_effects:
-                    # 最后回退：全设为other
-                    for pos in self.positions or []:
-                        snp_effects[pos] = 'other'
+            # 若数据库 variant_info.csv 已有 annotation 列，则跳过此步（建库时已正确注释）
+            _db_has_annotation = snp_effects and any(
+                v in ('missense', 'synonymous') or (isinstance(v, str) and 'missense' in v)
+                for v in snp_effects.values()
+            )
+            if _db_has_annotation:
+                logger.info("  - 数据库已含 missense/synonymous 注释，跳过 VCF 精化步骤")
+            else:
+                logger.info("  - 尝试从VCF精化SNP注释（错义/同义突变）...")
+                fasta_path = getattr(self, 'fasta_file', DataConfig.FASTA_PATH)
+                # 优先使用 per-gene VCF（database/GENE/variants.vcf.gz），无需全基因组索引
+                _vcf_for_ann = self.vcf_file
+                if hasattr(self, 'database_dir') and self.database_dir and gene_id:
+                    _per_gene_vcf = os.path.join(self.database_dir, gene_id, 'variants.vcf.gz')
+                    if os.path.exists(_per_gene_vcf):
+                        _vcf_for_ann = _per_gene_vcf
+                        logger.info(f"  - 使用 per-gene VCF 进行注释: {_per_gene_vcf}")
+                    else:
+                        logger.info(f"  - per-gene VCF 不存在，使用全基因组 VCF")
+                try:
+                    snp_effects_refined = self._annotate_snp_effects_tabix(
+                        vcf_file=_vcf_for_ann,
+                        fasta_path=fasta_path,
+                        gene_chrom=gene_chrom,
+                        region_start=plot_region_start,
+                        region_end=plot_region_end,
+                        cds_intervals=cds_list,
+                        exon_intervals=exons_list,
+                        gene_strand=strand,
+                        promoter_start=promoter_start_pos,
+                        promoter_end=promoter_end_pos,
+                        gene_body_start=gene_body_start,
+                        gene_body_end=gene_body_end
+                    )
+                    if snp_effects:
+                        # 数据库重建已有基础注释：仅用tabix覆盖当前为'other'的位置
+                        # （INS/DEL/SV/promoter/intron等已由数据库正确标注，无需覆盖）
+                        refined_count = 0
+                        for pos, eff in snp_effects_refined.items():
+                            if eff != 'other' and snp_effects.get(pos) == 'other':
+                                snp_effects[pos] = eff
+                                refined_count += 1
+                        logger.info(f"  - 精化了 {refined_count} 个位点的注释")
+                    else:
+                        # 数据库重建失败：直接使用tabix结果
+                        snp_effects = snp_effects_refined
+                except Exception as e:
+                    logger.warning(f"  - VCF精化注释失败: {e}")
+                    if not snp_effects:
+                        # 最后回退：全设为other
+                        for pos in self.positions or []:
+                            snp_effects[pos] = 'other'
             
             logger.info(f"  - SNP注释分布: {dict((k, sum(1 for v in snp_effects.values() if v==k)) for k in set(snp_effects.values()))}")
 

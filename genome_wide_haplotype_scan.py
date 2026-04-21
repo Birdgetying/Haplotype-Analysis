@@ -47,7 +47,7 @@ except ImportError:
 try:
     from haplotype_phenotype_analysis import (
         HaplotypeExtractor, DataConfig, setup_logging, PerformanceMonitor,
-        HaplotypePhenotypeAnalyzer
+        HaplotypePhenotypeAnalyzer, annotate_snp_effects_for_region
     )
     HAPLOTYPE_MODULE_AVAILABLE = True
     print("[INFO] haplotype_phenotype_analysis 模块导入成功")
@@ -840,8 +840,41 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         print(hap_df.head(3).to_string(index=False))
         print()
         
-        # 保存变异注释信息（从extractor获取）
+        # 保存变异注释信息（从extractor获取），并调用 annotate_snp_effects_for_region 计算 annotation
         if hasattr(extractor, 'variant_info') and extractor.variant_info:
+            # 计算每个位点的功能注释（missense/synonymous/UTR/intron/promoter/INS/DEL/SV/other）
+            _positions_for_ann = list(extractor.variant_info.keys())
+            _cds_for_ann = gtf_data.get('cds', [])
+            _exons_for_ann = gtf_data.get('exons', [])
+            _strand_for_ann = strand
+            # 计算启动子区间（用于区分 promoter 和 intron）
+            if strand == '+':
+                _promoter_start_ann = max(1, gene_start - promoter_actual_length)
+                _promoter_end_ann = gene_start - 1
+            else:
+                _promoter_start_ann = gene_end + 1
+                _promoter_end_ann = gene_end + promoter_actual_length
+            try:
+                _ann_effects = annotate_snp_effects_for_region(
+                    vcf_file=vcf_file,
+                    fasta_path=FASTA_FILE if 'FASTA_FILE' in dir() else None,
+                    gene_chrom=chrom,
+                    cds_intervals=_cds_for_ann,
+                    exon_intervals=_exons_for_ann,
+                    gene_strand=_strand_for_ann,
+                    positions=_positions_for_ann,
+                    gene_start=gene_start,
+                    gene_end=gene_end
+                )
+                # 对于 promoter 区域：annotate_snp_effects_for_region 不感知 promoter，需补充
+                for _p in _positions_for_ann:
+                    if _ann_effects.get(_p) in ('other', None):
+                        if _promoter_start_ann <= _p <= _promoter_end_ann:
+                            _ann_effects[_p] = 'promoter'
+                print(f"[INFO] 变异功能注释完成: { {k: sum(1 for v in _ann_effects.values() if v==k) for k in set(_ann_effects.values())} }")
+            except Exception as _ann_e:
+                print(f"[WARNING] 变异功能注释失败，使用空注释: {_ann_e}")
+                _ann_effects = {}
             variant_info_df = pd.DataFrame([
                 {
                     'position': pos,
@@ -850,12 +883,13 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                     'len_diff': info.get('len_diff', 0),
                     'is_sv': info.get('is_sv', False),
                     'maf': info.get('maf', 0.5),
-                    'missing_rate': info.get('missing_rate', 0.0)
+                    'missing_rate': info.get('missing_rate', 0.0),
+                    'annotation': _ann_effects.get(pos, 'other')
                 }
                 for pos, info in extractor.variant_info.items()
             ])
             variant_info_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
-            print(f"[INFO] 变异注释信息已保存: {len(variant_info_df)} 个位点")
+            print(f"[INFO] 变异注释信息已保存: {len(variant_info_df)} 个位点（含annotation字段）")
         
         # **新增**: 分析并保存启动子区域变异信息
         # 计算启动子区域（基因体外的上游区域）
