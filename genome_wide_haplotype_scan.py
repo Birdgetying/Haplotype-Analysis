@@ -1542,7 +1542,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     generate_html: bool = True,
                     test_region_length: int = 0,
                     cluster_haplotypes: bool = False,
-                    cophe_files: list = None) -> pd.DataFrame:
+                    cophe_files: list = None,
+                    sv_vcf_file: str = None) -> pd.DataFrame:
     """
     运行指定基因的单倍型数据集构建
     
@@ -1947,7 +1948,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                                      gff_file=gff_file,
                                      all_genes_cds=all_genes_cds,
                                      cophe_files=cophe_files,
-                                     sv_vcf_file=args.sv_vcf)
+                                     sv_vcf_file=sv_vcf_file)
         all_results.append(result)
         processed += 1
         
@@ -2429,7 +2430,9 @@ def main():
             (args.cophe1, args.cophe1_title) if args.cophe1 else None,
             (args.cophe2, args.cophe2_title) if args.cophe2 else None,
             (args.cophe3, args.cophe3_title) if args.cophe3 else None,
-        ]
+        ],
+        # 新增：结构变异VCF
+        sv_vcf_file=args.sv_vcf
     )
 
 
