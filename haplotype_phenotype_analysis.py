@@ -5290,7 +5290,7 @@ class ReportGenerator:
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
             pos_str = f'{pos:,}'  # 千分位逗号
-            html += (f'<th style="width:20px;min-width:20px;max-width:20px;padding:0;'
+            html += (f'<th class="seq-col-th" data-pos="{pos}" style="width:20px;min-width:20px;max-width:20px;padding:0;'
                      f'vertical-align:top;overflow:hidden;">'
                      f'<div style="writing-mode:vertical-rl;transform:rotate(180deg);'
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
