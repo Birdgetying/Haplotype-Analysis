@@ -4539,32 +4539,42 @@ class ReportGenerator:
         n_dp = len(ld_positions_list)
         if n_dp >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
             try:
-                # 构建每个样本在每个显示位置的基因型向量（0=参考，1=变异）
-                # 参考碱基：取最多的等位基因作为参考
-                # 使用display_orig_indices从序列中提取正确的索引
-                geno_matrix = []  # shape: (n_samples, n_positions)
+                # ---- 第一步：收集每个样本在每个位置的实际碱基 ----
+                # hap_sample_df 每行是一个样本（不是单倍型类型）
+                all_bases = []  # shape: (n_samples, n_positions)
                 for _, sample_row in hap_sample_df.iterrows():
                     seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
-                    geno_vec = []
-                    for pos_i, orig_idx in enumerate(display_orig_indices):
+                    row_bases = []
+                    for orig_idx in display_orig_indices:
                         if orig_idx < len(seq):
                             base = seq[orig_idx].upper()
-                            # 非参考碱基 = 变异（1），参考碱基 = 0
-                            # 用'N'和'R'（参考）作为参考状态
-                            geno_vec.append(0 if base in ('N',) else 1)
+                            # N/-/? 视为缺失
+                            row_bases.append(base if base not in ('N', '-', '?') else None)
                         else:
-                            geno_vec.append(0)
-                    geno_matrix.append(geno_vec)
-                
-                # 修正：确定每列的参考等位基因（出现最多的碱基 = 参考）
-                # 参考碱基频率最高的作为0
-                geno_array = np.array(geno_matrix, dtype=float)  # (n_samples, n_positions)
-                
-                # 重新确定每列的0/1编码：让列均值<=0.5（即使最多的碱基为参考）
-                for col_i in range(geno_array.shape[1]):
-                    col_mean = np.nanmean(geno_array[:, col_i])
-                    if col_mean > 0.5:
-                        geno_array[:, col_i] = 1 - geno_array[:, col_i]
+                            row_bases.append(None)
+                    all_bases.append(row_bases)
+
+                # ---- 第二步：对每列确定多数碱基=参考(0)，其余=1，缺失=NaN ----
+                n_samples_ld = len(all_bases)
+                n_cols_ld = len(display_orig_indices)
+                geno_array = np.full((n_samples_ld, n_cols_ld), np.nan)
+                for col_i in range(n_cols_ld):
+                    col_bases = [all_bases[si][col_i] for si in range(n_samples_ld)]
+                    counts = {}
+                    for b in col_bases:
+                        if b is not None:
+                            counts[b] = counts.get(b, 0) + 1
+                    if not counts:
+                        continue
+                    ref_base = max(counts, key=counts.get)  # 最多碱基 = 参考
+                    for si in range(n_samples_ld):
+                        b = all_bases[si][col_i]
+                        if b is None:
+                            geno_array[si, col_i] = np.nan
+                        elif b == ref_base:
+                            geno_array[si, col_i] = 0.0
+                        else:
+                            geno_array[si, col_i] = 1.0
                 
                 # 计算r²矩阵
                 n_pos = geno_array.shape[1]
@@ -5468,7 +5478,7 @@ class ReportGenerator:
     <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
     <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
         <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
-        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
+        <div style="background:linear-gradient(to right,#ffffff,#ffffcc,#fdcc8a,#fc8d59,#e34a33,#b30000);width:80px;height:10px;border-radius:2px;border:1px solid #ccc;"></div>
         <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
         <span style="font-size:9px;color:#555;margin-left:2px;">→</span>
         <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
@@ -6408,9 +6418,11 @@ function drawLDTriangle() {{
     // 获取表格中所有可见变异列的实际屏幕坐标
     var table = document.querySelector('.data-table');
     if (!table) {{ console.log('[LD] table not found'); return; }}
+    // 用 seq-col-th class 识别序列列，而非硬编码 idx>=3
+    // 这样即使前面有更多协变量列也能正确识别
     var allThs = Array.from(table.querySelectorAll('thead th'));
-    var visibleVarThs = allThs.filter(function(th, idx) {{
-        return idx >= 3 && idx < allThs.length - 1 && th.style.display !== 'none';
+    var visibleVarThs = allThs.filter(function(th) {{
+        return th.classList.contains('seq-col-th') && th.style.display !== 'none';
     }});
     
     if (visibleVarThs.length < 2) {{
