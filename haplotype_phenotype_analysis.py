@@ -4679,21 +4679,9 @@ class ReportGenerator:
                     ann = snp_effects[ip]
                 elif pos in snp_effects:
                     ann = snp_effects[pos]
-            # 构建功能注释信息（用于indel分类）
+            # 构建功能注释信息
+            # **修复**：indel 应该保持原始类型（INS/DEL），只有 SNP 才会被分为 missense/synonymous
             functional_ann = ann
-            # 如果是indel，尝试获取更详细的功能注释
-            if ann in ('indel', 'INS', 'DEL'):
-                # 检查位置是否在CDS区域
-                in_cds_check = any(cs <= ip <= ce for cs, ce in cds) if cds else False
-                in_exon_check = any(es <= ip <= ee for es, ee in exons) if exons else False
-                if in_cds_check:
-                    functional_ann = 'missense'  # 在CDS区域的indel归类为错义
-                elif in_exon_check:
-                    functional_ann = 'UTR'
-                elif g_start and g_end and g_start <= ip <= g_end:
-                    functional_ann = 'intron'
-                else:
-                    functional_ann = 'other'
             
             gwas_data.append({
                 'pos': ip,
