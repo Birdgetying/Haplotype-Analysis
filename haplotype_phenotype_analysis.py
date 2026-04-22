@@ -9380,6 +9380,15 @@ class HaplotypePhenotypeAnalyzer:
                         logger.info(f"[数据库] 已找到 VCF 文件: {vcf_path}")
                     except Exception as e:
                         logger.warning(f"[数据库] 加载 VCF 失败: {e}")
+
+                # 6. **新增**: SV VCF文件（结构变异）
+                sv_vcf_path = os.path.join(gene_db_dir, 'sv_variants.vcf.gz')
+                if os.path.exists(sv_vcf_path):
+                    try:
+                        preloaded_data['sv_vcf_file'] = sv_vcf_path
+                        logger.info(f"[数据库] 已找到 SV VCF 文件: {sv_vcf_path}")
+                    except Exception as e:
+                        logger.warning(f"[数据库] 加载 SV VCF 失败: {e}")
             
         # 初始化性能监控器
         perf_monitor = PerformanceMonitor(logger)

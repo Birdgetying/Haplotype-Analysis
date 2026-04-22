@@ -602,7 +602,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         database_dir: str, results_dir: str = None,
                         min_samples: int = 1, test_region_length: int = 0,
                         gff_file: str = None, all_genes_cds: list = None,
-                        cophe_files: list = None) -> dict:
+                        cophe_files: list = None,
+                        sv_vcf_file: str = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
@@ -682,6 +683,69 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             chrom, start, end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
         )
         
+
+        # ---- SV VCF 处理：同时从 SV VCF 提取结构变异并合并 ----
+        if sv_vcf_file and os.path.exists(sv_vcf_file):
+            try:
+                print(f"[INFO] {gene_id}: 同时从 SV VCF 提取结构变异: {sv_vcf_file}")
+                sv_extractor = HaplotypeExtractor(sv_vcf_file)
+                sv_positions, sv_hap_df, sv_hap_sample_df = sv_extractor.extract_region(
+                    chrom, start, end, min_samples=min_samples, snp_only=False
+                )
+
+                if sv_positions and len(sv_positions) > 0:
+                    print(f"[INFO] {gene_id}: 从 SV VCF 提取到 {len(sv_positions)} 个结构变异")
+
+                    # 合并 SV 位置到主位置列表（去重）
+                    if positions:
+                        pos_set = set(positions)
+                        new_sv_pos = [p for p in sv_positions if p not in pos_set]
+                        positions = sorted(positions + new_sv_pos)
+                    else:
+                        positions = list(sv_positions)
+                        hap_df = sv_hap_df
+                        hap_sample_df = sv_hap_sample_df
+
+                    # 合并 SV 序列到主单倍型序列
+                    if sv_hap_sample_df is not None and len(sv_hap_sample_df) > 0:
+                        sv_seq_map = dict(zip(sv_hap_sample_df['SampleID'], sv_hap_sample_df['Haplotype_Seq']))
+                        new_seqs = []
+                        for _, row in hap_sample_df.iterrows():
+                            sid = row['SampleID']
+                            orig_seq = row['Haplotype_Seq']
+                            sv_seq = sv_seq_map.get(sid, '')
+                            sv_seq_clean = sv_seq.replace('|', '') if sv_seq else ''
+                            new_seqs.append(orig_seq + sv_seq_clean)
+                        hap_sample_df = hap_sample_df.copy()
+                        hap_sample_df['Haplotype_Seq'] = new_seqs
+
+                        # 更新 hap_df 的 Haplotype_Seq（按 Hap_Name 关联）
+                        if hap_df is not None and len(hap_df) > 0:
+                            for idx in hap_df.index:
+                                hname = hap_df.at[idx, 'Hap_Name']
+                                first_sample = hap_sample_df[hap_sample_df['Hap_Name'] == hname]
+                                if len(first_sample) > 0:
+                                    hap_df.at[idx, 'Haplotype_Seq'] = first_sample.iloc[0]['Haplotype_Seq']
+
+                    # 保存 SV VCF 子集
+                    try:
+                        sv_subset_path = os.path.join(gene_data_dir, 'sv_variants.vcf.gz')
+                        vcf_sample_ids = (hap_sample_df['SampleID'].tolist()
+                                         if hap_sample_df is not None else [])
+                        create_subset_vcf(sv_vcf_file, chrom, start, end, sv_subset_path,
+                                        sample_ids=vcf_sample_ids)
+                        sv_size = os.path.getsize(sv_subset_path)
+                        if sv_size > 1024:
+                            print(f"[INFO] SV VCF子集已保存: {sv_subset_path} ({sv_size/1024:.1f} KB)")
+                        else:
+                            print(f"[WARNING] SV VCF子集文件过小 ({sv_size} bytes)")
+                    except Exception as sv_e:
+                        print(f"[WARNING] 保存SV VCF子集失败: {sv_e}")
+                else:
+                    print(f"[INFO] {gene_id}: SV VCF 在该区域无变异")
+            except Exception as sv_ext_e:
+                print(f"[WARNING] SV VCF 提取失败: {sv_ext_e}")
+
         # 关键新增：如果没有变异，动态扩展启动子区域
         if hap_df is None or len(hap_df) == 0:
             print(f"[INFO] {gene_id}: 当前区域 {start}-{end} 无变异，尝试扩展启动子")
@@ -780,6 +844,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'promoter_expansion_status': promoter_expansion_status,  # 扩展状态：none/extended/nearest
             'promoter_actual_length': promoter_actual_length,  # 实际使用的启动子长度
             'vcf_file': vcf_file,
+            'sv_vcf_file': sv_vcf_file if sv_vcf_file else None,
+            'sv_vcf_file': sv_vcf_file if sv_vcf_file else None,
             'vcf_mtime': os.path.getmtime(vcf_file),  # 关键：保存VCF修改时间用于缓存判断
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'exons': gtf_data.get('exons', []),
@@ -1257,7 +1323,8 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                             min_samples: int = 1, pvalue_threshold: float = 0.05,
                             gff_file: str = None, results_dir: str = None,
                             cluster_haplotypes: bool = False,
-                            cophe_files: list = None) -> dict:
+                            cophe_files: list = None,
+                        sv_vcf_file: str = None) -> dict:
     """
     对单个基因进行单倍型-表型关联分析，并生成综HTML图
     
@@ -1780,7 +1847,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
             'variant_info.csv',
             'phenotype_data.csv',
             'haplotype_stats.csv',
-            'variants.vcf.gz'  # 关键：VCF子集文件
+            'variants.vcf.gz'  # 关键：VCF子集文件,
+            'sv_variants.vcf.gz',  # 结构变异VCF子集
         ]
         
         if os.path.exists(gene_data_dir):
@@ -1878,7 +1946,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                                      test_region_length=test_region_length,
                                      gff_file=gff_file,
                                      all_genes_cds=all_genes_cds,
-                                     cophe_files=cophe_files)
+                                     cophe_files=cophe_files,
+                                     sv_vcf_file=args.sv_vcf)
         all_results.append(result)
         processed += 1
         
@@ -2337,6 +2406,9 @@ def main():
     parser.add_argument("--cophe3-title", type=str, default="Expression3",
                         help="协变量表型3的标题")
     
+    parser.add_argument("--sv-vcf", type=str, default=None,
+                        help="结构变异VCF文件路径（如Bubble检测结果）")
+
     args = parser.parse_args()
     
     # 运行扫描
