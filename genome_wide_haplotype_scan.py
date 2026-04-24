@@ -92,7 +92,7 @@ except ImportError:
 def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int, 
                       output_vcf: str, sample_ids: list = None):
     """
-    从原始VCF中提取指定区域和样本的子集VCF（纯Python实现，不依赖pysam）
+    从原始VCF中提取指定区域和样本的子集VCF（优先使用tabix快速查询，回退到逐行扫描）
     
     Args:
         input_vcf: 输入VCF文件路径
@@ -102,9 +102,107 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         output_vcf: 输出VCF文件路径
         sample_ids: 要保留的样本ID列表（None表示保留所有样本）
     """
+    import time
     import gzip
+    _t0 = time.time()
     
-    print(f"[DEBUG] 开始提取VCF子集: {chrom}:{start}-{end}")
+    print(f"[INFO] 开始提取VCF子集: {chrom}:{start}-{end}")
+    
+    # 检查是否有tabix索引，优先使用
+    tbi_path = input_vcf + '.tbi'
+    use_tabix = PYSAM_AVAILABLE and os.path.exists(tbi_path)
+    
+    if use_tabix:
+        print(f"[DEBUG] 使用tabix索引快速查询: {tbi_path}")
+        try:
+            import pysam as _pysam
+            tbx = _pysam.TabixFile(input_vcf)
+            
+            # 获取样本映射
+            header_lines = []
+            all_samples = []
+            for line in tbx.fetch(region=f"{chrom}:{start}-{end}", limit=1):
+                pass
+            
+            # 读取header
+            for line in tbx.header:
+                header_lines.append(line.rstrip('\n'))
+            
+            # 获取样本列表
+            header_str = '\n'.join(tbx.header + [''])
+            # 重新打开读取样本
+            if input_vcf.endswith('.gz'):
+                with gzip.open(input_vcf, 'rt') as _hf:
+                    for line in _hf:
+                        if line.startswith('#CHROM'):
+                            parts = line.rstrip('\n').split('\t')
+                            all_samples = parts[9:] if len(parts) > 9 else []
+                            header_lines.append(line.rstrip('\n'))
+                            break
+            else:
+                with open(input_vcf, 'r') as _hf:
+                    for line in _hf:
+                        if line.startswith('#CHROM'):
+                            parts = line.rstrip('\n').split('\t')
+                            all_samples = parts[9:] if len(parts) > 9 else []
+                            header_lines.append(line.rstrip('\n'))
+                            break
+            
+            # 确定要保留的样本
+            if sample_ids:
+                available_samples = set(all_samples)
+                filtered_samples = [s for s in sample_ids if s in available_samples]
+                sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
+                if len(filtered_samples) != len(sample_ids):
+                    missing = set(sample_ids) - available_samples
+                    print(f"[WARNING] 以下样本在VCF中不存在: {missing}")
+            else:
+                filtered_samples = all_samples
+                sample_indices = list(range(len(all_samples)))
+            
+            # 构建样本行
+            if sample_ids and filtered_samples != all_samples:
+                parts = header_lines[-1].split('\t')[:9]
+                new_sample_line = '\t'.join(parts + filtered_samples)
+                header_lines[-1] = new_sample_line
+            
+            # 打开输出VCF
+            if output_vcf.endswith('.gz'):
+                f_out = gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6)
+            else:
+                f_out = open(output_vcf, 'w', encoding='utf-8')
+            
+            # 写入头部
+            for line in header_lines[:-1]:
+                f_out.write(line + '\n')
+            f_out.write(header_lines[-1] + '\n')
+            
+            # 使用tabix查询
+            record_count = 0
+            for row in tbx.fetch(region=f"{chrom}:{start}-{end}"):
+                parts = row.split('\t')
+                if len(parts) < 10:
+                    continue
+                
+                # 过滤样本
+                if sample_ids and sample_indices != list(range(len(all_samples))):
+                    selected_parts = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
+                    f_out.write('\t'.join(selected_parts) + '\n')
+                else:
+                    f_out.write(row)
+                record_count += 1
+            
+            tbx.close()
+            f_out.close()
+            
+            print(f"[INFO] 子集VCF创建完成(tabix): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
+            return
+            
+        except Exception as _e:
+            print(f"[WARNING] tabix查询失败，回退到逐行扫描: {_e}")
+    
+    # 回退：逐行扫描（慢速）
+    print(f"[INFO] 使用逐行扫描模式提取VCF子集")
     
     # 打开输入VCF
     if input_vcf.endswith('.gz'):
@@ -138,12 +236,9 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     
     # 如果需要过滤样本，重新构建样本行
     if sample_ids and filtered_samples != all_samples:
-        # 找到样本在原始样本列表中的索引
         sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
-        # 重新构建样本行
-        parts = sample_line.split('\t')[:9]  # 前9个字段
-        sample_fields = filtered_samples
-        new_sample_line = '\t'.join(parts + sample_fields)
+        parts = sample_line.split('\t')[:9]
+        new_sample_line = '\t'.join(parts + filtered_samples)
     else:
         new_sample_line = sample_line
         sample_indices = list(range(len(all_samples)))
@@ -184,11 +279,9 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         
         # 如果需要过滤样本
         if sample_ids and sample_indices != list(range(len(all_samples))):
-            # 保留前9个字段 + 指定样本的数据
             selected_parts = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
             f_out.write('\t'.join(selected_parts) + '\n')
         else:
-            # 保留所有样本
             f_out.write(line)
         
         record_count += 1
@@ -196,7 +289,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     f_in.close()
     f_out.close()
     
-    print(f"[INFO] 子集VCF创建完成: {record_count} 个变异, {len(filtered_samples)} 个样本")
+    print(f"[INFO] 子集VCF创建完成(逐行): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
 
 
 # ============================================================================
