@@ -930,13 +930,10 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                     gene_strand=_strand_for_ann,
                     positions=_positions_for_ann,
                     gene_start=gene_start,
-                    gene_end=gene_end
+                    gene_end=gene_end,
+                    promoter_start=_promoter_start_ann,
+                    promoter_end=_promoter_end_ann
                 )
-                # 对于 promoter 区域：annotate_snp_effects_for_region 不感知 promoter，需补充
-                for _p in _positions_for_ann:
-                    if _ann_effects.get(_p) in ('other', None):
-                        if _promoter_start_ann <= _p <= _promoter_end_ann:
-                            _ann_effects[_p] = 'promoter'
                 print(f"[INFO] 变异功能注释完成: { {k: sum(1 for v in _ann_effects.values() if v==k) for k in set(_ann_effects.values())} }")
             except Exception as _ann_e:
                 print(f"[WARNING] 变异功能注释失败，使用空注释: {_ann_e}")
