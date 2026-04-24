@@ -1,0 +1,150 @@
+﻿
+============================================================
+FIX1: .csi support (L1353-L1358)
+============================================================
+L1353|        # 优先用 tabix 按区域查询（秒级），否则逐行扫描（慢）
+L1354|        tabix_ok = False
+L1355|        if vcf_file.endswith('.gz') and os.path.exists(vcf_file + '.tbi') and PYSAM_AVAILABLE:
+L1356|            try:
+L1357|                import pysam as _pysam
+L1358|                tbx = _pysam.TabixFile(vcf_file)
+
+============================================================
+FIX2: _annotate_snp_effects_tabix sig (L9014-L9019)
+============================================================
+L9014|    def _annotate_snp_effects_tabix(self, vcf_file: str, fasta_path: str, gene_chrom: str,
+L9015|                                     region_start: int, region_end: int,
+L9016|                                     cds_intervals: list, exon_intervals: list,
+L9017|                                     gene_strand: str, promoter_start: int = None, 
+L9018|                                     promoter_end: int = None) -> dict:
+L9019|        """
+
+============================================================
+FIX3: non-exon classification (L9081-L9115)
+============================================================
+L9081|                    
+L9082|                    # 计算变异长度差异（用于判断 SV/indel）
+L9083|                    len_diff = abs(len(ref) - len(alt_allele))
+L9084|                    
+L9085|                    # 优先级判断：exon/CDS > UTR > promoter > SV/indel > other
+L9086|                    if not in_exon:
+L9087|                        # 不在外显子区，检查是否在启动子区
+L9088|                        in_promoter = (promoter_start is not None and 
+L9089|                                      promoter_end is not None and 
+L9090|                                      promoter_start <= pos <= promoter_end)
+L9091|                        
+L9092|                        if in_promoter:
+L9093|                            # 启动子区域变异
+L9094|                            effects[pos] = 'promoter'
+L9095|                        elif len_diff >= 50:
+L9096|                            # 结构变异
+L9097|                            effects[pos] = 'SV'
+L9098|                        elif len_diff > 0:
+L9099|                            # 小插入缺失
+L9100|                            effects[pos] = 'indel'
+L9101|                        else:
+L9102|                            # 其他区域
+L9103|                            effects[pos] = 'other'
+L9104|                    elif not in_cds:
+L9105|                        # 在 exon 但不在 CDS（UTR 区域）
+L9106|                        effects[pos] = 'UTR'
+L9107|                    elif len(ref) != 1 or len(alt_allele) != 1:
+L9108|                        # CDS 区的非单碱基变异
+L9109|                        if len_diff >= 50:
+L9110|                            effects[pos] = 'SV'
+L9111|                        elif len_diff > 0:
+L9112|                            effects[pos] = 'indel'
+L9113|                        else:
+L9114|                            effects[pos] = 'other'
+L9115|                    elif not cds_seq or pos not in cds_pos_to_idx:
+
+============================================================
+FIX4: VCF fallback (L9047-L9054)
+============================================================
+L9047|            except Exception as e:
+L9048|                logger.warning(f"    - VCF打开失败: {e}")
+L9049|                for pos in positions_list:
+L9050|                    in_exon = _pos_in_any_interval(pos, exon_intervals)
+L9051|                    in_cds  = _pos_in_any_interval(pos, cds_intervals)
+L9052|                    effects[pos] = 'UTR' if (in_exon and not in_cds) else 'other'
+L9053|                return effects
+L9054|            
+
+============================================================
+FIX5: preloaded_data (L9321-L9334)
+============================================================
+L9321|                        variant_info_df = pd.read_csv(variant_info_path)
+L9322|                        preloaded_data['variant_info'] = {
+L9323|                            int(row['position']): {  # 强制转换为整数，确保与VCF的pos类型一致
+L9324|                                'ref': row.get('ref', ''),
+L9325|                                'alt': row.get('alt', ''),
+L9326|                                'len_diff': row.get('len_diff', 0),
+L9327|                                'is_sv': row.get('is_sv', False),
+L9328|                                'maf': row.get('maf', 0.5),
+L9329|                                'missing_rate': row.get('missing_rate', 0.0)
+L9330|                            }
+L9331|                            for _, row in variant_info_df.iterrows()
+L9332|                        }
+L9333|                        logger.info(f"[数据库] 已加载 variant_info: {len(preloaded_data['variant_info'])} 个位点")
+L9334|                    except Exception as e:
+
+============================================================
+FIX6: snp_effects rebuild (L9734-L9770)
+============================================================
+L9734|            # SNP 精细分类：优先从数据库重建，如果失败则尝试VCF
+L9735|            snp_effects = {}
+L9736|            
+L9737|            # **优先从数据库重建**
+L9738|            if hasattr(self, 'database_dir') and self.database_dir and gene_id:
+L9739|                variant_info_path = os.path.join(self.database_dir, gene_id, 'variant_info.csv')
+L9740|                if os.path.exists(variant_info_path):
+L9741|                    try:
+L9742|                        variant_info_df = pd.read_csv(variant_info_path)
+L9743|                        for _, row in variant_info_df.iterrows():
+L9744|                            pos = row['position']
+L9745|                            len_diff = row.get('len_diff', 0)
+L9746|                            is_sv = row.get('is_sv', False)
+L9747|                            
+L9748|                            # 基于变异类型和位置分类
+L9749|                            if is_sv or abs(len_diff) >= 50:
+L9750|                                snp_effects[pos] = 'SV'
+L9751|                            elif len_diff > 0:
+L9752|                                snp_effects[pos] = 'INS'
+L9753|                            elif len_diff < 0:
+L9754|                                snp_effects[pos] = 'DEL'
+L9755|                            else:
+L9756|                                # 根据位置判断：启动子、UTR、内含子
+L9757|                                if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
+L9758|                                    snp_effects[pos] = 'promoter'
+L9759|                                else:
+L9760|                                    in_exon = any(es <= pos <= ee for es, ee in exons_list)
+L9761|                                    in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
+L9762|                                    if in_exon and not in_cds:
+L9763|                                        snp_effects[pos] = 'UTR'
+L9764|                                    else:
+L9765|                                        snp_effects[pos] = 'other'
+L9766|                        logger.info(f"  - 从数据库重建SNP注释: {len(snp_effects)} 个位点")
+L9767|                    except Exception as e:
+L9768|                        logger.warning(f"  - 从数据库重建SNP注释失败: {e}")
+L9769|                        snp_effects = {}
+L9770|            
+
+============================================================
+FIX7: tabix call site (L9775-L9790)
+============================================================
+L9775|                try:
+L9776|                    snp_effects = self._annotate_snp_effects_tabix(
+L9777|                        vcf_file=self.vcf_file,
+L9778|                        fasta_path=fasta_path,
+L9779|                        gene_chrom=gene_chrom,
+L9780|                        region_start=plot_region_start,
+L9781|                        region_end=plot_region_end,
+L9782|                        cds_intervals=cds_list,
+L9783|                        exon_intervals=exons_list,
+L9784|                        gene_strand=strand,
+L9785|                        promoter_start=promoter_start_pos,
+L9786|                        promoter_end=promoter_end_pos
+L9787|                    )
+L9788|                except Exception as e:
+L9789|                    logger.warning(f"  - VCF注释也失败: {e}")
+L9790|                    # 最后的回退：全设为other

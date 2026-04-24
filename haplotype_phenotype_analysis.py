@@ -1352,7 +1352,9 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
 
         # 优先用 tabix 按区域查询（秒级），否则逐行扫描（慢）
         tabix_ok = False
-        if vcf_file.endswith('.gz') and os.path.exists(vcf_file + '.tbi') and PYSAM_AVAILABLE:
+        tbi_exists = vcf_file and os.path.exists(vcf_file + '.tbi')
+        csi_exists = vcf_file and os.path.exists(vcf_file + '.csi')
+        if vcf_file and vcf_file.endswith('.gz') and (tbi_exists or csi_exists) and PYSAM_AVAILABLE:
             try:
                 import pysam as _pysam
                 tbx = _pysam.TabixFile(vcf_file)
@@ -4964,6 +4966,8 @@ class ReportGenerator:
                 <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
                 <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
                 <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                <label><input type="checkbox" class="ann-cb" value="INS" checked onchange="applyFilters()"> INS</label>
+                <label><input type="checkbox" class="ann-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
                 <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
                 <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
             </span>
@@ -5641,7 +5645,8 @@ function annNorm(d) {
             if (d.overlaps_cds === true) return 'other';
             return 'promoter';
         }
-        return 'other';
+        // 保留原始类型 (INS/DEL/SV/indel)
+        return a;
     }
     
     // 直接返回原始类型（包括 intron, UTR, synonymous, promoter 等）
@@ -8185,6 +8190,8 @@ if (promoterStart < promoterEnd) {{
                             <label><input type="checkbox" class="ann-cb-mp" value="UTR" checked onchange="applyFilters()"> UTR</label>
                             <label><input type="checkbox" class="ann-cb-mp" value="intron" checked onchange="applyFilters()"> Intron</label>
                             <label><input type="checkbox" class="ann-cb-mp" value="promoter" checked onchange="applyFilters()"> Promoter</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="INS" checked onchange="applyFilters()"> INS</label>
+                            <label><input type="checkbox" class="ann-cb-mp" value="DEL" checked onchange="applyFilters()"> DEL</label>
                             <label><input type="checkbox" class="ann-cb-mp" value="indel" checked onchange="applyFilters()"> Indel</label>
                             <label><input type="checkbox" class="ann-cb-mp" value="SV" checked onchange="applyFilters()"> SV</label>
                             <label><input type="checkbox" class="ann-cb-mp" value="other" checked onchange="applyFilters()"> Other</label>
@@ -9015,7 +9022,9 @@ class HaplotypePhenotypeAnalyzer:
                                      region_start: int, region_end: int,
                                      cds_intervals: list, exon_intervals: list,
                                      gene_strand: str, promoter_start: int = None, 
-                                     promoter_end: int = None) -> dict:
+                                     promoter_end: int = None,
+                                     gene_body_start: int = None,
+                                     gene_body_end: int = None) -> dict:
         """
         用 tabix 只读目标区间，做 SNP 精细分类 (missense/synonymous/UTR/promoter/SV/indel/other)
         读取范围：gene_chrom:region_start-region_end (含启动子)
@@ -9049,7 +9058,14 @@ class HaplotypePhenotypeAnalyzer:
                 for pos in positions_list:
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
-                    effects[pos] = 'UTR' if (in_exon and not in_cds) else 'other'
+                    if in_exon and not in_cds:
+                        effects[pos] = 'UTR'
+                    elif promoter_start and promoter_end and promoter_start <= pos <= promoter_end:
+                        effects[pos] = 'promoter'
+                    elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end and not in_exon:
+                        effects[pos] = 'intron'
+                    else:
+                        effects[pos] = 'other'
                 return effects
             
             # 构建 CDS 上下文（用于翻译）
@@ -9084,22 +9100,24 @@ class HaplotypePhenotypeAnalyzer:
                     
                     # 优先级判断：exon/CDS > UTR > promoter > SV/indel > other
                     if not in_exon:
-                        # 不在外显子区，检查是否在启动子区
-                        in_promoter = (promoter_start is not None and 
-                                      promoter_end is not None and 
+                        # 非外显子区域: 区分promoter/intron/SV/INS/DEL
+                        in_promoter = (promoter_start is not None and
+                                      promoter_end is not None and
                                       promoter_start <= pos <= promoter_end)
-                        
-                        if in_promoter:
-                            # 启动子区域变异
-                            effects[pos] = 'promoter'
-                        elif len_diff >= 50:
-                            # 结构变异
+                        in_gene_body = (gene_body_start is not None and
+                                        gene_body_end is not None and
+                                        gene_body_start <= pos <= gene_body_end)
+                        if len_diff >= 50:
                             effects[pos] = 'SV'
-                        elif len_diff > 0:
-                            # 小插入缺失
-                            effects[pos] = 'indel'
+                        elif in_promoter:
+                            effects[pos] = 'promoter'
+                        elif in_gene_body:
+                            effects[pos] = 'intron'
+                        elif len(alt_allele) > len(ref):
+                            effects[pos] = 'INS'
+                        elif len(ref) > len(alt_allele):
+                            effects[pos] = 'DEL'
                         else:
-                            # 其他区域
                             effects[pos] = 'other'
                     elif not in_cds:
                         # 在 exon 但不在 CDS（UTR 区域）
@@ -9326,7 +9344,8 @@ class HaplotypePhenotypeAnalyzer:
                                 'len_diff': row.get('len_diff', 0),
                                 'is_sv': row.get('is_sv', False),
                                 'maf': row.get('maf', 0.5),
-                                'missing_rate': row.get('missing_rate', 0.0)
+                                'missing_rate': row.get('missing_rate', 0.0),
+                                'annotation': row.get('annotation', 'other')
                             }
                             for _, row in variant_info_df.iterrows()
                         }
@@ -9740,30 +9759,30 @@ class HaplotypePhenotypeAnalyzer:
                 if os.path.exists(variant_info_path):
                     try:
                         variant_info_df = pd.read_csv(variant_info_path)
+                        has_annotation_col = 'annotation' in variant_info_df.columns
                         for _, row in variant_info_df.iterrows():
                             pos = row['position']
+                            ann = row.get('annotation', 'other') if has_annotation_col else 'other'
                             len_diff = row.get('len_diff', 0)
                             is_sv = row.get('is_sv', False)
                             
-                            # 基于变异类型和位置分类
-                            if is_sv or abs(len_diff) >= 50:
-                                snp_effects[pos] = 'SV'
-                            elif len_diff > 0:
-                                snp_effects[pos] = 'INS'
-                            elif len_diff < 0:
-                                snp_effects[pos] = 'DEL'
+                            # 关键修复: 优先使用数据库中已计算的 annotation
+                            if has_annotation_col and ann and ann != 'other':
+                                snp_effects[pos] = ann
                             else:
-                                # 根据位置判断：启动子、UTR、内含子
-                                if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
-                                    snp_effects[pos] = 'promoter'
+                                # annotation 为 'other' 或缺失时，用 len_diff/is_sv 回退判断
+                                if is_sv or abs(len_diff) >= 50:
+                                    snp_effects[pos] = 'SV'
+                                elif len_diff > 0:
+                                    snp_effects[pos] = 'INS'
+                                elif len_diff < 0:
+                                    snp_effects[pos] = 'DEL'
                                 else:
-                                    in_exon = any(es <= pos <= ee for es, ee in exons_list)
-                                    in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
-                                    if in_exon and not in_cds:
-                                        snp_effects[pos] = 'UTR'
-                                    else:
-                                        snp_effects[pos] = 'other'
-                        logger.info(f"  - 从数据库重建SNP注释: {len(snp_effects)} 个位点")
+                                    snp_effects[pos] = 'other'
+                        _ann_dist = {}
+                        for v in snp_effects.values():
+                            _ann_dist[v] = _ann_dist.get(v, 0) + 1
+                        logger.info(f"  - 数据库注释分布: {_ann_dist}")
                     except Exception as e:
                         logger.warning(f"  - 从数据库重建SNP注释失败: {e}")
                         snp_effects = {}
@@ -9783,7 +9802,9 @@ class HaplotypePhenotypeAnalyzer:
                         exon_intervals=exons_list,
                         gene_strand=strand,
                         promoter_start=promoter_start_pos,
-                        promoter_end=promoter_end_pos
+                        promoter_end=promoter_end_pos,
+                        gene_body_start=start,
+                        gene_body_end=end
                     )
                 except Exception as e:
                     logger.warning(f"  - VCF注释也失败: {e}")
