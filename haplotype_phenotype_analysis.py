@@ -1295,7 +1295,9 @@ def _build_coding_context(chrom: str, cds_intervals, strand: str, fasta_path: st
 
 def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: str,
                                      cds_intervals: list, exon_intervals: list,
-                                     gene_strand: str, positions: list) -> dict:
+                                     gene_strand: str, positions: list,
+                                     gene_start: int = None, gene_end: int = None,
+                                     promoter_start: int = None, promoter_end: int = None) -> dict:
     """
     计算指定位点列表的 SNP 功能注释
     返回: {pos: 'missense'|'synonymous'|'UTR'|'indel'|'SV'|'other'}

@@ -1014,9 +1014,14 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 _promoter_start_ann = gene_end + 1
                 _promoter_end_ann = gene_end + promoter_actual_length
             try:
+                _fasta_path = None
+                try:
+                    _fasta_path = FASTA_FILE
+                except NameError:
+                    pass
                 _ann_effects = annotate_snp_effects_for_region(
                     vcf_file=vcf_file,
-                    fasta_path=FASTA_FILE if 'FASTA_FILE' in dir() else None,
+                    fasta_path=_fasta_path,
                     gene_chrom=chrom,
                     cds_intervals=_cds_for_ann,
                     exon_intervals=_exons_for_ann,
