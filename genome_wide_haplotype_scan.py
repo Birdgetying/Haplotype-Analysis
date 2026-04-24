@@ -938,7 +938,6 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'promoter_actual_length': promoter_actual_length,  # 实际使用的启动子长度
             'vcf_file': vcf_file,
             'sv_vcf_file': sv_vcf_file if sv_vcf_file else None,
-            'sv_vcf_file': sv_vcf_file if sv_vcf_file else None,
             'vcf_mtime': os.path.getmtime(vcf_file),  # 关键：保存VCF修改时间用于缓存判断
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'exons': gtf_data.get('exons', []),
