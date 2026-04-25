@@ -1,0 +1,5 @@
+position,ref,alt,distance_to_tss,is_sv,maf,overlaps_cds,overlapping_genes
+3379142,T,C,1913,False,0.0030959752321981426,False,
+3379282,G,GA,1773,False,0.2739938080495356,False,
+3379288,C,A,1767,False,0.2739938080495356,False,
+3380383,A,G,672,False,0.38544891640866874,False,

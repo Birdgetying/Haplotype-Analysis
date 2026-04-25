@@ -1333,7 +1333,7 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
         return effects
 
     if not PYSAM_AVAILABLE or not fasta_path or not os.path.exists(fasta_path):
-        # 没有 FASTA，只能判断 UTR vs other
+        # 没有 FASTA，无法判断 missense/synonymous，但仍可判断 promoter/intron/UTR
         for pos in positions:
             in_cds = _pos_in_any_interval(pos, cds_intervals)
             in_exon = _pos_in_any_interval(pos, exon_intervals)
@@ -1341,6 +1341,11 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                 effects[pos] = 'UTR'
             elif in_cds:
                 effects[pos] = 'other'  # 无法判断 missense/synonymous
+            elif promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                effects[pos] = 'promoter'
+            elif gene_start is not None and gene_end is not None and gene_start <= pos <= gene_end:
+                effects[pos] = 'intron'
+            # else: keep 'other' (intergenic)
         return effects
 
     try:
@@ -1389,8 +1394,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         elif var_type == 'indel':
                             effects[pos] = 'indel'
                         elif not in_exon:
-                            # 区分内含子和基因间区
-                            if gene_start and gene_end and gene_start <= pos <= gene_end:
+                            # 区分启动子/内含子/基因间区
+                            if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                                effects[pos] = 'promoter'
+                            elif gene_start and gene_end and gene_start <= pos <= gene_end:
                                 effects[pos] = 'intron'  # 在基因边界内但不在外显子中 = 内含子
                             else:
                                 effects[pos] = 'other'  # 基因间区
@@ -1456,8 +1463,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                     elif var_type == 'indel':
                         effects[pos] = 'indel'
                     elif not in_exon:
-                        # 区分内含子和基因间区
-                        if gene_start and gene_end and gene_start <= pos <= gene_end:
+                        # 区分启动子/内含子/基因间区
+                        if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                            effects[pos] = 'promoter'
+                        elif gene_start and gene_end and gene_start <= pos <= gene_end:
                             effects[pos] = 'intron'  # 在基因边界内但不在外显子中 = 内含子
                         else:
                             effects[pos] = 'other'  # 基因间区

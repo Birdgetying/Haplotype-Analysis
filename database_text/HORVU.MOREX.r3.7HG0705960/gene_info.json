@@ -1,0 +1,78 @@
+{
+  "gene_id": "HORVU.MOREX.r3.7HG0705960",
+  "chrom": "chr7H",
+  "start": 434120846,
+  "end": 434128327,
+  "gene_start": 434120846,
+  "gene_end": 434126327,
+  "strand": "-",
+  "length": 7482,
+  "promoter_length": 2000,
+  "promoter_extended_length": 5000,
+  "promoter_expansion_status": "none",
+  "promoter_actual_length": 2000,
+  "vcf_file": "/home/URPs/2025_URP_G1/project1/chrALL.impute.vcf.gz",
+  "sv_vcf_file": "/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt_SV/03.Pruning/BubbleAll_bnopart.vcf.gz",
+  "vcf_mtime": 1749391859.2773569,
+  "extraction_time": "2026-04-25 21:17:24",
+  "exons": [
+    [
+      434120846,
+      434122167
+    ],
+    [
+      434124522,
+      434124638
+    ],
+    [
+      434124727,
+      434124798
+    ],
+    [
+      434124874,
+      434124969
+    ],
+    [
+      434125078,
+      434125263
+    ],
+    [
+      434125614,
+      434125846
+    ],
+    [
+      434126011,
+      434126327
+    ]
+  ],
+  "cds": [
+    [
+      434121070,
+      434122167
+    ],
+    [
+      434124522,
+      434124638
+    ],
+    [
+      434124727,
+      434124798
+    ],
+    [
+      434124874,
+      434124969
+    ],
+    [
+      434125078,
+      434125263
+    ],
+    [
+      434125614,
+      434125846
+    ],
+    [
+      434126011,
+      434126260
+    ]
+  ]
+}

@@ -1,0 +1,2 @@
+gene_id,chrom,start,end,f_statistic,p_value,significant,pve_percent,n_haplotypes,n_samples
+HORVU.MOREX.r3.1HG0080220,chr1H,485701418,485707526,1.8413743639913902,0.0005385863793929532,True,,114,646
