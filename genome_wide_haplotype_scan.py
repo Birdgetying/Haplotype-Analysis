@@ -936,6 +936,10 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'promoter_extended_length': promoter_extended,  # 扩展启动子长度（5000）
             'promoter_expansion_status': promoter_expansion_status,  # 扩展状态：none/extended/nearest
             'promoter_actual_length': promoter_actual_length,  # 实际使用的启动子长度
+            'promoter_start': (max(1, gene_start - promoter_actual_length) if strand == '+' else gene_end + 1),
+            'promoter_end': (gene_start - 1 if strand == '+' else gene_end + promoter_actual_length),
+            'promoter_start': (max(1, gene_start - promoter_actual_length) if strand == '+' else gene_end + 1),
+            'promoter_end': (gene_start - 1 if strand == '+' else gene_end + promoter_actual_length),
             'vcf_file': vcf_file,
             'sv_vcf_file': sv_vcf_file if sv_vcf_file else None,
             'vcf_mtime': os.path.getmtime(vcf_file),  # 关键：保存VCF修改时间用于缓存判断
