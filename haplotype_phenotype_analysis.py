@@ -1296,7 +1296,8 @@ def _build_coding_context(chrom: str, cds_intervals, strand: str, fasta_path: st
 def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: str,
                                      cds_intervals: list, exon_intervals: list,
                                      gene_strand: str, positions: list,
-                                     gene_start: int = None, gene_end: int = None) -> dict:
+                                     gene_start: int = None, gene_end: int = None,
+                                     promoter_start: int = None, promoter_end: int = None) -> dict:
     """
     计算指定位点列表的 SNP 功能注释
     返回: {pos: 'missense'|'synonymous'|'UTR'|'indel'|'SV'|'other'}
@@ -1335,7 +1336,7 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
         return effects
 
     if not PYSAM_AVAILABLE or not fasta_path or not os.path.exists(fasta_path):
-        # 没有 FASTA，只能判断 UTR / intron / other
+        # 没有 FASTA，无法判断 missense/synonymous，但仍可判断 promoter/intron/UTR
         for pos in positions:
             in_cds = _pos_in_any_interval(pos, cds_intervals)
             in_exon = _pos_in_any_interval(pos, exon_intervals)
@@ -1343,9 +1344,11 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                 effects[pos] = 'UTR'
             elif in_cds:
                 effects[pos] = 'other'  # 无法判断 missense/synonymous
-            elif gene_start and gene_end and gene_start <= pos <= gene_end:
+            elif promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                effects[pos] = 'promoter'
+            elif gene_start is not None and gene_end is not None and gene_start <= pos <= gene_end:
                 effects[pos] = 'intron'
-            # else: stays 'other'
+            # else: keep 'other' (intergenic)
         return effects
 
     try:
@@ -1357,7 +1360,9 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
 
         # 优先用 tabix 按区域查询（秒级），否则逐行扫描（慢）
         tabix_ok = False
-        if vcf_file.endswith('.gz') and os.path.exists(vcf_file + '.tbi') and PYSAM_AVAILABLE:
+        tbi_exists = vcf_file and os.path.exists(vcf_file + '.tbi')
+        csi_exists = vcf_file and os.path.exists(vcf_file + '.csi')
+        if vcf_file and vcf_file.endswith('.gz') and (tbi_exists or csi_exists) and PYSAM_AVAILABLE:
             try:
                 import pysam as _pysam
                 tbx = _pysam.TabixFile(vcf_file)
@@ -1392,8 +1397,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         elif var_type == 'indel':
                             effects[pos] = 'indel'
                         elif not in_exon:
-                            # 区分内含子和基因间区
-                            if gene_start and gene_end and gene_start <= pos <= gene_end:
+                            # 区分启动子、内含子和基因间区
+                            if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                                effects[pos] = 'promoter'
+                            elif gene_start and gene_end and gene_start <= pos <= gene_end:
                                 effects[pos] = 'intron'  # 在基因边界内但不在外显子中 = 内含子
                             else:
                                 effects[pos] = 'other'  # 基因间区
@@ -1459,8 +1466,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                     elif var_type == 'indel':
                         effects[pos] = 'indel'
                     elif not in_exon:
-                        # 区分内含子和基因间区
-                        if gene_start and gene_end and gene_start <= pos <= gene_end:
+                        # 区分启动子、内含子和基因间区
+                        if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                            effects[pos] = 'promoter'
+                        elif gene_start and gene_end and gene_start <= pos <= gene_end:
                             effects[pos] = 'intron'  # 在基因边界内但不在外显子中 = 内含子
                         else:
                             effects[pos] = 'other'  # 基因间区
@@ -5280,13 +5289,14 @@ class ReportGenerator:
         html += f'<col style="width:90px;min-width:90px;max-width:90px;">\n'  # Haplotype
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
-        for _ in display_positions:
-            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
         # 新增：协变量箱线图列 - 排除已知列后的所有列
         covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
         for cov_col in covariate_cols:
             html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # 协变量列
+        
+        for _ in display_positions:
+            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
         html += f'<col style="width:auto;min-width:60px;">\n'  # n 列
         html += '</colgroup>\n'
@@ -5296,19 +5306,19 @@ class ReportGenerator:
         html += '    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>\n'
         html += '    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>\n'
         
+        # 协变量表头（序列列之前）
+        for cov_col in covariate_cols:
+            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
+        
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
             pos_str = f'{pos:,}'  # 千分位逗号
-            html += (f'<th style="width:20px;min-width:20px;max-width:20px;padding:0;'
+            html += (f'<th class="seq-col-th" data-pos="{pos}" style="width:20px;min-width:20px;max-width:20px;padding:0;'
                      f'vertical-align:top;overflow:hidden;">'
                      f'<div style="writing-mode:vertical-rl;transform:rotate(180deg);'
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
-        
-        # 新增：协变量表头
-        for cov_col in covariate_cols:
-            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
         
         html += '<th class="n-cell" style="min-width:60px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
         
@@ -5388,6 +5398,58 @@ class ReportGenerator:
         {box_html}
     </td>\n'''
             
+            # 协变量箱线图列（序列列之前）
+            for cov_col in covariate_cols:
+                # 计算该协变量的箱线图数据
+                cov_box_data = {}
+                for h in top_haps:
+                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == h]
+                    if cov_col in hap_rows.columns:
+                        values = hap_rows[cov_col].dropna().tolist()
+                        if values:
+                            cov_box_data[h] = {
+                                'mean': np.mean(values), 'median': np.median(values),
+                                'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
+                                'min': min(values), 'max': max(values), 'n': len(values),
+                                'values': values
+                            }
+                
+                # 计算全局范围
+                if cov_box_data:
+                    cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
+                    cov_global_min = min(cov_all_vals)
+                    cov_global_max = max(cov_all_vals)
+                    cov_global_range = cov_global_max - cov_global_min if cov_global_max > cov_global_min else 1
+                else:
+                    cov_global_min, cov_global_max, cov_global_range = 0, 1, 1
+                
+                # 生成箱线图 HTML（含散点）
+                cov_bd = cov_box_data.get(hap, {})
+                if cov_bd:
+                    cov_w_left = ((cov_bd['min'] - cov_global_min) / cov_global_range) * 100
+                    cov_w_right = ((cov_bd['max'] - cov_global_min) / cov_global_range) * 100
+                    cov_b_left = ((cov_bd['q1'] - cov_global_min) / cov_global_range) * 100
+                    cov_b_width = ((cov_bd['q3'] - cov_bd['q1']) / cov_global_range) * 100
+                    cov_m_pos = ((cov_bd['median'] - cov_global_min) / cov_global_range) * 100
+                    # 散点
+                    import random
+                    random.seed(hash(hap + cov_col) % 9999)
+                    cov_dots_html = ''
+                    for val in cov_bd.get('values', []):
+                        x_pct = ((val - cov_global_min) / cov_global_range) * 100
+                        top_pct = random.randint(15, 85)
+                        cov_dots_html += f'<div class="data-dot" style="left:{x_pct:.1f}%;top:{top_pct}%;"></div>'
+                    cov_box_html = f'''<div class="bar-container">
+                        <div class="bar-whisker" style="left:{cov_w_left}%;width:{max(cov_w_right-cov_w_left,1)}%;"></div>
+                        <div class="bar-box" style="left:{cov_b_left}%;width:{max(cov_b_width,2)}%;"></div>
+                        <div class="bar-median" style="left:{cov_m_pos}%;"></div>
+                        {cov_dots_html}
+                    </div>'''
+                else:
+                    cov_box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
+                
+                html += f'    <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">\n        {cov_box_html}\n    </td>\n'
+            
             # 序列列
             if 'Haplotype_Seq' in row.index:
                 seq = row['Haplotype_Seq'].replace('|', '')
@@ -5433,50 +5495,7 @@ class ReportGenerator:
                     else:
                         font_size = "9px"
                     
-                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
-            
-            # 新增：协变量箱线图列
-            for cov_col in covariate_cols:
-                # 计算该协变量的箱线图数据
-                cov_box_data = {}
-                for h in top_haps:
-                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == h]
-                    if cov_col in hap_rows.columns:
-                        values = hap_rows[cov_col].dropna().tolist()
-                        if values:
-                            cov_box_data[h] = {
-                                'mean': np.mean(values), 'median': np.median(values),
-                                'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
-                                'min': min(values), 'max': max(values), 'n': len(values)
-                            }
-                
-                # 计算全局范围
-                if cov_box_data:
-                    cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
-                    cov_global_min = min(cov_all_vals)
-                    cov_global_max = max(cov_all_vals)
-                    cov_global_range = cov_global_max - cov_global_min if cov_global_max > cov_global_min else 1
-                else:
-                    cov_global_min, cov_global_max, cov_global_range = 0, 1, 1
-                
-                # 生成箱线图 HTML
-                cov_bd = cov_box_data.get(hap, {})
-                if cov_bd:
-                    cov_w_left = ((cov_bd['min'] - cov_global_min) / cov_global_range) * 100
-                    cov_w_right = ((cov_bd['max'] - cov_global_min) / cov_global_range) * 100
-                    cov_b_left = ((cov_bd['q1'] - cov_global_min) / cov_global_range) * 100
-                    cov_b_width = ((cov_bd['q3'] - cov_bd['q1']) / cov_global_range) * 100
-                    cov_m_pos = ((cov_bd['median'] - cov_global_min) / cov_global_range) * 100
-                    
-                    cov_box_html = f'''<div class="bar-container">
-                        <div class="bar-whisker" style="left:{cov_w_left}%;width:{max(cov_w_right-cov_w_left,1)}%;"></div>
-                        <div class="bar-box" style="left:{cov_b_left}%;width:{max(cov_b_width,2)}%;"></div>
-                        <div class="bar-median" style="left:{cov_m_pos}%;"></div>
-                    </div>'''
-                else:
-                    cov_box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
-                
-                html += f'    <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">\n        {cov_box_html}\n    </td>\n'
+                    html += f'<td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
             html += f'<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">{cnt}</td>\n'
             
@@ -5520,11 +5539,7 @@ class ReportGenerator:
             html += '</div>'
         html += '</td>\n'
         
-        # 序列列（逐个输出空td，与数据行一一对应，确保列对齐）
-        for _ in display_positions:
-            html += '<td style="border:none;"></td>'
-        
-        # 新增：协变量列坐标轴
+        # 协变量列坐标轴（序列列之前）
         for cov_col in covariate_cols:
             # 计算该协变量的箱线图数据
             cov_box_data = {}
@@ -5557,6 +5572,10 @@ class ReportGenerator:
                     html += f'<span style="position:absolute;bottom:-4px;left:{tick_pct}%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">{tick_label}</span>'
                 html += '</div>'
             html += '</td>\n'
+        
+        # 序列列（逐个输出空td，与数据行一一对应，确保列对齐）
+        for _ in display_positions:
+            html += '<td style="border:none;"></td>'
         
         # n 列（空）
         html += '<td class="n-cell" style="border:none;"></td>\n'
@@ -5984,10 +6003,12 @@ function applyFilters() {
     
     allThs.forEach(function(th, idx) {{
         var thText = th.textContent.trim().substring(0, 30);
-        // 判断是否为固定列（前3列：Haplotype/Effect/Phenotype，或有特殊class的列：box-cell/n-cell）
-        var isFixedCol = (idx < 3) || th.classList.contains('box-cell') || th.classList.contains('n-cell');
+        // 判断是否为序列列（带 seq-col-th class）
+        var isSeqCol = th.classList.contains('seq-col-th');
+        // 判断是否为固定列（非seq-col-th的列）
+        var isFixedCol = !isSeqCol;
         if (!isFixedCol) {{
-            var posText = th.textContent.trim().replace(/,/g,'');
+            var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g,'');
             var pos = parseInt(posText);
             var inPosSet = posSet[pos] !== undefined;
             console.log('[DEBUG] Checking column idx:', idx, 'text:', thText, 'posText:', posText, 'parsedPos:', pos, 'inPosSet:', inPosSet);
@@ -6051,8 +6072,8 @@ function updateTableColumns(keepIndices, keepPositions) {
     // 处理表头
     allThs.forEach(function(th, idx) {{
         var text = th.textContent.trim().substring(0, 20);
-        // 判断是否为固定列（前3列 或 有特殊class的列：box-cell/n-cell）
-        var isFixedCol = (idx < 3) || th.classList.contains('box-cell') || th.classList.contains('n-cell');
+        // 判断是否为序列列（带 seq-col-th class）
+        var isFixedCol = !th.classList.contains('seq-col-th');
         if (isFixedCol) {{
             // 固定列始终显示
             console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - FIXED, showing');
@@ -6073,8 +6094,8 @@ function updateTableColumns(keepIndices, keepPositions) {
     tbodyRows.forEach(function(row) {{
         var tds = Array.from(row.querySelectorAll('td'));
         tds.forEach(function(td, idx) {{
-            // 判断是否为固定列（前3列 或 有特殊class的列：box-cell/n-cell/hap-cell/effect-cell）
-            var isFixedCol = (idx < 3) || td.classList.contains('box-cell') || td.classList.contains('n-cell');
+            // 判断是否为序列列（带 seq-col-th class）
+            var isFixedCol = !td.classList.contains('seq-col-th');
             if (isFixedCol) {{
                 // 固定列始终显示
                 td.style.display = '';
