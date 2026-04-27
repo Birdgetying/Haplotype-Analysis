@@ -5075,7 +5075,6 @@ class ReportGenerator:
             </span>
         </div>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
-        <button class="filter-btn" onclick="applyFilters()">Apply Filter</button>
     </div>
     
     <div class="zoom-controls">
@@ -5668,7 +5667,7 @@ class ReportGenerator:
 </div><!-- table-scroll-container -->
 
 <!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
-<div id="ld-triangle-wrapper" style="margin-top:0px;overflow-x:auto;overflow-y:hidden;">
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:hidden;">
     <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
     <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
         <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
@@ -8473,7 +8472,6 @@ if (promoterStart < promoterEnd) {{
                         </span>
                     </div>
                     <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
-                    <button class="filter-btn" onclick="applyFilters()">Apply</button>
                 </div>
                 
                 <!-- 顶部面板区域 -->
