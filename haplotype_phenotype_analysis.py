@@ -5667,7 +5667,7 @@ class ReportGenerator:
 </div><!-- table-scroll-container -->
 
 <!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
-<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:hidden;">
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:visible;width:auto;display:block;">
     <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
     <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
         <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
