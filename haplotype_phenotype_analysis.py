@@ -5668,8 +5668,8 @@ class ReportGenerator:
 </div><!-- table-scroll-container -->
 
 <!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
-<div id="ld-triangle-wrapper" style="margin-top:0px;overflow-x:auto;overflow-y:hidden;padding-left:0px;">
-    <canvas id="ld-triangle-canvas" style="display:block;margin:0 auto;"></canvas>
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow-x:auto;overflow-y:hidden;">
+    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
     <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
         <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
         <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
@@ -6166,9 +6166,10 @@ function drawLDTriangle() {
     var halfCell = cellW / 2;
     
     var nc = colInfos.length;
-    var paddingTop = 8;
+    var paddingTop = 10;
     var paddingBottom = 20;
-    var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
+    // 倒三角高度：每行的高度为halfCell*2，总共nc行
+    var canvasH = Math.ceil(paddingTop + nc * halfCell * 2 + paddingBottom);
     
     // canvas宽度只覆盖序列列区域，不包吨固定列（Haplotype/Effect/Phenotype等）
     // 使用序列列的实际总宽度：最后一列的canvasX + 半个cell宽度 - 第一列的canvasX + 半个cell宽度
@@ -6176,6 +6177,11 @@ function drawLDTriangle() {
     var lastColX = colInfos[colInfos.length-1].screenX;
     var canvasW = Math.ceil(lastColX - firstColX + cellW);
     canvasW = Math.max(canvasW, 100); // 最小宽度100px
+    
+    // wrapper需要添加padding-left使其与序列列对齐（即第一列的screenX）
+    var wrapper = document.getElementById('ld-triangle-wrapper');
+    wrapper.style.paddingLeft = firstColX + 'px';
+    
     canvas.width = canvasW;
     canvas.height = canvasH;
     canvas.style.width = canvasW + 'px';
@@ -6188,20 +6194,19 @@ function drawLDTriangle() {
     
     // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
-        // screenX是相对wrapper的偏移，需要缩放为canvas内部坐标，并且考虑canvas偏移（第一列应该在canvas左侧）
         colInfos[ci2].canvasX = (colInfos[ci2].screenX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
     }
     
     // 用canvas内部坐标重新计算细胞宽度
     if (colInfos.length > 1) {
         halfCell = (colInfos[colInfos.length-1].canvasX - colInfos[0].canvasX) / (colInfos.length - 1) / 2;
-        halfCell = Math.max(halfCell, 5);
+        halfCell = Math.max(halfCell, 8); // 增加最小宽度以避免重叠
     }
     
     var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvasW, canvasH);
     
-    // 绘制倒三角图形单元
+    // 绘制倒三角图形单元（经典Haploview风格）
     for (var i = 0; i < nc; i++) {
         for (var j = i + 1; j < nc; j++) {
             var mi = colInfos[i].matIdx;
@@ -6209,12 +6214,15 @@ function drawLDTriangle() {
             var r2val = (mi >= 0 && mj >= 0 && matrix[mi] && matrix[mi][mj] !== undefined) 
                         ? matrix[mi][mj] : 0;
             
+            // 菱形中心X：两个位点之间的中间位置
             var cx = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
-            var depth = (j - i);
-            var cy = paddingTop + (depth - 0.5) * halfCell;
+            // 菱形中心Y：行号i决定垂直位置（倒三角：第0行在最上，第nc-1行在最下）
+            var cy = paddingTop + i * halfCell * 2 + halfCell;
             
-            var hw = (j - i) * halfCell;
-            var hh = hw;
+            // 菱形尺寸：宽度为两个位点的距离，高度与宽度相等
+            var dist = colInfos[j].canvasX - colInfos[i].canvasX;
+            var hw = dist / 2; // 菱形半宽度
+            var hh = halfCell; // 菱形半高度固定为halfCell
             
             ctx.beginPath();
             ctx.moveTo(cx,      cy - hh);
@@ -6224,16 +6232,16 @@ function drawLDTriangle() {
             ctx.closePath();
             ctx.fillStyle = r2ToColor(r2val);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(180,180,180,0.4)';
-            ctx.lineWidth = 0.4;
+            ctx.strokeStyle = 'rgba(180,180,180,0.3)';
+            ctx.lineWidth = 0.5;
             ctx.stroke();
             
             // 如果r²较高且格子足够大，显示数字
-            if (hw >= 10 && r2val > 0.05) {
+            if (hw >= 12 && r2val > 0.05) {
                 var label = r2val >= 0.995 ? '1' : r2val.toFixed(2).replace('0.', '.');
                 ctx.fillStyle = r2val > 0.6 ? 'white' : '#333';
-                var fontSize = Math.min(hw * 0.5, 9);
-                if (fontSize >= 6) {
+                var fontSize = Math.min(hw * 0.45, 10);
+                if (fontSize >= 7) {
                     ctx.font = 'bold ' + fontSize + 'px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
