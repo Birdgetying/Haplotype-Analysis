@@ -5833,12 +5833,12 @@ function annNorm(d) {
         return 'synonymous';
     }
     
-    // INS/DEL/SV/indel：按 functional_ann 确定位置分类，兑底为 'other'
+    // INS/DEL/SV/indel：按 functional_ann 确定位置分类，返回Position标签
     if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {
         if (d.functional_ann) {
             var fa = String(d.functional_ann).toLowerCase();
-            if (fa.indexOf('missense') !== -1) return 'missense';
-            if (fa.indexOf('synonymous') !== -1) return 'synonymous';
+            // 注意：INS/DEL/SV不应该归一化为missense/synonymous，因为那是CDS突变标签
+            // 应该只返回Position标签：promoter/UTR/intron/other
             if (fa.indexOf('utr') !== -1) return 'UTR';
             if (fa.indexOf('intron') !== -1) return 'intron';
             if (fa.indexOf('promoter') !== -1) {
@@ -5846,7 +5846,7 @@ function annNorm(d) {
                 return 'promoter';
             }
         }
-        return 'other';  // 兑底：基因间区 / 未知位置
+        return 'other';  // 兜底：基因间区 / 未知位置
     }
     
     return a;
