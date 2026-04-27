@@ -6168,8 +6168,8 @@ function drawLDTriangle() {
     var nc = colInfos.length;
     var paddingTop = 10;
     var paddingBottom = 20;
-    // 倒三角高度：每行的高度为halfCell*2，总共nc行
-    var canvasH = Math.ceil(paddingTop + nc * halfCell * 2 + paddingBottom);
+    // 倒三角高度：深度从1到nc-1，所以总高度 = (nc-1) * halfCell
+    var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
     
     // canvas宽度只覆盖序列列区域，不包吨固定列（Haplotype/Effect/Phenotype等）
     // 使用序列列的实际总宽度：最后一列的canvasX + 半个cell宽度 - 第一列的canvasX + 半个cell宽度
@@ -6216,13 +6216,13 @@ function drawLDTriangle() {
             
             // 菱形中心X：两个位点之间的中间位置
             var cx = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
-            // 菱形中心Y：行号i决定垂直位置（倒三角：第0行在最上，第nc-1行在最下）
-            var cy = paddingTop + i * halfCell * 2 + halfCell;
+            // 菱形中心Y：深度(j-i)决定垂直位置（经典倒三角布局）
+            var depth = j - i;
+            var cy = paddingTop + depth * halfCell;
             
-            // 菱形尺寸：宽度为两个位点的距离，高度与宽度相等
-            var dist = colInfos[j].canvasX - colInfos[i].canvasX;
-            var hw = dist / 2; // 菱形半宽度
-            var hh = halfCell; // 菱形半高度固定为halfCell
+            // 菱形尺寸：固定大小，与位点间距无关
+            var hw = halfCell; // 菱形半宽 = halfCell
+            var hh = halfCell; // 菱形半高 = halfCell
             
             ctx.beginPath();
             ctx.moveTo(cx,      cy - hh);
@@ -6237,11 +6237,11 @@ function drawLDTriangle() {
             ctx.stroke();
             
             // 如果r²较高且格子足够大，显示数字
-            if (hw >= 12 && r2val > 0.05) {
+            if (halfCell >= 8 && r2val > 0.05) {
                 var label = r2val >= 0.995 ? '1' : r2val.toFixed(2).replace('0.', '.');
                 ctx.fillStyle = r2val > 0.6 ? 'white' : '#333';
-                var fontSize = Math.min(hw * 0.45, 10);
-                if (fontSize >= 7) {
+                var fontSize = Math.min(halfCell * 0.6, 9);
+                if (fontSize >= 6) {
                     ctx.font = 'bold ' + fontSize + 'px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
