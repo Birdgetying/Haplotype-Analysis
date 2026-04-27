@@ -4619,30 +4619,41 @@ class ReportGenerator:
         n_dp = len(ld_positions_list)
         if n_dp >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
             try:
-                # 构建每个样本在每个显示位置的基因型（0=参考，1=变异，NaN=缺失）
-                # 参考等位基因：取最多的碱基作为参考（0）
-                geno_matrix = []  # shape: (n_samples, n_positions)
-                for _, sample_row in hap_sample_df.iterrows():
-                    seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
-                    geno_vec = []
-                    for pos_i, orig_idx in enumerate(display_orig_indices):
+                # 构建每个样本在每个显示位置的基因型（0=主要等位基因，1=次要等位基因，NaN=缺失）
+                # 第一步：先收集所有位置的碱基序列
+                all_bases_at_positions = []  # shape: (n_positions, n_samples)
+                for pos_i, orig_idx in enumerate(display_orig_indices):
+                    bases_list = []
+                    for _, sample_row in hap_sample_df.iterrows():
+                        seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
                         if orig_idx < len(seq):
                             base = seq[orig_idx].upper()
-                            # 非参考碱基 = 变异，N作为缺失
-                            geno_vec.append(0 if base in ('N',) else 1)
+                            bases_list.append(base)
                         else:
+                            bases_list.append('N')  # 超出序列长度视为缺失
+                    all_bases_at_positions.append(bases_list)
+                
+                # 第二步：对每个位置，找主要碱基（出现最多的）编码为0，其他编码为1，N=NaN
+                geno_matrix = []  # shape: (n_samples, n_positions)
+                for sample_i in range(len(hap_sample_df)):
+                    geno_vec = []
+                    for pos_i in range(n_dp):
+                        base = all_bases_at_positions[pos_i][sample_i]
+                        if base == 'N':
                             geno_vec.append(np.nan)
+                        else:
+                            # 统计该位置所有非N碱基的频率
+                            all_non_n = [b for b in all_bases_at_positions[pos_i] if b != 'N']
+                            if len(all_non_n) == 0:
+                                geno_vec.append(np.nan)
+                            else:
+                                from collections import Counter
+                                base_counts = Counter(all_non_n)
+                                major_base = base_counts.most_common(1)[0][0]  # 出现最多的碱基
+                                geno_vec.append(0 if base == major_base else 1)
                     geno_matrix.append(geno_vec)
                 
-                # 纠正：确定每列的参考等位基因（出现最多的碱基=参考=0）
-                # 让列均值=0.5（即最多的碱基为参考）
                 geno_array = np.array(geno_matrix, dtype=float)  # (n_samples, n_positions)
-                
-                # 重新确定每列的0/1编码：让列均值最大的碱基为0
-                for col_i in range(geno_array.shape[1]):
-                    col_mean = np.nanmean(geno_array[:, col_i])
-                    if col_mean > 0.5:
-                        geno_array[:, col_i] = 1 - geno_array[:, col_i]
                 
                 # 计算r²矩阵
                 n_pos = geno_array.shape[1]
@@ -4673,6 +4684,8 @@ class ReportGenerator:
                 print(f"[INFO] LD r²矩阵计算完成: {n_pos}x{n_pos}")
             except Exception as e:
                 print(f"[WARNING] LD r²矩阵计算失败: {e}")
+                import traceback
+                traceback.print_exc()
                 ld_r2_matrix = []
         
         ld_r2_json = json.dumps(ld_r2_matrix) if ld_r2_matrix else '[]'
@@ -5655,8 +5668,8 @@ class ReportGenerator:
 </div><!-- table-scroll-container -->
 
 <!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
-<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:hidden;">
-    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow-x:auto;overflow-y:hidden;padding-left:0px;">
+    <canvas id="ld-triangle-canvas" style="display:block;margin:0 auto;"></canvas>
     <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
         <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
         <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
@@ -6123,8 +6136,12 @@ function drawLDTriangle() {
     var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
         
     visibleVarThs.forEach(function(th) {
-        var thRect = th.getBoundingClientRect();
-        var centerX = thRect.left + thRect.width / 2 - wrapRect.left;
+        // 使用offsetLeft获取列相对于table的偏移，再加table相对于wrapper的偏移
+        var tableEl = th.closest('table');
+        var tableRect = tableEl.getBoundingClientRect();
+        var thOffsetInTable = th.offsetLeft + th.offsetWidth / 2;
+        var tableOffsetInWrap = tableRect.left - wrapRect.left;
+        var centerX = tableOffsetInWrap + thOffsetInTable;
         // 找该列在displayPositions中的索引
         var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posVal = parseInt(posText);
@@ -6153,10 +6170,12 @@ function drawLDTriangle() {
     var paddingBottom = 20;
     var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
     
-    // canvas宽度连接wrapper的整体宽度
-    var tableRect = table.getBoundingClientRect();
-    var wrapLeft = wrapRect.left;
-    var canvasW = Math.ceil(tableRect.right - wrapLeft + 60);
+    // canvas宽度只覆盖序列列区域，不包吨固定列（Haplotype/Effect/Phenotype等）
+    // 使用序列列的实际总宽度：最后一列的canvasX + 半个cell宽度 - 第一列的canvasX + 半个cell宽度
+    var firstColX = colInfos[0].screenX;
+    var lastColX = colInfos[colInfos.length-1].screenX;
+    var canvasW = Math.ceil(lastColX - firstColX + cellW);
+    canvasW = Math.max(canvasW, 100); // 最小宽度100px
     canvas.width = canvasW;
     canvas.height = canvasH;
     canvas.style.width = canvasW + 'px';
@@ -6164,11 +6183,13 @@ function drawLDTriangle() {
     
     // 计算canvas显示尺寸与内部坐标的比例
     var canvasDisplayRect = canvas.getBoundingClientRect();
+    // canvasScaleX: canvas内部像素坐标 / canvas显示CSS像素坐标的比率
     var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
     
-    // 将所有colInfos的screenX转换为canvas内部坐标
+    // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
-        colInfos[ci2].canvasX = colInfos[ci2].screenX * canvasScaleX;
+        // screenX是相对wrapper的偏移，需要缩放为canvas内部坐标，并且考虑canvas偏移（第一列应该在canvas左侧）
+        colInfos[ci2].canvasX = (colInfos[ci2].screenX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
     }
     
     // 用canvas内部坐标重新计算细胞宽度
