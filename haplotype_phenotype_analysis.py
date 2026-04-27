@@ -4613,6 +4613,71 @@ class ReportGenerator:
             display_positions = variant_positions if variant_positions else []
             display_orig_indices = list(range(len(display_positions)))  # 顺序索引
         
+        # ==================== 计算LD r²矩阵（用于倒三角图） ====================
+        ld_r2_matrix = []
+        ld_positions_list = list(display_positions)  # 与display_positions完全一致
+        n_dp = len(ld_positions_list)
+        if n_dp >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
+            try:
+                # 构建每个样本在每个显示位置的基因型（0=参考，1=变异，NaN=缺失）
+                # 参考等位基因：取最多的碱基作为参考（0）
+                geno_matrix = []  # shape: (n_samples, n_positions)
+                for _, sample_row in hap_sample_df.iterrows():
+                    seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
+                    geno_vec = []
+                    for pos_i, orig_idx in enumerate(display_orig_indices):
+                        if orig_idx < len(seq):
+                            base = seq[orig_idx].upper()
+                            # 非参考碱基 = 变异，N作为缺失
+                            geno_vec.append(0 if base in ('N',) else 1)
+                        else:
+                            geno_vec.append(np.nan)
+                    geno_matrix.append(geno_vec)
+                
+                # 纠正：确定每列的参考等位基因（出现最多的碱基=参考=0）
+                # 让列均值=0.5（即最多的碱基为参考）
+                geno_array = np.array(geno_matrix, dtype=float)  # (n_samples, n_positions)
+                
+                # 重新确定每列的0/1编码：让列均值最大的碱基为0
+                for col_i in range(geno_array.shape[1]):
+                    col_mean = np.nanmean(geno_array[:, col_i])
+                    if col_mean > 0.5:
+                        geno_array[:, col_i] = 1 - geno_array[:, col_i]
+                
+                # 计算r²矩阵
+                n_pos = geno_array.shape[1]
+                r2_mat = [[1.0] * n_pos for _ in range(n_pos)]
+                for i in range(n_pos):
+                    for j in range(i + 1, n_pos):
+                        xi = geno_array[:, i]
+                        xj = geno_array[:, j]
+                        # 过滤掉缺失值
+                        mask = (~np.isnan(xi)) & (~np.isnan(xj))
+                        xi_m = xi[mask]
+                        xj_m = xj[mask]
+                        if len(xi_m) < 4:
+                            r2 = 0.0
+                        else:
+                            pi = np.mean(xi_m)
+                            pj = np.mean(xj_m)
+                            if pi <= 0 or pi >= 1 or pj <= 0 or pj >= 1:
+                                r2 = 0.0
+                            else:
+                                cov = np.mean(xi_m * xj_m) - pi * pj
+                                denom = (pi * (1 - pi) * pj * (1 - pj)) ** 0.5
+                                r2 = (cov / denom) ** 2 if denom > 0 else 0.0
+                                r2 = min(1.0, max(0.0, r2))
+                        r2_mat[i][j] = r2
+                        r2_mat[j][i] = r2
+                ld_r2_matrix = r2_mat
+                print(f"[INFO] LD r²矩阵计算完成: {n_pos}x{n_pos}")
+            except Exception as e:
+                print(f"[WARNING] LD r²矩阵计算失败: {e}")
+                ld_r2_matrix = []
+        
+        ld_r2_json = json.dumps(ld_r2_matrix) if ld_r2_matrix else '[]'
+        # ==================== LD计算结束 ====================
+        
         effects = effect_results.get('haplotype_effects', []) if effect_results else []
         grand_mean = effect_results.get('grand_mean', 0) if effect_results else 0
         region_len_kb = (region_end - region_start) / 1000
@@ -4974,12 +5039,10 @@ class ReportGenerator:
         <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
             <label style="width:100%;margin-bottom:4px;">Position:</label>
             <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
-                <label><input type="checkbox" class="ann-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
-                <label><input type="checkbox" class="ann-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
                 <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
                 <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
-                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
-                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
+                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Intergenic</label>
             </span>
         </div>
         <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
@@ -4989,6 +5052,13 @@ class ReportGenerator:
                 <label><input type="checkbox" class="type-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
                 <label><input type="checkbox" class="type-cb" value="SV" checked onchange="applyFilters()"> SV</label>
                 <label><input type="checkbox" class="type-cb" value="SNP" checked onchange="applyFilters()"> SNP</label>
+            </span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">CDS Mutation:</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="syn-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="syn-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
             </span>
         </div>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
@@ -5583,6 +5653,19 @@ class ReportGenerator:
         
         html += r'''</tbody></table>
 </div><!-- table-scroll-container -->
+
+<!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:hidden;">
+    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
+    <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
+        <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
+        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
+        <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">½</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
+        <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
+    </div>
+</div>
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
     </div>
@@ -5715,6 +5798,7 @@ var leadVariantPos = __LEAD_POS__;
 var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
 var displayPositions = __DISPLAY_POSITIONS__;  // 显示的变异位置列表
+var ldR2Matrix = __LD_R2_MATRIX__;  // LD r²矩阵（n x n），与displayPositions对应
 
 // ==================== 过滤功能 ====================
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
@@ -5781,6 +5865,29 @@ function annAllowed(d) {
     return o ? o.checked : true;
 }
 
+// CDS突变过滤：检查syn-cb复选框（synonymous/missense）
+// 只有CDS内的SNP才受此过滤控制，非CDS变异自动通过
+function synAllowed(d) {
+    var a = String(d.annotation || '');
+    // 非SNP（INS/DEL/SV等）不受syn过滤控制
+    if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {
+        return true;
+    }
+    // SNP但不在CDS区域，不受syn过滤控制
+    var isInCDS = false;
+    if (d.functional_ann) {
+        var fa = String(d.functional_ann).toLowerCase();
+        if (fa.indexOf('missense') !== -1 || fa.indexOf('synonymous') !== -1) {
+            isInCDS = true;
+        }
+    }
+    if (!isInCDS) return true;
+    // CDS内SNP：检查syn-cb
+    var normA = annNorm(d);
+    var cb = document.querySelector('.syn-cb[value="' + normA + '"]');
+    return cb ? cb.checked : true;
+}
+
 function updateFilterDisplay(type, value) {
     if (type === 'maf') {
         currentFilter.maf = parseFloat(value);
@@ -5800,6 +5907,7 @@ function resetFilters() {
     document.getElementById('missingValue').textContent = '0.2';
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
+    document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
     applyFilters();
 }
 
@@ -5951,6 +6059,227 @@ window.addEventListener('load', updateConnectorLines);
 // 窗口大小改变时重新计算
 window.addEventListener('resize', updateConnectorLines);
 
+// ==================== LD 倒三角图 ====================
+function r2ToColor(r2) {
+    // r² 转颜色：0=深蓝，0.5=浅蓝/白，1=深红
+    // 颜色条：#313695 -> #abd9e9 -> #fee090 -> #d73027
+    var colors = [
+        { stop: 0.0, r: 49, g: 54, b: 149 },   // #313695 深蓝
+        { stop: 0.25, r: 69, g: 117, b: 180 }, // #4575b4
+        { stop: 0.4, r: 116, g: 173, b: 209 }, // #74add1
+        { stop: 0.5, r: 171, g: 217, b: 233 }, // #abd9e9 浅蓝
+        { stop: 0.55, r: 224, g: 243, b: 248 }, // #e0f3f8
+        { stop: 0.6, r: 254, g: 224, b: 144 },  // #fee090 浅黄
+        { stop: 0.7, r: 253, g: 174, b: 97 },   // #fdae61 橙
+        { stop: 0.8, r: 244, g: 109, b: 67 },   // #f46d43 红橙
+        { stop: 0.9, r: 215, g: 48, b: 39 },    // #d73027 红
+        { stop: 1.0, r: 165, g: 0, b: 38 }      // #a50026 深红
+    ];
+    var r = 0, g = 0, b = 0;
+    if (r2 <= 0) return 'rgb(200,200,200)';
+    if (r2 >= 1) return 'rgb(165,0,38)';
+    // 找到所在区间
+    for (var i = 1; i < colors.length; i++) {
+        if (r2 <= colors[i].stop) {
+            var t = (r2 - colors[i-1].stop) / (colors[i].stop - colors[i-1].stop);
+            r = Math.round(colors[i-1].r + t * (colors[i].r - colors[i-1].r));
+            g = Math.round(colors[i-1].g + t * (colors[i].g - colors[i-1].g));
+            b = Math.round(colors[i-1].b + t * (colors[i].b - colors[i-1].b));
+            break;
+        }
+    }
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+function drawLDTriangle() {
+    var canvas = document.getElementById('ld-triangle-canvas');
+    if (!canvas) { console.log('[LD] canvas not found'); return; }
+    
+    var matrix = ldR2Matrix;
+    if (!matrix || matrix.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        console.log('[LD] no LD data, hiding');
+        return;
+    }
+    var n = matrix.length;
+    
+    // 获取表格中所有可见变异列的屏幕坐标
+    var table = document.querySelector('.data-table');
+    if (!table) { console.log('[LD] table not found'); return; }
+    var allThs = Array.from(table.querySelectorAll('thead th'));
+    // 用 seq-col-th class 识别序列列
+    var visibleVarThs = allThs.filter(function(th, idx) {
+        return th.classList.contains('seq-col-th') && th.style.display !== 'none';
+    });
+    
+    if (visibleVarThs.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }
+    
+    // 计算每列的屏幕坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
+    var colInfos = [];  // {screenX, matIdx}
+    var canvasEl = canvas;
+    var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
+        
+    visibleVarThs.forEach(function(th) {
+        var thRect = th.getBoundingClientRect();
+        var centerX = thRect.left + thRect.width / 2 - wrapRect.left;
+        // 找该列在displayPositions中的索引
+        var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
+        var posVal = parseInt(posText);
+        var matIdx = -1;
+        for (var pi = 0; pi < displayPositions.length; pi++) {
+            if (displayPositions[pi] === posVal) { matIdx = pi; break; }
+        }
+        if (matIdx >= 0) {
+            colInfos.push({ screenX: centerX, matIdx: matIdx });
+        }
+    });
+    
+    if (colInfos.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }
+    
+    // 计算canvas尺寸
+    var cellW = colInfos.length > 1 ? 
+        (colInfos[colInfos.length-1].screenX - colInfos[0].screenX) / (colInfos.length - 1) : 20;
+    cellW = Math.max(cellW, 10);
+    var halfCell = cellW / 2;
+    
+    var nc = colInfos.length;
+    var paddingTop = 8;
+    var paddingBottom = 20;
+    var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
+    
+    // canvas宽度连接wrapper的整体宽度
+    var tableRect = table.getBoundingClientRect();
+    var wrapLeft = wrapRect.left;
+    var canvasW = Math.ceil(tableRect.right - wrapLeft + 60);
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    canvas.style.width = canvasW + 'px';
+    canvas.style.height = canvasH + 'px';
+    
+    // 计算canvas显示尺寸与内部坐标的比例
+    var canvasDisplayRect = canvas.getBoundingClientRect();
+    var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
+    
+    // 将所有colInfos的screenX转换为canvas内部坐标
+    for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
+        colInfos[ci2].canvasX = colInfos[ci2].screenX * canvasScaleX;
+    }
+    
+    // 用canvas内部坐标重新计算细胞宽度
+    if (colInfos.length > 1) {
+        halfCell = (colInfos[colInfos.length-1].canvasX - colInfos[0].canvasX) / (colInfos.length - 1) / 2;
+        halfCell = Math.max(halfCell, 5);
+    }
+    
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    
+    // 绘制倒三角图形单元
+    for (var i = 0; i < nc; i++) {
+        for (var j = i + 1; j < nc; j++) {
+            var mi = colInfos[i].matIdx;
+            var mj = colInfos[j].matIdx;
+            var r2val = (mi >= 0 && mj >= 0 && matrix[mi] && matrix[mi][mj] !== undefined) 
+                        ? matrix[mi][mj] : 0;
+            
+            var cx = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+            var depth = (j - i);
+            var cy = paddingTop + (depth - 0.5) * halfCell;
+            
+            var hw = (j - i) * halfCell;
+            var hh = hw;
+            
+            ctx.beginPath();
+            ctx.moveTo(cx,      cy - hh);
+            ctx.lineTo(cx + hw, cy);
+            ctx.lineTo(cx,      cy + hh);
+            ctx.lineTo(cx - hw, cy);
+            ctx.closePath();
+            ctx.fillStyle = r2ToColor(r2val);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(180,180,180,0.4)';
+            ctx.lineWidth = 0.4;
+            ctx.stroke();
+            
+            // 如果r²较高且格子足够大，显示数字
+            if (hw >= 10 && r2val > 0.05) {
+                var label = r2val >= 0.995 ? '1' : r2val.toFixed(2).replace('0.', '.');
+                ctx.fillStyle = r2val > 0.6 ? 'white' : '#333';
+                var fontSize = Math.min(hw * 0.5, 9);
+                if (fontSize >= 6) {
+                    ctx.font = 'bold ' + fontSize + 'px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(label, cx, cy);
+                }
+            }
+        }
+    }
+    
+    // 底部坐标轴刻度线（与displayPositions对齐）
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 1;
+    for (var k = 0; k < colInfos.length; k++) {
+        var tx = colInfos[k].canvasX;
+        ctx.beginPath();
+        ctx.moveTo(tx, paddingTop + (nc - 1) * halfCell);
+        ctx.lineTo(tx, paddingTop + (nc - 1) * halfCell + 4);
+        ctx.stroke();
+    }
+    
+    // 鼠标悬停显示r²数字
+    canvas.onmousemove = function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var scaleX2 = canvas.width / (rect.width || canvas.width);
+        var scaleY2 = canvas.height / (rect.height || canvas.height);
+        var mx = (e.clientX - rect.left) * scaleX2;
+        var my = (e.clientY - rect.top) * scaleY2;
+        var info = '';
+        for (var i = 0; i < nc; i++) {
+            for (var j = i + 1; j < nc; j++) {
+                var cx2 = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+                var depth2 = j - i;
+                var cy2 = paddingTop + (depth2 - 0.5) * halfCell;
+                var hw2 = depth2 * halfCell;
+                var hh2 = hw2;
+                var dx = mx - cx2;
+                var dy = my - cy2;
+                if (Math.abs(dx) + Math.abs(dy) <= hw2) {
+                    var mi2 = colInfos[i].matIdx;
+                    var mj2 = colInfos[j].matIdx;
+                    var r2v = (matrix[mi2] && matrix[mi2][mj2] !== undefined) ? matrix[mi2][mj2] : 0;
+                    var p1 = displayPositions[mi2] ? displayPositions[mi2].toLocaleString() : '?';
+                    var p2 = displayPositions[mj2] ? displayPositions[mj2].toLocaleString() : '?';
+                    info = 'r²(' + p1 + ', ' + p2 + ') = ' + r2v.toFixed(3);
+                    break;
+                }
+            }
+            if (info) break;
+        }
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = info;
+    };
+    canvas.onmouseleave = function() {
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = '';
+    };
+    
+    console.log('[LD] LD倒三角图绘制完成: ' + nc + '个列, 菱形数量' + nc*(nc-1)/2);
+}
+
+// 过滤更新时重绘LD图
+var _origApplyFilters = applyFilters;
+applyFilters = function() {
+    _origApplyFilters();
+    requestAnimationFrame(function() { drawLDTriangle(); });
+};
+
 function applyFilters() {
     console.log('[DEBUG] ==================== applyFilters START ====================');
     console.log('[DEBUG] applyFilters called at:', new Date().toISOString());
@@ -5969,13 +6298,14 @@ function applyFilters() {
         var missPass = d.missing_rate <= currentFilter.missingRate;
         var annPass = annAllowed(d);
         var typePass = typeAllowed(d);
+        var synPass = synAllowed(d);
         var normAnn = annNorm(d);
-        if (!mafPass || !missPass || !annPass || !typePass) {
+        if (!mafPass || !missPass || !annPass || !typePass || !synPass) {
             console.log('[DEBUG] Filtered OUT pos:', d.pos, 'maf:', d.maf, 'missing:', d.missing_rate, 
                         'ann:', d.annotation, 'normAnn:', normAnn, 'functional_ann:', d.functional_ann,
-                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass, 'typePass:', typePass);
+                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass, 'typePass:', typePass, 'synPass:', synPass);
         }
-        return mafPass && missPass && annPass && typePass;
+        return mafPass && missPass && annPass && typePass && synPass;
     });
     console.log('[DEBUG] Filtered data count:', filtered.length, 'of', gwasData.length);
     
@@ -6498,6 +6828,8 @@ document.addEventListener('DOMContentLoaded', function() {
     drawGWASPlot(gwasData);
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
+    // 初始化LD倒三角图
+    setTimeout(function() { drawLDTriangle(); }, 300);
 });
 </script>
 </body>
@@ -6536,6 +6868,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__EXON_REGIONS__", _exon_json)
         html = html.replace("__GENE_LABEL__", _glabel)
         html = html.replace("__DISPLAY_POSITIONS__", _display_pos_json)
+        html = html.replace("__LD_R2_MATRIX__", ld_r2_json)
         
         # DEBUG: 检查exportSVG是否存在
         if 'exportSVG' in html:
