@@ -110,7 +110,8 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     
     # 检查是否有tabix索引，优先使用
     tbi_path = input_vcf + '.tbi'
-    use_tabix = PYSAM_AVAILABLE and os.path.exists(tbi_path)
+    csi_path = input_vcf + '.csi'
+    use_tabix = PYSAM_AVAILABLE and (os.path.exists(tbi_path) or os.path.exists(csi_path))
     
     if use_tabix:
         print(f"[DEBUG] 使用tabix索引快速查询: {tbi_path}")
@@ -1955,8 +1956,10 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
             'phenotype_data.csv',
             'haplotype_stats.csv',
             'variants.vcf.gz',  # 关键：VCF子集文件
-            'sv_variants.vcf.gz',  # 结构变异VCF子集
         ]
+        # sv_variants.vcf.gz 只在提供了sv_vcf_file时才是必须的
+        if sv_vcf_file and os.path.exists(sv_vcf_file):
+            required_files.append('sv_variants.vcf.gz')
         
         if os.path.exists(gene_data_dir):
             # 检查缺失哪些文件
