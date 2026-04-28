@@ -792,8 +792,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                     print(f"[INFO] {gene_id}: 从 SV VCF 提取到 {len(sv_positions)} 个结构变异")
 
                     # 合并 SV 位置到主位置列表（去重）
+                    pos_set = set(positions) if positions else set()
                     if positions:
-                        pos_set = set(positions)
                         new_sv_pos = [p for p in sv_positions if p not in pos_set]
                         positions = sorted(positions + new_sv_pos)
                     else:
@@ -1014,10 +1014,31 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             
             return result_summary
         
-        # 关键检查：如果 hap_sample_df 为空，直接返回
+        # 关键检查：如果 hap_sample_df 为空，直接返回（但保存基础文件）
         if hap_sample_df is None or len(hap_sample_df) == 0:
             print(f"[WARNING] hap_sample_df 为空，无法继续")
             result_summary['status'] = 'no_valid_haplotypes'
+            
+            # 保存基础文件以避免缓存检查失败
+            empty_hap_df = pd.DataFrame(columns=['Hap_Name', 'Haplotype_Seq', 'n_variants'])
+            empty_hap_df.to_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'), index=False)
+            empty_hap_sample_df = pd.DataFrame(columns=['SampleID', 'Hap_Name', 'Haplotype_Seq'])
+            empty_hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
+            empty_var_df = pd.DataFrame(columns=['position', 'ref', 'alt', 'len_diff', 'is_sv', 'maf', 'missing_rate', 'annotation'])
+            empty_var_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
+            
+            # 创建空VCF
+            subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
+            if not os.path.exists(subset_vcf_path):
+                try:
+                    import gzip as _gzip
+                    with _gzip.open(subset_vcf_path, 'wt', encoding='utf-8') as f:
+                        f.write('##fileformat=VCFv4.2\n')
+                        f.write(f'##contig=<ID={chrom}>\n')
+                        f.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
+                except Exception as _e:
+                    print(f"[WARNING] {gene_id}: 保存空VCF失败: {_e}")
+            
             return result_summary
         
         n_variants = len(positions) if positions else 0
