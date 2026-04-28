@@ -1056,7 +1056,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                     'is_sv': info.get('is_sv', False),
                     'maf': info.get('maf', 0.5),
                     'missing_rate': info.get('missing_rate', 0.0),
-                    'annotation': _ann_effects.get(pos, 'other')
+                    # 优先使用info中已有的annotation（如SV），其次用_ann_effects计算结果
+                    'annotation': info.get('annotation', _ann_effects.get(pos, 'other'))
                 }
                 for pos, info in extractor.variant_info.items()
             ])
