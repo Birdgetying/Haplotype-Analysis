@@ -820,6 +820,17 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                                 if len(first_sample) > 0:
                                     hap_df.at[idx, 'Haplotype_Seq'] = first_sample.iloc[0]['Haplotype_Seq']
 
+                    # 关键修复：合并 SV variant_info 到主 extractor.variant_info
+                    if hasattr(sv_extractor, 'variant_info') and sv_extractor.variant_info:
+                        for sv_pos, sv_info in sv_extractor.variant_info.items():
+                            if sv_pos not in pos_set:
+                                # 标记为SV变异
+                                sv_info['is_sv'] = True
+                                if 'annotation' not in sv_info or sv_info['annotation'] in ('', 'other'):
+                                    sv_info['annotation'] = 'SV'
+                                extractor.variant_info[sv_pos] = sv_info
+                        print(f"[INFO] {gene_id}: 合并 {len(sv_extractor.variant_info)} 个SV变异信息到variant_info")
+
                     # 保存 SV VCF 子集
                     try:
                         sv_subset_path = os.path.join(gene_data_dir, 'sv_variants.vcf.gz')
@@ -936,8 +947,6 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'promoter_extended_length': promoter_extended,  # 扩展启动子长度（5000）
             'promoter_expansion_status': promoter_expansion_status,  # 扩展状态：none/extended/nearest
             'promoter_actual_length': promoter_actual_length,  # 实际使用的启动子长度
-            'promoter_start': (max(1, gene_start - promoter_actual_length) if strand == '+' else gene_end + 1),
-            'promoter_end': (gene_start - 1 if strand == '+' else gene_end + promoter_actual_length),
             'promoter_start': (max(1, gene_start - promoter_actual_length) if strand == '+' else gene_end + 1),
             'promoter_end': (gene_start - 1 if strand == '+' else gene_end + promoter_actual_length),
             'vcf_file': vcf_file,
