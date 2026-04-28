@@ -9672,7 +9672,8 @@ class HaplotypePhenotypeAnalyzer:
                                 'len_diff': row.get('len_diff', 0),
                                 'is_sv': row.get('is_sv', False),
                                 'maf': row.get('maf', 0.5),
-                                'missing_rate': row.get('missing_rate', 0.0)
+                                'missing_rate': row.get('missing_rate', 0.0),
+                                'annotation': row.get('annotation', 'other')  # 关键：包含annotation字段
                             }
                             for _, row in variant_info_df.iterrows()
                         }
@@ -10166,31 +10167,36 @@ class HaplotypePhenotypeAnalyzer:
                         variant_info_df = pd.read_csv(variant_info_path)
                         for _, row in variant_info_df.iterrows():
                             pos = row['position']
-                            len_diff = row.get('len_diff', 0)
-                            is_sv = row.get('is_sv', False)
                             
-                            # 基于变异类型和位置分类
-                            if is_sv or abs(len_diff) >= 50:
-                                snp_effects[pos] = 'SV'
-                            elif len_diff > 0:
-                                snp_effects[pos] = 'INS'
-                            elif len_diff < 0:
-                                snp_effects[pos] = 'DEL'
+                            # 优先使用数据库中已有的annotation字段（包含missense/synonymous/promoter/intron/UTR等精细分类）
+                            if 'annotation' in row and pd.notna(row['annotation']) and row['annotation'] != '':
+                                snp_effects[pos] = row['annotation']
                             else:
-                                # 根据位置判断：启动子、UTR、内含子
-                                if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
-                                    snp_effects[pos] = 'promoter'
+                                # 回退：根据变异类型和位置分类
+                                len_diff = row.get('len_diff', 0)
+                                is_sv = row.get('is_sv', False)
+                                
+                                if is_sv or abs(len_diff) >= 50:
+                                    snp_effects[pos] = 'SV'
+                                elif len_diff > 0:
+                                    snp_effects[pos] = 'INS'
+                                elif len_diff < 0:
+                                    snp_effects[pos] = 'DEL'
                                 else:
-                                    in_exon = any(es <= pos <= ee for es, ee in exons_list)
-                                    in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
-                                    if in_exon and not in_cds:
-                                        snp_effects[pos] = 'UTR'
-                                    elif in_cds:
-                                        snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
-                                    elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
-                                        snp_effects[pos] = 'intron'
+                                    # 根据位置判断：启动子、UTR、内含子
+                                    if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
+                                        snp_effects[pos] = 'promoter'
                                     else:
-                                        snp_effects[pos] = 'other'
+                                        in_exon = any(es <= pos <= ee for es, ee in exons_list)
+                                        in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
+                                        if in_exon and not in_cds:
+                                            snp_effects[pos] = 'UTR'
+                                        elif in_cds:
+                                            snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
+                                        elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
+                                            snp_effects[pos] = 'intron'
+                                        else:
+                                            snp_effects[pos] = 'other'
                         logger.info(f"  - 从数据库重建SNP注释: {len(snp_effects)} 个位点")
                     except Exception as e:
                         logger.warning(f"  - 从数据库重建SNP注释失败: {e}")

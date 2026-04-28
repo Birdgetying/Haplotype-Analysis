@@ -1108,13 +1108,13 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             print(f"[INFO] 变异注释信息已保存: {len(variant_info_df)} 个位点（含annotation字段）")
         
         # **新增**: 分析并保存启动子区域变异信息
-        # 计算启动子区域（基因体外的上游区域）
+        # 计算启动子区域（使用扩展后的实际长度）
         if strand == '+':
-            promoter_start = max(1, gene_start - promoter_length)
+            promoter_start = max(1, gene_start - promoter_actual_length)
             promoter_end = gene_start - 1
         else:
             promoter_start = gene_end + 1
-            promoter_end = gene_end + promoter_length
+            promoter_end = gene_end + promoter_actual_length
         
         # **关键修复**：加载所有基因的CDS信息，用于检查启动子变异是否与其他基因重叠
         # 性能优化：如果外部传入 all_genes_cds，直接使用，避免重复扫描 GFF 文件
