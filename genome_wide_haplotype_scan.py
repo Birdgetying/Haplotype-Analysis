@@ -969,6 +969,28 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 # 保存空的单倍型数据
                 hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
                 
+                # 保存空的 haplotype_data.csv（只有列名）
+                empty_hap_df = pd.DataFrame(columns=['Hap_Name', 'Haplotype_Seq', 'n_variants'])
+                empty_hap_df.to_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'), index=False)
+                
+                # 保存空的 variant_info.csv（只有列名）
+                empty_var_df = pd.DataFrame(columns=['position', 'ref', 'alt', 'len_diff', 'is_sv', 'maf', 'missing_rate', 'annotation'])
+                empty_var_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
+                
+                # 保存空的 variants.vcf.gz（只有header，无数据行）
+                subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
+                if not os.path.exists(subset_vcf_path):
+                    try:
+                        import gzip as _gzip
+                        # 创建最小化空VCF（只有必需header）
+                        with _gzip.open(subset_vcf_path, 'wt', encoding='utf-8') as f:
+                            f.write('##fileformat=VCFv4.2\n')
+                            f.write(f'##contig=<ID={chrom}>\n')
+                            f.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
+                        print(f"[INFO] {gene_id}: 已保存空VCF子集（无变异）")
+                    except Exception as _e:
+                        print(f"[WARNING] {gene_id}: 保存空VCF失败: {_e}")
+                
                 # 合并表型数据
                 merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
                 if len(merged) > 0:
