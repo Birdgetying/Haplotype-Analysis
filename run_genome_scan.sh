@@ -189,6 +189,7 @@ python genome_wide_haplotype_scan.py \
     --sv-vcf ${SV_VCF_FILE} \
     --gff ${GFF_FILE} \
     --phenotype ${PHENO_FILE} \
+    --fasta ${FASTA_FILE} \
     --database-dir ${DATABASE_DIR} \
     --results-dir ${RESULTS_DIR} \
     --min-samples 1 \

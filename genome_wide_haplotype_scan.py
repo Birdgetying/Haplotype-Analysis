@@ -696,7 +696,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         min_samples: int = 1, test_region_length: int = 0,
                         gff_file: str = None, all_genes_cds: list = None,
                         cophe_files: list = None,
-                        sv_vcf_file: str = None) -> dict:
+                        sv_vcf_file: str = None,
+                        fasta_file: str = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
@@ -1026,11 +1027,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 _promoter_start_ann = gene_end + 1
                 _promoter_end_ann = gene_end + promoter_actual_length
             try:
-                _fasta_path = None
-                try:
-                    _fasta_path = FASTA_FILE
-                except NameError:
-                    pass
+                # 优先使用传入的fasta_file参数，其次用ScanConfig，否则为None
+                _fasta_path = fasta_file or getattr(ScanConfig, 'FASTA_FILE', None)
                 _ann_effects = annotate_snp_effects_for_region(
                     vcf_file=vcf_file,
                     fasta_path=_fasta_path,
@@ -1650,7 +1648,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     test_region_length: int = 0,
                     cluster_haplotypes: bool = False,
                     cophe_files: list = None,
-                    sv_vcf_file: str = None) -> pd.DataFrame:
+                    sv_vcf_file: str = None,
+                    fasta_file: str = None) -> pd.DataFrame:
     """
     运行指定基因的单倍型数据集构建
     
@@ -1955,7 +1954,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
             'variant_info.csv',
             'phenotype_data.csv',
             'haplotype_stats.csv',
-            'variants.vcf.gz'  # 关键：VCF子集文件,
+            'variants.vcf.gz',  # 关键：VCF子集文件
             'sv_variants.vcf.gz',  # 结构变异VCF子集
         ]
         
@@ -2055,7 +2054,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                                      gff_file=gff_file,
                                      all_genes_cds=all_genes_cds,
                                      cophe_files=cophe_files,
-                                     sv_vcf_file=sv_vcf_file)
+                                     sv_vcf_file=sv_vcf_file,
+                                     fasta_file=fasta_file)
         all_results.append(result)
         processed += 1
         
@@ -2390,7 +2390,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                                         'len_diff': info.get('len_diff', 0),
                                         'is_sv': info.get('is_sv', False),
                                         'maf': info.get('maf', 0.5),
-                                        'missing_rate': info.get('missing_rate', 0.0)
+                                        'missing_rate': info.get('missing_rate', 0.0),
+                                        'annotation': info.get('annotation', 'other')
                                     }
                                     for pos, info in variant_info.items()
                                 ])
@@ -2516,6 +2517,8 @@ def main():
     
     parser.add_argument("--sv-vcf", type=str, default=None,
                         help="结构变异VCF文件路径（如Bubble检测结果）")
+    parser.add_argument("--fasta", type=str, default=ScanConfig.FASTA_FILE,
+                        help="基因组FASTA文件路径（用于missense/synonymous注释）")
 
     args = parser.parse_args()
     
@@ -2539,7 +2542,9 @@ def main():
             (args.cophe3, args.cophe3_title) if args.cophe3 else None,
         ],
         # 新增：结构变异VCF
-        sv_vcf_file=args.sv_vcf
+        sv_vcf_file=args.sv_vcf,
+        # FASTA路径（用于missense/synonymous注释）
+        fasta_file=args.fasta
     )
 
 
