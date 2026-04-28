@@ -1,0 +1,42 @@
+启动子区域变异分析报告
+============================================================
+基因: HORVU.MOREX.r3.1HG0080620
+染色体: chr1H
+链方向: -
+启动子区域: 486,482,770-486,484,769
+TSS位置: 486,476,592 (正链) 或 486,482,769 (负链)
+变异总数: 29
+  - 纯启动子变异: 29
+  - 与其他基因CDS重叠: 0
+
+变异详情:
+------------------------------------------------------------
+  位置: 486,482,858 | 距离TSS: 89bp | REF: T | ALT: G | MAF: 0.014
+  位置: 486,482,974 | 距离TSS: 205bp | REF: T | ALT: A | MAF: 0.128
+  位置: 486,483,007 | 距离TSS: 238bp | REF: A | ALT: G | MAF: 0.375
+  位置: 486,483,115 | 距离TSS: 346bp | REF: A | ALT: G | MAF: 0.062
+  位置: 486,483,150 | 距离TSS: 381bp | REF: CAAACCGTGTGGTAGTTTGTTAAAAAAAA | ALT: C | MAF: 0.014
+  位置: 486,483,314 | 距离TSS: 545bp | REF: T | ALT: C | MAF: 0.012
+  位置: 486,483,341 | 距离TSS: 572bp | REF: TAC | ALT: T | MAF: 0.019
+  位置: 486,483,345 | 距离TSS: 576bp | REF: TCCGTATAC | ALT: T | MAF: 0.019
+  位置: 486,483,541 | 距离TSS: 772bp | REF: TGTTG | ALT: T | MAF: 0.214
+  位置: 486,483,547 | 距离TSS: 778bp | REF: AT | ALT: A | MAF: 0.214
+  位置: 486,483,619 | 距离TSS: 850bp | REF: A | ALT: G | MAF: 0.224
+  位置: 486,483,632 | 距离TSS: 863bp | REF: G | ALT: GCCAC | MAF: 0.215
+  位置: 486,483,642 | 距离TSS: 873bp | REF: A | ALT: AGCG | MAF: 0.217
+  位置: 486,483,658 | 距离TSS: 889bp | REF: TTTGAATC | ALT: T | MAF: 0.218
+  位置: 486,483,718 | 距离TSS: 949bp | REF: T | ALT: G | MAF: 0.226
+  位置: 486,483,799 | 距离TSS: 1,030bp | REF: C | ALT: T | MAF: 0.226
+  位置: 486,483,841 | 距离TSS: 1,072bp | REF: TA | ALT: T | MAF: 0.125
+  位置: 486,483,845 | 距离TSS: 1,076bp | REF: TG | ALT: T | MAF: 0.025
+  位置: 486,483,917 | 距离TSS: 1,148bp | REF: T | ALT: C | MAF: 0.243
+  位置: 486,483,964 | 距离TSS: 1,195bp | REF: G | ALT: T | MAF: 0.039
+  位置: 486,484,064 | 距离TSS: 1,295bp | REF: T | ALT: C | MAF: 0.241
+  位置: 486,484,220 | 距离TSS: 1,451bp | REF: C | ALT: G | MAF: 0.006
+  位置: 486,484,242 | 距离TSS: 1,473bp | REF: T | ALT: C | MAF: 0.014
+  位置: 486,484,263 | 距离TSS: 1,494bp | REF: G | ALT: A | MAF: 0.057
+  位置: 486,484,297 | 距离TSS: 1,528bp | REF: G | ALT: A | MAF: 0.491
+  位置: 486,484,391 | 距离TSS: 1,622bp | REF: A | ALT: C | MAF: 0.255
+  位置: 486,484,408 | 距离TSS: 1,639bp | REF: A | ALT: C | MAF: 0.235
+  位置: 486,484,467 | 距离TSS: 1,698bp | REF: A | ALT: C | MAF: 0.009
+  位置: 486,484,500 | 距离TSS: 1,731bp | REF: T | ALT: C | MAF: 0.015

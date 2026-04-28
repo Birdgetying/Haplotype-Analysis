@@ -1,0 +1,6 @@
+Haplotype_Seq,Count,Hap_Name,Alleles
+T|G|C|A,234,Hap1,"['T', 'G', 'C', 'A']"
+T|G|C|G,233,Hap2,"['T', 'G', 'C', 'G']"
+T|+|A|G,162,Hap3,"['T', '+', 'A', 'G']"
+T|+|A|A,15,Hap4,"['T', '+', 'A', 'A']"
+C|G|C|G,2,Hap5,"['C', 'G', 'C', 'G']"

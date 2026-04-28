@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>P-value Heatmap - Gene Region</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px;
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 30px; }
+        .header { margin-bottom: 25px; }
+        .header h1 { font-size: 22px; color: #2c3e50; margin-bottom: 8px; }
+        .header p { font-size: 13px; color: #7f8c8d; }
+        #heatmap { width: 100%; height: 300px; }
+        .color-scale { display: flex; align-items: center; gap: 15px; margin-top: 20px; padding: 15px;
+                       background: #f8f9fa; border-radius: 8px; }
+        .color-scale-bar { width: 200px; height: 20px; border-radius: 3px; }
+        .color-scale-labels { display: flex; justify-content: space-between; width: 200px; font-size: 11px; }
+        .tooltip { position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 12px;
+                   border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; }
+        .gene-structure { fill: #3498db; }
+        .promoter-region { fill: #f39c12; opacity: 0.5; }
+        .axis text { font-size: 10px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>P-value Heatmap Overlay</h1>
+        <p>Region: chr1H:485,701,418 - 485,707,526 | Gene: 485,701,418 - 485,707,526 | Variants: 79</p>
+    </div>
+    
+    <div id="heatmap"></div>
+    
+    <div class="color-scale">
+        <span style="font-size:13px;font-weight:600;">-log10(P-value):</span>
+        <div>
+            <div class="color-scale-bar" style="background: linear-gradient(to right, #ffffcc, #fd8d3c, #bd0026);"></div>
+            <div class="color-scale-labels"><span>0 (ns)</span><span>1.3 (P=0.05)</span><span>2+ (P&lt;0.01)</span></div>
+        </div>
+        <span style="margin-left:20px;font-size:12px;color:#666;">Significant variants shown as larger circles</span>
+    </div>
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<script>
+const data = [{"pos": 485701461, "pvalue": 1.374994349637274e-06, "logp": 5.8616990865074605, "significant": true}, {"pos": 485701589, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485701646, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485701731, "pvalue": 0.7571646159731529, "logp": 0.12080968980421435, "significant": false}, {"pos": 485701737, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485701823, "pvalue": 3.1880270005670504e-05, "logp": 4.496478009061489, "significant": true}, {"pos": 485701825, "pvalue": 0.016690215472443957, "logp": 1.7775380564969452, "significant": true}, {"pos": 485701873, "pvalue": 0.4969348396312211, "logp": 0.30370055421204345, "significant": false}, {"pos": 485701957, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485702264, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485702824, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485702840, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485702912, "pvalue": 0.006417448650524511, "logp": 2.192637597667516, "significant": true}, {"pos": 485702923, "pvalue": 0.006417448650524511, "logp": 2.192637597667516, "significant": true}, {"pos": 485702965, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485702979, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485702999, "pvalue": 0.005481085997328886, "logp": 2.2611333838660594, "significant": true}, {"pos": 485703090, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703117, "pvalue": 0.00027967899836811333, "logp": 3.553340144408893, "significant": true}, {"pos": 485703162, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703212, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703251, "pvalue": 0.14955585070403252, "logp": 0.8251965924703448, "significant": false}, {"pos": 485703259, "pvalue": 0.056256806846061956, "logp": 1.249824922161773, "significant": false}, {"pos": 485703270, "pvalue": 7.720370039092711e-05, "logp": 4.1123618833320545, "significant": true}, {"pos": 485703284, "pvalue": 0.31298411662379777, "logp": 0.5044777015515315, "significant": false}, {"pos": 485703303, "pvalue": 0.024456141737326166, "logp": 1.6116120572898078, "significant": true}, {"pos": 485703349, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703375, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703418, "pvalue": 0.04537034059845671, "logp": 1.3432279604413875, "significant": true}, {"pos": 485703435, "pvalue": 0.06077774884989099, "logp": 1.2162553898134285, "significant": false}, {"pos": 485703446, "pvalue": 0.31298411662379777, "logp": 0.5044777015515315, "significant": false}, {"pos": 485703520, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703523, "pvalue": 0.34929401327887044, "logp": 0.45680885788434716, "significant": false}, {"pos": 485703621, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703681, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485703710, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704064, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704073, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704076, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704438, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704453, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704479, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704553, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704830, "pvalue": 0.9899009791808924, "logp": 0.00440824615612417, "significant": false}, {"pos": 485704853, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485704961, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705240, "pvalue": 0.00011586271563358657, "logp": 3.936056296561457, "significant": true}, {"pos": 485705255, "pvalue": 0.07755625910283244, "logp": 1.110383147120135, "significant": false}, {"pos": 485705275, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705338, "pvalue": 0.31298411662379777, "logp": 0.5044777015515315, "significant": false}, {"pos": 485705451, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705484, "pvalue": 0.31298411662379777, "logp": 0.5044777015515315, "significant": false}, {"pos": 485705516, "pvalue": 0.2025465560649215, "logp": 0.69347513680385, "significant": false}, {"pos": 485705519, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705573, "pvalue": 0.2298078455688062, "logp": 0.6386351487152819, "significant": false}, {"pos": 485705640, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705701, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705788, "pvalue": 0.3346498875386329, "logp": 0.4754093166080662, "significant": false}, {"pos": 485705834, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705885, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705910, "pvalue": 0.003913566369120654, "logp": 2.407427296698203, "significant": true}, {"pos": 485705922, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485705952, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485706228, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485706353, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485706630, "pvalue": 4.6102205710685926e-05, "logp": 4.336278295758645, "significant": true}, {"pos": 485706671, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707104, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707110, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707181, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707197, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707201, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707213, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707234, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707318, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707334, "pvalue": 0.14993341750163075, "logp": 0.8241015598195809, "significant": false}, {"pos": 485707364, "pvalue": 0.04849774652144841, "logp": 1.314278440697469, "significant": true}, {"pos": 485707432, "pvalue": 1.0, "logp": -0.0, "significant": false}, {"pos": 485707467, "pvalue": 1.0, "logp": -0.0, "significant": false}];
+const regionStart = 485701418;
+const regionEnd = 485707526;
+const geneStart = 485701418;
+const geneEnd = 485707526;
+
+const margin = {top: 50, right: 30, bottom: 50, left: 60};
+const container = document.getElementById('heatmap');
+const width = container.clientWidth - margin.left - margin.right;
+const height = 300 - margin.top - margin.bottom;
+
+const svg = d3.select('#heatmap')
+    .append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+// 比例尺
+const xScale = d3.scaleLinear()
+    .domain([regionStart, regionEnd])
+    .range([0, width]);
+
+const maxLogP = data.length > 0 ? Math.max(...data.map(d => d.logp), 2) : 2;
+
+// 颜色比例尺 (黄-橙-红)
+const colorScale = d3.scaleSequential(d3.interpolateYlOrRd)
+    .domain([0, maxLogP]);
+
+// 绘制区域背景
+svg.append('rect')
+    .attr('x', 0)
+    .attr('y', height * 0.3)
+    .attr('width', width)
+    .attr('height', height * 0.4)
+    .attr('fill', '#f8f9fa')
+    .attr('rx', 4);
+
+// 绘制基因结构
+const geneX1 = xScale(geneStart);
+const geneX2 = xScale(geneEnd);
+const geneY = height * 0.5;
+const geneH = height * 0.15;
+
+// 基因主体
+svg.append('rect')
+    .attr('class', 'gene-structure')
+    .attr('x', geneX1)
+    .attr('y', geneY - geneH/2)
+    .attr('width', geneX2 - geneX1)
+    .attr('height', geneH)
+    .attr('rx', 3);
+
+// 启动子区域（基因5'端上游2kb）
+const promoterEnd = geneStart;
+const promoterStart = Math.max(regionStart, geneStart - 2000);
+if (promoterStart < promoterEnd) {
+    svg.append('rect')
+        .attr('class', 'promoter-region')
+        .attr('x', xScale(promoterStart))
+        .attr('y', geneY - geneH/2)
+        .attr('width', xScale(promoterEnd) - xScale(promoterStart))
+        .attr('height', geneH)
+        .attr('rx', 2)
+        .attr('stroke', '#e67e22')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '3,2');
+}
+
+// 坐标轴
+svg.append('g')
+    .attr('transform', `translate(0,${height * 0.85})`)
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => (d/1000).toFixed(0) + 'k'));
+
+svg.append('text')
+    .attr('x', width / 2)
+    .attr('y', height + 5)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '12px')
+    .attr('fill', '#333')
+    .text('Position (bp)');
+
+// 热图点
+const tooltip = d3.select('#tooltip');
+
+svg.selectAll('.heatmap-point')
+    .data(data)
+    .enter()
+    .append('circle')
+    .attr('class', 'heatmap-point')
+    .attr('cx', d => xScale(d.pos))
+    .attr('cy', geneY - geneH - 15)  // 在基因上方
+    .attr('r', d => d.significant ? 7 : 4)
+    .attr('fill', d => colorScale(d.logp))
+    .attr('stroke', d => d.significant ? '#000' : 'none')
+    .attr('stroke-width', d => d.significant ? 1.5 : 0)
+    .attr('opacity', 0.85)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(event, d) {
+        d3.select(this).attr('r', d.significant ? 10 : 6);
+        tooltip.style('display', 'block')
+            .html(`<strong>Position:</strong> ${d.pos.toLocaleString()}<br>
+                   <strong>P-value:</strong> ${d.pvalue < 0.001 ? d.pvalue.toExponential(2) : d.pvalue.toFixed(4)}<br>
+                   <strong>-log10(P):</strong> ${d.logp.toFixed(2)}<br>
+                   <strong>Significant:</strong> ${d.significant ? 'Yes' : 'No'}`);
+    })
+    .on('mousemove', function(event) {
+        tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY - 10) + 'px');
+    })
+    .on('mouseout', function(event, d) {
+        d3.select(this).attr('r', d.significant ? 7 : 4);
+        tooltip.style('display', 'none');
+    });
+
+// 连接线（从热图点到基因位置）
+svg.selectAll('.connect-line')
+    .data(data.filter(d => d.significant))
+    .enter()
+    .append('line')
+    .attr('class', 'connect-line')
+    .attr('x1', d => xScale(d.pos))
+    .attr('y1', geneY - geneH - 8)
+    .attr('x2', d => xScale(d.pos))
+    .attr('y2', geneY - geneH/2 - 2)
+    .attr('stroke', d => colorScale(d.logp))
+    .attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '3,2');
+
+// 标题和图例
+svg.append('text')
+    .attr('x', 0)
+    .attr('y', -25)
+    .attr('font-size', '14px')
+    .attr('font-weight', '600')
+    .attr('fill', '#2c3e50')
+    .text('P-value Distribution Across Gene Region');
+
+// 区域标签
+svg.append('text')
+    .attr('x', (geneX1 + geneX2) / 2)
+    .attr('y', geneY + geneH/2 + 15)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '11px')
+    .attr('fill', '#2c3e50')
+    .text('Gene Body');
+
+if (promoterStart < promoterEnd) {
+    svg.append('text')
+        .attr('x', (xScale(promoterStart) + xScale(promoterEnd)) / 2)
+        .attr('y', geneY + geneH/2 + 15)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '10px')
+        .attr('fill', '#e67e22')
+        .text('Promoter');
+}
+</script>
+</body>
+</html>

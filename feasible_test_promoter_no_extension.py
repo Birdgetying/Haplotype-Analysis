@@ -25,27 +25,14 @@ sys.path.insert(0, 'd:/Desktop/project1')
 from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer
 
 # 配置
-DATABASE_DIR = "d:/Desktop/project1/database"
-BASE_OUTPUT_DIR = "d:/Desktop/project1/results3"
+DATABASE_DIR = "d:/Desktop/project1/database_text"
+BASE_OUTPUT_DIR = "d:/Desktop/project1/result_test"
 VCF_FILE = "d:/Desktop/project1/chrALL.impute.vcf.gz"
 GFF_FILE = "d:/Desktop/project1/barley_morex_v3.chr.gff3"
 
-# 老师指定的30个基因（全部测试）
-TEST_GENES = [
-    # K-SNP_Indel_CandidateGene (16个)
-    "HORVU.MOREX.r3.1HG0081480", "HORVU.MOREX.r3.2HG0213430", "HORVU.MOREX.r3.2HG0214000",
-    "HORVU.MOREX.r3.3HG0289370", "HORVU.MOREX.r3.4HG0341890", "HORVU.MOREX.r3.4HG0356420",
-    "HORVU.MOREX.r3.4HG0356370", "HORVU.MOREX.r3.4HG0398010", "HORVU.MOREX.r3.4HG0415770",
-    "HORVU.MOREX.r3.6HG0625930", "HORVU.MOREX.r3.6HG0626440", "HORVU.MOREX.r3.7HG0705960",
-    "HORVU.MOREX.r3.7HG0733200", "HORVU.MOREX.r3.4HG0415690", "HORVU.MOREX.r3.4HG0415780",
-    "HORVU.MOREX.r3.5HG0492640",
-    # K-SV（自己结果）(15个，其中 HORVU.MOREX.r3.4HG0356420 重复)
-    "HORVU.MOREX.r3.6HG0542030", "HORVU.MOREX.r3.6HG0542250", "HORVU.MOREX.r3.4HG0356430",
-    "HORVU.MOREX.r3.3HG0299830", "HORVU.MOREX.r3.3HG0299890", "HORVU.MOREX.r3.1HG0080620",
-    "HORVU.MOREX.r3.1HG0080220", "HORVU.MOREX.r3.2HG0096990", "HORVU.MOREX.r3.7HG0639230",
-    "HORVU.MOREX.r3.5HG0432290", "HORVU.MOREX.r3.5HG0490420", "HORVU.MOREX.r3.5HG0490030",
-    "HORVU.MOREX.r3.5HG0490190", "HORVU.MOREX.r3.6HG0626350"
-]
+# 从 database_text 读取全部30个基因
+gene_dirs = [d for d in os.listdir(DATABASE_DIR) if os.path.isdir(os.path.join(DATABASE_DIR, d))]
+TEST_GENES = sorted([d for d in gene_dirs if os.path.exists(os.path.join(DATABASE_DIR, d, 'gene_info.json'))])
 
 print(f"\n{'='*70}")
 print(f"启动子无扩展测试（2000bp内有变异）")
@@ -59,8 +46,8 @@ for GENE_ID in TEST_GENES:
     print(f"[TEST] 测试基因: {GENE_ID}")
     print(f"{'='*70}\n")
     
-    # 为每个基因创建独立输出目录（添加[NoExtend]前缀便于识别）
-    OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, f"[NoExtend]_{GENE_ID}")
+    # 为每个基因创建独立输出目录（直接用基因ID命名）
+    OUTPUT_DIR = os.path.join(BASE_OUTPUT_DIR, GENE_ID)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     print(f"[INFO] 输出目录: {OUTPUT_DIR}")
     
@@ -130,7 +117,7 @@ print(f"\n{'='*70}")
 print(f"[INFO] 所有测试完成！")
 print(f"{'='*70}")
 print(f"\n[验证清单]")
-print(f"  1. 打开 [NoExtend]_* 文件夹中的 integrated_analysis.html")
+print(f"  1. 打开 result_test/{{基因ID}}/{{基因ID}}.html")
 print(f"  2. 检查基因结构图上的启动子区域（橙色虚线框）")
 print(f"  3. 验证启动子长度 = 2000bp（不是5000或其他值）")
 print(f"  4. 检查日志中的 'promoter_actual_length=2000'")
