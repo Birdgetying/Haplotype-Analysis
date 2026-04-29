@@ -124,8 +124,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
             # 获取样本映射
             header_lines = []
             all_samples = []
-            for line in tbx.fetch(region=f"{chrom}:{start}-{end}", limit=1):
-                pass
+            # 注意：pysam TabixFile.fetch()不支持limit参数，直接读header即可
             
             # 读取header
             for line in tbx.header:
