@@ -103,11 +103,32 @@ echo ""
 echo "[Step 3] Checking data files..."
 
 # 大麦 Morex_v3 数据路径
-VCF_FILE="/home/URPs/2025_URP_G1/project1/chrALL.impute.vcf.gz"
-SV_VCF_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt_SV/03.Pruning/BubbleAll_bnopart.vcf.gz"
+VCF_FILE_ORIG="/home/URPs/2025_URP_G1/project1/chrALL.impute.vcf.gz"
+SV_VCF_FILE_ORIG="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt_SV/03.Pruning/BubbleAll_bnopart.vcf.gz"
 PHENO_FILE="/home/qinz/project/tmp_Proj/07.GWAS/20260103_Barley_salt/04.Gemma/00.pheno/K.rep1.SA.gemma"
 GFF_FILE="/home/qinz/data/genomes/Morex_v3/gene_annotation/Hv_Morex.pgsb.Jul2020.gff3"
 FASTA_FILE="/home/qinz/data/genomes/Morex_v3/MorexV3_MtPt.fasta"
+
+# 优先使用本地软连接（有CSI索引），否则使用原始路径
+if [ -f "chrALL.impute.vcf.gz" ] && [ -f "chrALL.impute.vcf.gz.csi" ]; then
+    VCF_FILE="./chrALL.impute.vcf.gz"
+    echo "  ✓ 使用本地VCF（含索引）: ./chrALL.impute.vcf.gz"
+else
+    VCF_FILE="${VCF_FILE_ORIG}"
+    if [ -f "${VCF_FILE_ORIG}.csi" ]; then
+        echo "  ✓ 使用原始VCF（含索引）: ${VCF_FILE_ORIG}"
+    else
+        echo "  ⚠ VCF索引不存在，VCF提取将使用逐行扫描模式（较慢）"
+        echo "    运行 create_vcf_index.sh 建立索引可大幅加速"
+    fi
+fi
+
+if [ -f "BubbleAll_bnopart.vcf.gz" ] && [ -f "BubbleAll_bnopart.vcf.gz.csi" ]; then
+    SV_VCF_FILE="./BubbleAll_bnopart.vcf.gz"
+    echo "  ✓ 使用本地SV-VCF（含索引）: ./BubbleAll_bnopart.vcf.gz"
+else
+    SV_VCF_FILE="${SV_VCF_FILE_ORIG}"
+fi
 
 if [ -f "${VCF_FILE}" ]; then
     echo "  ✓ VCF: chrALL.impute.vcf.gz"
