@@ -656,7 +656,11 @@ class SimpleVCFParser:
         # 尝试使用 pysam 的 tabix（如果可用）
         try:
             import pysam
-            tbi = pysam.TabixFile(self.filepath)
+            # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
+            tbi_path = self.filepath + '.tbi'
+            csi_path = self.filepath + '.csi'
+            index_path = csi_path if os.path.exists(csi_path) else tbi_path
+            tbi = pysam.TabixFile(self.filepath, index=index_path)
             for row in tbi.fetch(chrom, start, end):
                 record = self._parse_line(row + '\n')
                 if record:
@@ -1365,7 +1369,9 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
         if vcf_file and vcf_file.endswith('.gz') and (tbi_exists or csi_exists) and PYSAM_AVAILABLE:
             try:
                 import pysam as _pysam
-                tbx = _pysam.TabixFile(vcf_file)
+                # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
+                index_path = (vcf_file + '.csi') if csi_exists else (vcf_file + '.tbi')
+                tbx = _pysam.TabixFile(vcf_file, index=index_path)
                 if positions:
                     region_min = min(positions)
                     region_max = max(positions)

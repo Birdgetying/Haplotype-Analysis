@@ -114,10 +114,12 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     use_tabix = PYSAM_AVAILABLE and (os.path.exists(tbi_path) or os.path.exists(csi_path))
     
     if use_tabix:
-        print(f"[DEBUG] 使用tabix索引快速查询: {tbi_path}")
+        # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
+        index_path = csi_path if os.path.exists(csi_path) else tbi_path
+        print(f"[DEBUG] 使用tabix索引快速查询: {index_path}")
         try:
             import pysam as _pysam
-            tbx = _pysam.TabixFile(input_vcf)
+            tbx = _pysam.TabixFile(input_vcf, index=index_path)
             
             # 获取样本映射
             header_lines = []
