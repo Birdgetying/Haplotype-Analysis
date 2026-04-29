@@ -848,7 +848,17 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                     except Exception as sv_e:
                         print(f"[WARNING] 保存SV VCF子集失败: {sv_e}")
                 else:
-                    print(f"[INFO] {gene_id}: SV VCF 在该区域无变异")
+                    print(f"[INFO] {gene_id}: SV VCF 在该区域无变异，但仍保存空VCF子集")
+                    # 即使没有SV变异，也保存空VCF子集（避免缓存检查失败）
+                    try:
+                        sv_subset_path = os.path.join(gene_data_dir, 'sv_variants.vcf.gz')
+                        vcf_sample_ids = (hap_sample_df['SampleID'].tolist()
+                                         if hap_sample_df is not None else [])
+                        create_subset_vcf(sv_vcf_file, chrom, start, end, sv_subset_path,
+                                        sample_ids=vcf_sample_ids)
+                        print(f"[INFO] SV VCF子集已保存（空）: {sv_subset_path}")
+                    except Exception as sv_e:
+                        print(f"[WARNING] 保存空SV VCF子集失败: {sv_e}")
             except Exception as sv_ext_e:
                 print(f"[WARNING] SV VCF 提取失败: {sv_ext_e}")
 
