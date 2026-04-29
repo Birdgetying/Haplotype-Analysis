@@ -167,21 +167,27 @@ COPHE1_TITLE="WT_TPM"
 COPHE2_FILE="/home/qinz/project/tmp_Proj/01.RNA_seq/260408_qinzhen_barley_salt_leaf_RNAseq/pan_Morex.gene_SAtpm.tsv"
 COPHE2_TITLE="SA_TPM"
 
-# 检查协变量文件是否存在
-COPHE_ARGS=""
+# 分别检查并构建协变量参数（支持独立配置）
+COPHE1_ARGS=""
+COPHE2_ARGS=""
+COPHE3_ARGS=""
+
 if [ -f "${COPHE1_FILE}" ]; then
-    COPHE_ARGS="--cophe1 ${COPHE1_FILE} --cophe1-title ${COPHE1_TITLE}"
+    COPHE1_ARGS="--cophe1 ${COPHE1_FILE} --cophe1-title ${COPHE1_TITLE}"
     echo "  ✓ 协变量1: ${COPHE1_TITLE}"
 else
     echo "  - 协变量1: 未配置或文件不存在"
 fi
 
 if [ -f "${COPHE2_FILE}" ]; then
-    COPHE_ARGS="${COPHE_ARGS} --cophe2 ${COPHE2_FILE} --cophe2-title ${COPHE2_TITLE}"
+    COPHE2_ARGS="--cophe2 ${COPHE2_FILE} --cophe2-title ${COPHE2_TITLE}"
     echo "  ✓ 协变量2: ${COPHE2_TITLE}"
 else
     echo "  - 协变量2: 未配置或文件不存在"
 fi
+
+# 合并所有协变量参数
+COPHE_ARGS="${COPHE1_ARGS} ${COPHE2_ARGS} ${COPHE3_ARGS}"
 
 # 运行扫描（完整基因区间）
 python genome_wide_haplotype_scan.py \
