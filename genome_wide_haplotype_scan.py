@@ -259,7 +259,6 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     tmp_handle.close()
 
     # bgzip压缩（支持pysam随机访问），失败则回退gzip
-    _used_bgzip = False
     if _bgzip_available and output_vcf.endswith('.gz'):
         try:
             with open(tmp_path, 'rb') as fin:
@@ -273,7 +272,6 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
                 raise Exception(f"bgzip -c failed (code={proc.returncode}): {_stderr.decode('utf-8','ignore')[:200]}")
             with open(output_vcf, 'wb') as fout:
                 fout.write(compressed)
-            _used_bgzip = True
             _compressor = 'bgzip'
         except Exception as bgzip_err:
             with gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6) as fout:
@@ -906,11 +904,11 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                 current_end = extended_end_5k
                 
                 while True:
-                    # 计算扩展后的区域
+                    # 计算扩展后的区域（每次向启动子方向多扩展 extension_step）
                     if strand == '+':
-                        current_start = max(1, gene_start - (current_end - gene_end) - extension_step)
+                        current_start = max(1, current_start - extension_step)
                     else:
-                        current_end = gene_end + (gene_start - current_start) + extension_step
+                        current_end = current_end + extension_step
                     
                     # 检查是否超过最大扩展
                     if strand == '+' and (gene_start - current_start) > max_extension:
@@ -1672,7 +1670,7 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                 
                 # 运行完整分析流程（会生成综合HTML）
                 # 获取所有表型列（包括协变量）
-                all_pheno_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
+                all_pheno_cols = [c for c in merged.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
                 analysis_result = analyzer.analyze_gene(
                     chrom=chrom,
                     start=start,
