@@ -9844,14 +9844,17 @@ class HaplotypePhenotypeAnalyzer:
             
             if not is_marker_file:
                 logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
+                # 备份原始variant_info（可能包含SNP+SV合并后的数据）
+                # 防止VCF提取失败时variant_info被覆盖为仅SNP的数据
+                _orig_variant_info = preloaded_data.get('variant_info', {}).copy()
                 try:
                     # 使用数据库VCF创建临时extractor
                     temp_extractor = HaplotypeExtractor(vcf_path)
                     self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
                         chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
                     )
-                    # 复制variant_info
-                    if hasattr(temp_extractor, 'variant_info'):
+                    # 复制variant_info（VCF提取的variant_info通常包含更完整信息）
+                    if hasattr(temp_extractor, 'variant_info') and temp_extractor.variant_info:
                         preloaded_data['variant_info'] = temp_extractor.variant_info
                         self.variant_info = temp_extractor.variant_info
                     logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
@@ -9873,6 +9876,8 @@ class HaplotypePhenotypeAnalyzer:
                     
                 except Exception as e:
                     logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
+                    # 恢复原始variant_info（不含被覆盖的仅SNP数据）
+                    preloaded_data['variant_info'] = _orig_variant_info
                     # 回退到CSV数据
                     if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
                         self.hap_df = preloaded_data['hap_df']
