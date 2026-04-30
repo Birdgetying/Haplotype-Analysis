@@ -124,8 +124,10 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         pass
 
     # ---------- 读取header和样本列表 ----------
-    header_lines = []
+    header_lines = []   # 仅存储 ## 开头的元信息行
+    sample_line = None  # 单独存储 #CHROM 行
     all_samples = []
+    tbx = None
 
     if use_tabix:
         # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
@@ -134,33 +136,48 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         try:
             import pysam as _pysam
             tbx = _pysam.TabixFile(input_vcf, index=index_path)
+            # tbx.header 只含 ## 行，不含 #CHROM 行
             for line in tbx.header:
                 header_lines.append(line.rstrip('\n'))
 
-            # 读取样本列表
+            # 单独读取 #CHROM 行获取样本列表
             if input_vcf.endswith('.gz'):
                 with gzip.open(input_vcf, 'rt') as _hf:
                     for line in _hf:
                         if line.startswith('#CHROM'):
-                            parts = line.rstrip('\n').split('\t')
+                            sample_line = line.rstrip('\n')
+                            parts = sample_line.split('\t')
                             all_samples = parts[9:] if len(parts) > 9 else []
-                            header_lines.append(line.rstrip('\n'))
                             break
             else:
                 with open(input_vcf, 'r') as _hf:
                     for line in _hf:
                         if line.startswith('#CHROM'):
-                            parts = line.rstrip('\n').split('\t')
+                            sample_line = line.rstrip('\n')
+                            parts = sample_line.split('\t')
                             all_samples = parts[9:] if len(parts) > 9 else []
-                            header_lines.append(line.rstrip('\n'))
                             break
-
-            # 继续执行fetch和写入逻辑（删除提前return）
 
         except Exception as _e:
             print(f"[WARNING] tabix查询失败，回退到逐行扫描: {_e}")
             use_tabix = False
             tbx = None
+
+    # 如果 header 未读取（tabix不可用或失败），从文件扫描读取
+    if not header_lines:
+        if input_vcf.endswith('.gz'):
+            _hf = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
+        else:
+            _hf = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
+        for line in _hf:
+            if line.startswith('##'):
+                header_lines.append(line.rstrip('\n'))
+            elif line.startswith('#CHROM'):
+                sample_line = line.rstrip('\n')
+                parts = sample_line.split('\t')
+                all_samples = parts[9:] if len(parts) > 9 else []
+                break
+        _hf.close()
 
     # ---------- 确定要保留的样本 ----------
     if sample_ids:
@@ -173,24 +190,16 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         filtered_samples = list(all_samples)
 
     # 构建样本索引映射
-    sample_indices = None
-    if sample_ids and filtered_samples != all_samples:
+    _need_sample_filter = bool(sample_ids) and (set(filtered_samples) != set(all_samples))
+    if _need_sample_filter:
         sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
-        # 构建新的#CHROM行
-        parts = []
-        for line in header_lines:
-            if line.startswith('#CHROM'):
-                parts = line.split('\t')[:9]
-                break
+        # 构建新的 #CHROM 行
+        parts = sample_line.split('\t')[:9] if sample_line else ['#CHROM','POS','ID','REF','ALT','QUAL','FILTER','INFO','FORMAT']
         new_sample_line = '\t'.join(parts + filtered_samples)
     else:
         filtered_samples = list(all_samples)
         sample_indices = list(range(len(all_samples)))
-        new_sample_line = None
-        for line in header_lines:
-            if line.startswith('#CHROM'):
-                new_sample_line = line
-                break
+        new_sample_line = sample_line
 
     # ---------- 写入VCF（优先bgzip，否则gzip） ----------
     # 先写文本到临时文件，再bgzip压缩
@@ -198,19 +207,22 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     os.close(tmp_fd)
     tmp_handle = open(tmp_path, 'w', encoding='utf-8')
 
+    # 写入 ## 头部
     for line in header_lines:
         tmp_handle.write(line + '\n')
+    # 写入 #CHROM 行（可能是过滤后的）
     if new_sample_line:
         tmp_handle.write(new_sample_line + '\n')
 
     record_count = 0
 
-    if use_tabix and 'tbx' in dir() and tbx is not None:
+    if use_tabix and tbx is not None:
         # ---------- tabix分支：fetch数据 ----------
         try:
-            for row in tbx.fetch(reference=chrom, start=start, end=end):
+            # 使用 region 字符串格式（1-based，与VCF坐标一致）
+            for row in tbx.fetch(region=f"{chrom}:{start}-{end}"):
                 parts = str(row).split('\t')
-                if sample_indices:
+                if _need_sample_filter:
                     sel = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
                     tmp_handle.write('\t'.join(sel) + '\n')
                 else:
@@ -243,7 +255,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
                 continue
             if rec_pos > end:
                 break  # 假设文件按位置排序，超出则停止
-            if sample_indices:
+            if _need_sample_filter:
                 sel = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
                 tmp_handle.write('\t'.join(sel) + '\n')
             else:
