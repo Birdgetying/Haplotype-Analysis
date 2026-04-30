@@ -4934,6 +4934,15 @@ class ReportGenerator:
         has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
         promoter_actual_length_json = str(promoter_actual_length)
         
+        # 计算协变量列数（用于布局对齐）
+        covariate_cols_early = [c for c in hap_sample_df.columns
+                                if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
+        n_cov_cols = len(covariate_cols_early)
+        # 网络图宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图精确对齐
+        # 对齐公式：network_w + 14(gap) + 86(gwas_left_margin) = gene_area_start(450 + n_cov*180)
+        # → network_w = 350 + n_cov*180
+        network_w = 350 + n_cov_cols * 180
+        
         html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4983,16 +4992,19 @@ class ReportGenerator:
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        /* top-section 使用 flex row 布局（非 absolute），确保 GWAS X 轴与基因结构图精确对齐 */
+        .top-section {{ display: flex; flex-direction: row; align-items: flex-start; gap: 0; position: relative; height: 280px; }}
         .main-data-section {{ }} /* 移除 fit-content，使用滚动容器 */
-        .network-panel {{ width: 350px; min-width: 350px; height: 280px; 
+        /* 网络图：flex item，宽度随协变量列数扩展以保持 GWAS 对齐 */
+        .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: 280px; 
                          border: 1px solid #e0e0e0; border-radius: 6px; 
-                         background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; }}
+                         background: #fafafa; flex-shrink: 0; overflow: hidden; position: relative; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px; 
                                font-size: 12px; font-weight: 600; color: #2c3e50; 
                                background: rgba(255,255,255,0.9); padding: 2px 6px; 
                                border-radius: 3px; z-index: 10; }}
-        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
+        /* GWAS 面板：14px 间距，left edge = network_w + 14，内部 gwas_left_margin=86 → x=regionStart 位于 network_w+100 = gene_area_start */
+        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 14px; border: 1px solid #e0e0e0; 
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px; 
                            font-size: 12px; font-weight: 600; color: #2c3e50; 
@@ -5124,7 +5136,10 @@ class ReportGenerator:
         hap_col_w = 90
         eff_col_w = 180
         box_col_w = 180
-        gene_area_start = hap_col_w + eff_col_w + box_col_w  # = 450px
+        # gene_area_start：基因区域在SVG中的起始X坐标
+        # 必须与表格序列列的起始像素对齐：hap(90) + eff(180) + box(180) + n_cov×box(180)
+        # 这样连线从基因结构位置出发，几乎垂直到达对应的序列列（斜率适中）
+        gene_area_start = hap_col_w + eff_col_w + box_col_w + n_cov_cols * box_col_w
         seq_col_w = 20  # 每个变异列宽度（调小以适应更多变异）
         gene_area_width = n_vars * seq_col_w
         legend_w = 220  # 图例宽度（增加以容纳双列图例）
@@ -5974,13 +5989,13 @@ function updateConnectorLines() {
     console.log('[DEBUG] Total th count:', allThsList.length);
     
     var visibleThs = allThsList.filter(function(th, idx) {
-        // 跳过前3列和最后一列，只保留变异列
-        if (idx < 3) return false;
-        if (idx >= allThsList.length - 1) return false;
+        // 使用 seq-col-th class 识别序列列（而非 idx<3 硬编码）
+        // 这样无论有多少协变量列，都能正确跳过
+        if (!th.classList.contains('seq-col-th')) return false;
         // 只保留可见的列
         var isVisible = th.style.display !== 'none';
         if (isVisible) {
-            console.log('[DEBUG] Visible th idx:', idx, 'text:', th.textContent.trim().substring(0, 20));
+            console.log('[DEBUG] Visible seq th idx:', idx, 'pos:', th.getAttribute('data-pos'));
         }
         return isVisible;
     });
