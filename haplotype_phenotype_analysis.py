@@ -6153,15 +6153,20 @@ function drawLDTriangle() {
     // 计算每列的屏幕坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
     var colInfos = [];  // {screenX, matIdx}
     var canvasEl = canvas;
-    var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
+    
+    // 获取SVG作为基准（与updateConnectorLines相同的基准）
+    var svgElement = document.querySelector('#gene-structure-svg');
+    if (!svgElement) { console.log('[LD] SVG not found'); return; }
+    var svgRect = svgElement.getBoundingClientRect();
+    var svgLogicalWidth = svgElement.width.baseVal.value;
+    var scaleFactor = svgRect.width / svgLogicalWidth;
         
     visibleVarThs.forEach(function(th) {
-        // 使用offsetLeft获取列相对于table的偏移，再加table相对于wrapper的偏移
-        var tableEl = th.closest('table');
-        var tableRect = tableEl.getBoundingClientRect();
-        var thOffsetInTable = th.offsetLeft + th.offsetWidth / 2;
-        var tableOffsetInWrap = tableRect.left - wrapRect.left;
-        var centerX = tableOffsetInWrap + thOffsetInTable;
+        // 与updateConnectorLines相同：th.screenX → SVG逻辑坐标
+        var thRect = th.getBoundingClientRect();
+        var screenX = thRect.left + thRect.width / 2;
+        // 转换为SVG内部逻辑坐标（与基因结构图/连线同一基准）
+        var svgX = (screenX - svgRect.left) / scaleFactor;
         // 找该列在displayPositions中的索引
         var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posVal = parseInt(posText);
@@ -6170,7 +6175,7 @@ function drawLDTriangle() {
             if (displayPositions[pi] === posVal) { matIdx = pi; break; }
         }
         if (matIdx >= 0) {
-            colInfos.push({ screenX: centerX, matIdx: matIdx });
+            colInfos.push({ svgX: svgX, matIdx: matIdx });
         }
     });
     
@@ -6179,9 +6184,9 @@ function drawLDTriangle() {
         return;
     }
     
-    // 计算canvas尺寸
+    // 计算canvas尺寸（基于SVG逻辑坐标）
     var cellW = colInfos.length > 1 ? 
-        (colInfos[colInfos.length-1].screenX - colInfos[0].screenX) / (colInfos.length - 1) : 20;
+        (colInfos[colInfos.length-1].svgX - colInfos[0].svgX) / (colInfos.length - 1) : 20;
     cellW = Math.max(cellW, 10);
     var halfCell = cellW / 2;
     
@@ -6191,14 +6196,14 @@ function drawLDTriangle() {
     // 倒三角高度：深度从1到nc-1，所以总高度 = (nc-1) * halfCell
     var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
     
-    // canvas宽度只覆盖序列列区域，不包吨固定列（Haplotype/Effect/Phenotype等）
-    // 使用序列列的实际总宽度：最后一列的canvasX + 半个cell宽度 - 第一列的canvasX + 半个cell宽度
-    var firstColX = colInfos[0].screenX;
-    var lastColX = colInfos[colInfos.length-1].screenX;
+    // canvas宽度只覆盖序列列区域，不包括固定列（Haplotype/Effect/Phenotype等）
+    // 第一列的svgX即为wrapper.paddingLeft（与SVG对齐）
+    var firstColX = colInfos[0].svgX;
+    var lastColX = colInfos[colInfos.length-1].svgX;
     var canvasW = Math.ceil(lastColX - firstColX + cellW);
     canvasW = Math.max(canvasW, 100); // 最小宽度100px
     
-    // wrapper需要添加padding-left使其与序列列对齐（即第一列的screenX）
+    // wrapper.paddingLeft = 第一列的SVG逻辑坐标（与基因结构图/连线同一基准）
     var wrapper = document.getElementById('ld-triangle-wrapper');
     wrapper.style.paddingLeft = firstColX + 'px';
     
@@ -6212,9 +6217,9 @@ function drawLDTriangle() {
     // canvasScaleX: canvas内部像素坐标 / canvas显示CSS像素坐标的比率
     var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
     
-    // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
+    // 将所有colInfos的svgX转换为canvas内部坐标（相对canvas左上角）
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
-        colInfos[ci2].canvasX = (colInfos[ci2].screenX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
+        colInfos[ci2].canvasX = (colInfos[ci2].svgX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
     }
     
     // 用canvas内部坐标重新计算细胞宽度
