@@ -6573,10 +6573,17 @@ function drawNetworkPlot() {
         .call(d3.drag()
             .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
             .on('drag',  function(e,d) {
-                // 限制拖拽范围在容器内
+                // 随缩放比例动态计算可拖动边界（zoomG内部坐标系）
+                // zoomG transform: translate(W/2,H/2) scale(s) translate(-W/2,-H/2)
+                // 视觉边界[0,W]在内部坐标中为[W/2*(1-1/s), W/2*(1+1/s)]
                 var r = d.size * 0.5 + 5;
-                d.fx = Math.max(r, Math.min(W - r, e.x));
-                d.fy = Math.max(r, Math.min(H - r, e.y));
+                var s = currentScale;
+                var xMin = W/2 * (1 - 1/s) + r;
+                var xMax = W/2 * (1 + 1/s) - r;
+                var yMin = H/2 * (1 - 1/s) + r;
+                var yMax = H/2 * (1 + 1/s) - r;
+                d.fx = Math.max(xMin, Math.min(xMax, e.x));
+                d.fy = Math.max(yMin, Math.min(yMax, e.y));
             })
             .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
         );
