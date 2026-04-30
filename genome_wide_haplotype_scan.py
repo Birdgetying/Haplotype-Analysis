@@ -215,6 +215,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         tmp_handle.write(new_sample_line + '\n')
 
     record_count = 0
+    _source = 'tabix' if (use_tabix and tbx is not None) else '逐行扫描'
 
     if use_tabix and tbx is not None:
         # ---------- tabix分支：fetch数据 ----------
@@ -296,7 +297,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
 
     os.unlink(tmp_path)
 
-    print(f"[INFO] 子集VCF创建完成({_compressor}): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
+    print(f"[INFO] 子集VCF创建完成({_source}+{_compressor}): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
 # ============================================================================
 # 内置单倍型提取器（当主模块不可用时使用）
 # ============================================================================
