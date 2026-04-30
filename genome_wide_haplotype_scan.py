@@ -794,6 +794,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
 
                     # 合并 SV 位置到主位置列表（去重）
                     pos_set = set(positions) if positions else set()
+                    has_snp_positions = bool(positions)  # 是否有SNP位点（用于判断是否需要合并序列）
                     if positions:
                         new_sv_pos = [p for p in sv_positions if p not in pos_set]
                         positions = sorted(positions + new_sv_pos)
@@ -801,17 +802,30 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         positions = list(sv_positions)
                         hap_df = sv_hap_df
                         hap_sample_df = sv_hap_sample_df
-
+                    
                     # 合并 SV 序列到主单倍型序列
-                    if sv_hap_sample_df is not None and len(sv_hap_sample_df) > 0:
+                    # 注意：SV序列格式也是 allele1|allele2|... 每个位点用|分隔
+                    # 必须保留|分隔符拼接，否则序列长度（allele数）与positions数不匹配
+                    # 对于在SV VCF中没有基因型的样本，用N填充（每个新SV位点一个N）
+                    # 只有在有SNP位点时才需要合并；如果原来就没有SNP，SV数据已经直接赋値，不需合并
+                    if has_snp_positions and sv_hap_sample_df is not None and len(sv_hap_sample_df) > 0:
                         sv_seq_map = dict(zip(sv_hap_sample_df['SampleID'], sv_hap_sample_df['Haplotype_Seq']))
+                        # 计算SV新增了多少位点（用于缺失样本的N填充）
+                        n_new_sv_pos = len([p for p in sv_positions if p not in pos_set])
+                        sv_placeholder = '|'.join(['N'] * n_new_sv_pos) if n_new_sv_pos > 0 else ''
                         new_seqs = []
                         for _, row in hap_sample_df.iterrows():
                             sid = row['SampleID']
                             orig_seq = row['Haplotype_Seq']
                             sv_seq = sv_seq_map.get(sid, '')
-                            sv_seq_clean = sv_seq.replace('|', '') if sv_seq else ''
-                            new_seqs.append(orig_seq + sv_seq_clean)
+                            if sv_seq:
+                                # 用|分隔拼接，确保每个位点对应一个allele
+                                new_seqs.append(orig_seq + '|' + sv_seq)
+                            elif sv_placeholder:
+                                # 样本在SV VCF中缺失，用N占位，保证序列长度=positions长度
+                                new_seqs.append(orig_seq + '|' + sv_placeholder)
+                            else:
+                                new_seqs.append(orig_seq)
                         hap_sample_df = hap_sample_df.copy()
                         hap_sample_df['Haplotype_Seq'] = new_seqs
 
