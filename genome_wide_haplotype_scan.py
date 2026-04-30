@@ -89,11 +89,12 @@ except ImportError:
 # VCF 工具函数
 # ============================================================================
 
-def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int, 
+def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
                       output_vcf: str, sample_ids: list = None):
     """
-    从原始VCF中提取指定区域和样本的子集VCF（优先使用tabix快速查询，回退到逐行扫描）
-    
+    从原始VCF中提取指定区域和样本的子集VCF（优先使用tabix快速查询，回退到逐行扫描）。
+    输出优先使用bgzip压缩（支持pysam随机访问），无bgzip时用gzip。
+
     Args:
         input_vcf: 输入VCF文件路径
         chrom: 染色体
@@ -102,17 +103,30 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         output_vcf: 输出VCF文件路径
         sample_ids: 要保留的样本ID列表（None表示保留所有样本）
     """
-    import time
-    import gzip
+    import time, gzip, subprocess, tempfile, os
     _t0 = time.time()
-    
+
     print(f"[INFO] 开始提取VCF子集: {chrom}:{start}-{end}")
-    
+
     # 检查是否有tabix索引，优先使用
     tbi_path = input_vcf + '.tbi'
     csi_path = input_vcf + '.csi'
     use_tabix = PYSAM_AVAILABLE and (os.path.exists(tbi_path) or os.path.exists(csi_path))
-    
+
+    # 检查bgzip是否可用（用于输出bgzip格式VCF，支持pysam随机访问）
+    _bgzip_available = False
+    try:
+        r = subprocess.run(['bgzip', '--version'], capture_output=True, check=False)
+        if r.returncode == 0:
+            _bgzip_available = True
+            print(f"[DEBUG] 检测到bgzip可用，输出VCF将使用bgzip压缩（支持pysam随机访问）")
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    # ---------- 读取header和样本列表 ----------
+    header_lines = []
+    all_samples = []
+
     if use_tabix:
         # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
         index_path = csi_path if os.path.exists(csi_path) else tbi_path
@@ -120,19 +134,10 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         try:
             import pysam as _pysam
             tbx = _pysam.TabixFile(input_vcf, index=index_path)
-            
-            # 获取样本映射
-            header_lines = []
-            all_samples = []
-            # 注意：pysam TabixFile.fetch()不支持limit参数，直接读header即可
-            
-            # 读取header
             for line in tbx.header:
                 header_lines.append(line.rstrip('\n'))
-            
-            # 获取样本列表
-            header_str = '\n'.join(tbx.header + [''])
-            # 重新打开读取样本
+
+            # 读取样本列表
             if input_vcf.endswith('.gz'):
                 with gzip.open(input_vcf, 'rt') as _hf:
                     for line in _hf:
@@ -149,84 +154,15 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
                             all_samples = parts[9:] if len(parts) > 9 else []
                             header_lines.append(line.rstrip('\n'))
                             break
-            
-            # 确定要保留的样本
-            if sample_ids:
-                available_samples = set(all_samples)
-                filtered_samples = [s for s in sample_ids if s in available_samples]
-                sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
-                if len(filtered_samples) != len(sample_ids):
-                    missing = set(sample_ids) - available_samples
-                    print(f"[WARNING] 以下样本在VCF中不存在: {missing}")
-            else:
-                filtered_samples = all_samples
-                sample_indices = list(range(len(all_samples)))
-            
-            # 构建样本行
-            if sample_ids and filtered_samples != all_samples:
-                parts = header_lines[-1].split('\t')[:9]
-                new_sample_line = '\t'.join(parts + filtered_samples)
-                header_lines[-1] = new_sample_line
-            
-            # 打开输出VCF
-            if output_vcf.endswith('.gz'):
-                f_out = gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6)
-            else:
-                f_out = open(output_vcf, 'w', encoding='utf-8')
-            
-            # 写入头部
-            for line in header_lines[:-1]:
-                f_out.write(line + '\n')
-            f_out.write(header_lines[-1] + '\n')
-            
-            # 使用tabix查询
-            record_count = 0
-            for row in tbx.fetch(region=f"{chrom}:{start}-{end}"):
-                parts = row.split('\t')
-                if len(parts) < 10:
-                    continue
-                
-                # 过滤样本
-                if sample_ids and sample_indices != list(range(len(all_samples))):
-                    selected_parts = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
-                    f_out.write('\t'.join(selected_parts) + '\n')
-                else:
-                    f_out.write(row)
-                record_count += 1
-            
-            tbx.close()
-            f_out.close()
-            
-            print(f"[INFO] 子集VCF创建完成(tabix): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
-            return
-            
+
+            # 继续执行fetch和写入逻辑（删除提前return）
+
         except Exception as _e:
             print(f"[WARNING] tabix查询失败，回退到逐行扫描: {_e}")
-    
-    # 回退：逐行扫描（慢速）
-    print(f"[INFO] 使用逐行扫描模式提取VCF子集")
-    
-    # 打开输入VCF
-    if input_vcf.endswith('.gz'):
-        f_in = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
-    else:
-        f_in = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
-    
-    # 读取头部
-    header_lines = []
-    sample_line = None
-    all_samples = []
-    
-    for line in f_in:
-        if line.startswith('##'):
-            header_lines.append(line.rstrip('\n'))
-        elif line.startswith('#CHROM'):
-            sample_line = line.rstrip('\n')
-            parts = line.rstrip('\n').split('\t')
-            all_samples = parts[9:] if len(parts) > 9 else []
-            break
-    
-    # 确定要保留的样本
+            use_tabix = False
+            tbx = None
+
+    # ---------- 确定要保留的样本 ----------
     if sample_ids:
         available_samples = set(all_samples)
         filtered_samples = [s for s in sample_ids if s in available_samples]
@@ -234,66 +170,121 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
             missing = set(sample_ids) - available_samples
             print(f"[WARNING] 以下样本在VCF中不存在: {missing}")
     else:
-        filtered_samples = all_samples
-    
-    # 如果需要过滤样本，重新构建样本行
+        filtered_samples = list(all_samples)
+
+    # 构建样本索引映射
+    sample_indices = None
     if sample_ids and filtered_samples != all_samples:
         sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
-        parts = sample_line.split('\t')[:9]
+        # 构建新的#CHROM行
+        parts = []
+        for line in header_lines:
+            if line.startswith('#CHROM'):
+                parts = line.split('\t')[:9]
+                break
         new_sample_line = '\t'.join(parts + filtered_samples)
     else:
-        new_sample_line = sample_line
+        filtered_samples = list(all_samples)
         sample_indices = list(range(len(all_samples)))
-    
-    # 打开输出VCF
-    if output_vcf.endswith('.gz'):
-        f_out = gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6)
-    else:
-        f_out = open(output_vcf, 'w', encoding='utf-8')
-    
-    # 写入头部
+        new_sample_line = None
+        for line in header_lines:
+            if line.startswith('#CHROM'):
+                new_sample_line = line
+                break
+
+    # ---------- 写入VCF（优先bgzip，否则gzip） ----------
+    # 先写文本到临时文件，再bgzip压缩
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.vcf', prefix='subset_')
+    os.close(tmp_fd)
+    tmp_handle = open(tmp_path, 'w', encoding='utf-8')
+
     for line in header_lines:
-        f_out.write(line + '\n')
-    f_out.write(new_sample_line + '\n')
-    
-    # 提取指定区域的记录
+        tmp_handle.write(line + '\n')
+    if new_sample_line:
+        tmp_handle.write(new_sample_line + '\n')
+
     record_count = 0
-    for line in f_in:
-        if line.startswith('#'):
-            continue
-        
-        parts = line.rstrip('\n').split('\t')
-        if len(parts) < 8:
-            continue
-        
-        rec_chrom = parts[0]
-        rec_pos = int(parts[1])
-        
-        # 检查染色体
-        if rec_chrom != chrom and rec_chrom != chrom.replace('chr', ''):
-            continue
-        
-        # 检查位置
-        if rec_pos < start:
-            continue
-        if rec_pos > end:
-            break  # 超出区域，停止（假设文件按位置排序）
-        
-        # 如果需要过滤样本
-        if sample_ids and sample_indices != list(range(len(all_samples))):
-            selected_parts = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
-            f_out.write('\t'.join(selected_parts) + '\n')
+
+    if use_tabix and 'tbx' in dir() and tbx is not None:
+        # ---------- tabix分支：fetch数据 ----------
+        try:
+            for row in tbx.fetch(reference=chrom, start=start, end=end):
+                parts = str(row).split('\t')
+                if sample_indices:
+                    sel = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
+                    tmp_handle.write('\t'.join(sel) + '\n')
+                else:
+                    tmp_handle.write(str(row) + '\n')
+                record_count += 1
+        except Exception as fetch_err:
+            print(f"[WARNING] tabix fetch失败: {fetch_err}")
+        finally:
+            tbx.close()
+    else:
+        # ---------- 回退：逐行扫描（慢速） ----------
+        print(f"[INFO] 使用逐行扫描模式提取VCF子集")
+
+        if input_vcf.endswith('.gz'):
+            f_in = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
         else:
-            f_out.write(line)
-        
-        record_count += 1
-    
-    f_in.close()
-    f_out.close()
-    
-    print(f"[INFO] 子集VCF创建完成(逐行): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
+            f_in = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
 
+        for line in f_in:
+            if line.startswith('#'):
+                continue
+            parts = line.rstrip('\n').split('\t')
+            if len(parts) < 8:
+                continue
+            rec_chrom = parts[0]
+            rec_pos = int(parts[1])
+            if rec_chrom != chrom and rec_chrom != chrom.replace('chr', ''):
+                continue
+            if rec_pos < start:
+                continue
+            if rec_pos > end:
+                break  # 假设文件按位置排序，超出则停止
+            if sample_indices:
+                sel = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
+                tmp_handle.write('\t'.join(sel) + '\n')
+            else:
+                tmp_handle.write(line)
+            record_count += 1
 
+        f_in.close()
+
+    tmp_handle.close()
+
+    # bgzip压缩（支持pysam随机访问），失败则回退gzip
+    _used_bgzip = False
+    if _bgzip_available and output_vcf.endswith('.gz'):
+        try:
+            with open(tmp_path, 'rb') as fin:
+                proc = subprocess.Popen(
+                    ['bgzip', '-c'],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL
+                )
+                compressed = proc.communicate(input=fin.read())[0]
+                with open(output_vcf, 'wb') as fout:
+                    fout.write(compressed)
+            proc.wait()
+            _used_bgzip = True
+            _compressor = 'bgzip'
+        except Exception as bgzip_err:
+            with gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6) as fout:
+                with open(tmp_path, 'rt', encoding='utf-8') as fin:
+                    fout.write(fin.read())
+            _compressor = 'gzip(fallback)'
+            print(f"[WARNING] bgzip压缩失败，回退gzip: {bgzip_err}")
+    else:
+        with gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6) as fout:
+            with open(tmp_path, 'rt', encoding='utf-8') as fin:
+                fout.write(fin.read())
+        _compressor = 'gzip'
+
+    os.unlink(tmp_path)
+
+    print(f"[INFO] 子集VCF创建完成({_compressor}): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
 # ============================================================================
 # 内置单倍型提取器（当主模块不可用时使用）
 # ============================================================================
