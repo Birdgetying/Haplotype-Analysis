@@ -5685,9 +5685,8 @@ class ReportGenerator:
         html += '</tr>\n'
         
         html += r'''</tbody></table>
-</div><!-- table-scroll-container -->
 
-<!-- LD 倒三角图容器：紧接在单倍型序列表格下方 -->
+<!-- LD 倒三角图容器：在 table-scroll-container 内部，与表格共享同一滚动上下文 -->
 <div id="ld-triangle-wrapper" style="margin-top:0px;overflow:visible;width:auto;display:block;">
     <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
     <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
@@ -5699,6 +5698,7 @@ class ReportGenerator:
         <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
     </div>
 </div>
+</div><!-- table-scroll-container -->
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
     </div>
@@ -6150,23 +6150,18 @@ function drawLDTriangle() {
         return;
     }
     
-    // 计算每列的屏幕坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
-    var colInfos = [];  // {screenX, matIdx}
+    // 计算每列的坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
+    var colInfos = [];  // {svgX, matIdx}
     var canvasEl = canvas;
     
-    // 获取SVG作为基准（与updateConnectorLines相同的基准）
-    var svgElement = document.querySelector('#gene-structure-svg');
-    if (!svgElement) { console.log('[LD] SVG not found'); return; }
-    var svgRect = svgElement.getBoundingClientRect();
-    var svgLogicalWidth = svgElement.width.baseVal.value;
-    var scaleFactor = svgRect.width / svgLogicalWidth;
+    // wrapper 现在在 table-scroll-container 内部，直接用 th.offsetLeft 计算
+    var tableEl = document.querySelector('.data-table');
+    if (!tableEl) { console.log('[LD] table not found'); return; }
         
     visibleVarThs.forEach(function(th) {
-        // 与updateConnectorLines相同：th.screenX → SVG逻辑坐标
-        var thRect = th.getBoundingClientRect();
-        var screenX = thRect.left + thRect.width / 2;
-        // 转换为SVG内部逻辑坐标（与基因结构图/连线同一基准）
-        var svgX = (screenX - svgRect.left) / scaleFactor;
+        // 直接用 th.offsetLeft（相对于 table 的偏移）
+        var thOffsetLeft = th.offsetLeft;
+        var svgX = thOffsetLeft + th.offsetWidth / 2;  // 列中心
         // 找该列在displayPositions中的索引
         var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posVal = parseInt(posText);
