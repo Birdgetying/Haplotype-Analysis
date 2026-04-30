@@ -136,35 +136,26 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         try:
             import pysam as _pysam
             tbx = _pysam.TabixFile(input_vcf, index=index_path)
-            # tbx.header 只含 ## 行，不含 #CHROM 行
+            # tbx.header 包含所有 # 开头的行（含 #CHROM），需分离
             for line in tbx.header:
-                header_lines.append(line.rstrip('\n'))
-
-            # 单独读取 #CHROM 行获取样本列表
-            if input_vcf.endswith('.gz'):
-                with gzip.open(input_vcf, 'rt') as _hf:
-                    for line in _hf:
-                        if line.startswith('#CHROM'):
-                            sample_line = line.rstrip('\n')
-                            parts = sample_line.split('\t')
-                            all_samples = parts[9:] if len(parts) > 9 else []
-                            break
-            else:
-                with open(input_vcf, 'r') as _hf:
-                    for line in _hf:
-                        if line.startswith('#CHROM'):
-                            sample_line = line.rstrip('\n')
-                            parts = sample_line.split('\t')
-                            all_samples = parts[9:] if len(parts) > 9 else []
-                            break
+                l = line.rstrip('\n')
+                if l.startswith('#CHROM'):
+                    sample_line = l
+                    parts = l.split('\t')
+                    all_samples = parts[9:] if len(parts) > 9 else []
+                else:
+                    header_lines.append(l)
 
         except Exception as _e:
             print(f"[WARNING] tabix查询失败，回退到逐行扫描: {_e}")
             use_tabix = False
             tbx = None
 
-    # 如果 header 未读取（tabix不可用或失败），从文件扫描读取
-    if not header_lines:
+    # 如果 header 或 #CHROM 行未读取（tabix不可用、失败、或tbx.header不含#CHROM），从文件扫描读取
+    if not header_lines or sample_line is None:
+        header_lines = []   # 重置，避免与tabix部分读取的内容重复
+        sample_line = None
+        all_samples = []
         if input_vcf.endswith('.gz'):
             _hf = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
         else:
@@ -275,12 +266,13 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
                 proc = subprocess.Popen(
                     ['bgzip', '-c'],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL
+                    stderr=subprocess.PIPE
                 )
-                compressed = proc.communicate(input=fin.read())[0]
-                with open(output_vcf, 'wb') as fout:
-                    fout.write(compressed)
-            proc.wait()
+                compressed, _stderr = proc.communicate(input=fin.read())
+            if proc.returncode != 0 or not compressed:
+                raise Exception(f"bgzip -c failed (code={proc.returncode}): {_stderr.decode('utf-8','ignore')[:200]}")
+            with open(output_vcf, 'wb') as fout:
+                fout.write(compressed)
             _used_bgzip = True
             _compressor = 'bgzip'
         except Exception as bgzip_err:
