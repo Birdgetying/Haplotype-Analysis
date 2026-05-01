@@ -6198,14 +6198,16 @@ function drawLDTriangle() {
     var canvasW = Math.ceil(lastColX - firstColX + cellW);
     canvasW = Math.max(canvasW, 100); // 最小宽度100px
     
-    // wrapper.paddingLeft = 第一列的SVG逻辑坐标（与基因结构图/连线同一基准）
+    // wrapper 在 table-scroll-container 内部，不需要 paddingLeft
+    // canvas 左边缘对齐表格左边缘（table 处理滚动）
     var wrapper = document.getElementById('ld-triangle-wrapper');
-    wrapper.style.paddingLeft = firstColX + 'px';
+    wrapper.style.paddingLeft = '0px';
     
     canvas.width = canvasW;
     canvas.height = canvasH;
     canvas.style.width = canvasW + 'px';
     canvas.style.height = canvasH + 'px';
+    canvas.style.marginLeft = firstColX + 'px';  // canvas 向右偏移，对齐第一个序列列
     
     // 计算canvas显示尺寸与内部坐标的比例
     var canvasDisplayRect = canvas.getBoundingClientRect();
@@ -6213,8 +6215,9 @@ function drawLDTriangle() {
     var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
     
     // 将所有colInfos的svgX转换为canvas内部坐标（相对canvas左上角）
+    // firstColX 是第一个序列列的左边缘（offsetLeft），canvasX=0 对应第一个列的左边缘
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
-        colInfos[ci2].canvasX = (colInfos[ci2].svgX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
+        colInfos[ci2].canvasX = (colInfos[ci2].svgX - firstColX) * canvasScaleX;
     }
     
     // 用canvas内部坐标重新计算细胞宽度
