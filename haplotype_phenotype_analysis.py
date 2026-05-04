@@ -5122,7 +5122,7 @@ class ReportGenerator:
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
             <div class="top-section">
                 <div class="network-panel">
-                    <div class="network-panel-title">Haplotype Network</div>
+                    <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| 点击节点复制样本</span></div>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
                 <div class="gene-gwas-panel">
@@ -5819,7 +5819,9 @@ function copyAllHaplotypes() {
     });
 }
 
-function copyNodeSamples(event, nodeId, samples) {
+function copyNodeSamples(nodeId) {
+    var node = networkNodes.find(n => n.id === nodeId);
+    var samples = node ? (node.samples || []) : [];
     if (!samples || samples.length === 0) {
         alert('No samples for ' + nodeId);
         return;
@@ -5835,7 +5837,6 @@ function copyNodeSamples(event, nodeId, samples) {
         document.execCommand('copy');
         document.body.removeChild(ta);
     });
-    event.stopPropagation();
 }
 
 // ==================== D3 数据 ====================
@@ -8782,7 +8783,7 @@ function initNetwork() {{
     node.on('mouseover', function(event, d) {{
         d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
         tooltip.style('display', 'block').html(
-            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p><p style='color:#e74c3c;cursor:pointer;' onclick='copyNodeSamples(event, ${{d.id}}, ${{JSON.stringify(d.samples || [])}})'>📋 点击复制样本</p>`);
+            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p><p style='color:#e74c3c;cursor:pointer;' onclick='copyNodeSamples("${{d.id}}")'>📋 点击复制样本</p>`);
     }}).on('mousemove', function(event) {{
         tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
     }}).on('mouseout', function() {{
@@ -8790,22 +8791,12 @@ function initNetwork() {{
         tooltip.style('display', 'none');
     }}).on('click', function(event, d) {{
         // 点击节点复制样本名
-        var samples = d.samples || [];
-        if (samples.length === 0) {{
-            alert('No samples for ' + d.id);
-            return;
-        }}
-        var text = samples.join(',');
-        navigator.clipboard.writeText(text).then(function() {{
-            console.log('Copied samples for ' + d.id);
-        }}).catch(function(err) {{
-            var ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-        }});
+        copyNodeSamples(d.id);
+        event.stopPropagation();
+    }});
+    
+    // 阻止 tooltip 点击触发节点点击
+    tooltip.on('click', function(event) {{
         event.stopPropagation();
     }});
     
