@@ -6588,7 +6588,7 @@ function drawNetworkPlot() {
                 d.fx = Math.max(xMin, Math.min(xMax, e.x));
                 d.fy = Math.max(yMin, Math.min(yMax, e.y));
             })
-            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); /* 保持节点在拖动后的位置，不复位 */ })
         );
 
     nodeG.append('circle')
@@ -7276,9 +7276,8 @@ const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
             d.fy = Math.max(r, Math.min(height - r, e.y));
         }})
         .on('end', function(e, d) {{ 
-            if (!e.active) sim.alphaTarget(0); 
-            d.fx = null; 
-            d.fy = null; 
+            if (!e.active) sim.alphaTarget(0);
+            /* 保持节点在拖动后的位置，不复位 */
         }})
     );
 
@@ -8750,7 +8749,7 @@ function initNetwork() {{
         .call(d3.drag()
             .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
             .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }})
+            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); /* 保持节点位置 */ }})
         );
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
