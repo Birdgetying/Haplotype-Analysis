@@ -4875,13 +4875,17 @@ class ReportGenerator:
                 else:
                     color = '#9b59b6'  # 默认紫色
                 
+                # 获取该单倍型的样本列表
+                samples_for_hap = hap_samples_map.get(hap, [])
+                
                 network_nodes.append({
                     'id': hap,
                     'count': count,
                     'size': size,
                     'color': color,
                     'phenoMean': round(hap_pheno_means.get(hap, 0), 3),
-                    'isLead': is_lead_hap
+                    'isLead': is_lead_hap,
+                    'samples': samples_for_hap  # 样本列表，用于点击复制
                 })
                 
                 # 计算边（Hamming距离）
@@ -5813,6 +5817,25 @@ function copyAllHaplotypes() {
         document.execCommand('copy');
         document.body.removeChild(textArea);
     });
+}
+
+function copyNodeSamples(event, nodeId, samples) {
+    if (!samples || samples.length === 0) {
+        alert('No samples for ' + nodeId);
+        return;
+    }
+    var text = samples.join(',');
+    navigator.clipboard.writeText(text).then(function() {
+        console.log('Copied samples for ' + nodeId);
+    }).catch(function(err) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+    event.stopPropagation();
 }
 
 // ==================== D3 数据 ====================
@@ -8759,12 +8782,36 @@ function initNetwork() {{
     node.on('mouseover', function(event, d) {{
         d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
         tooltip.style('display', 'block').html(
-            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p>`);
+            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p><p style='color:#e74c3c;cursor:pointer;' onclick='copyNodeSamples(event, ${{d.id}}, ${{JSON.stringify(d.samples || [])}})'>📋 点击复制样本</p>`);
     }}).on('mousemove', function(event) {{
         tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
     }}).on('mouseout', function() {{
         d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
         tooltip.style('display', 'none');
+    }}).on('click', function(event, d) {{
+        // 点击节点复制样本名
+        var samples = d.samples || [];
+        if (samples.length === 0) {{
+            alert('No samples for ' + d.id);
+            return;
+        }}
+        var text = samples.join(',');
+        navigator.clipboard.writeText(text).then(function() {{
+            console.log('Copied samples for ' + d.id);
+        }}).catch(function(err) {{
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }});
+        event.stopPropagation();
+    }});
+    
+    // 阻止 tooltip 点击触发节点点击
+    tooltip.on('click', function(event) {{
+        event.stopPropagation();
     }});
     
     networkSimulation.on('tick', () => {{
