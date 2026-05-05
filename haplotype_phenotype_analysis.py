@@ -5007,6 +5007,12 @@ class ReportGenerator:
                                font-size: 12px; font-weight: 600; color: #2c3e50; 
                                background: rgba(255,255,255,0.9); padding: 2px 6px; 
                                border-radius: 3px; z-index: 10; }}
+        .network-mode-btn {{ position: absolute; top: 8px; right: 60px; 
+                            font-size: 11px; padding: 3px 8px; border: 1px solid #3498db; 
+                            background: white; color: #3498db; border-radius: 3px; 
+                            cursor: pointer; z-index: 10; }}
+        .network-mode-btn:hover {{ background: #3498db; color: white; }}
+        .network-mode-btn.active {{ background: #3498db; color: white; }}
         /* GWAS 面板：14px 间距，left edge = network_w + 14，内部 gwas_left_margin=86 → x=regionStart 位于 network_w+100 = gene_area_start */
         .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 14px; border: 1px solid #e0e0e0; 
                            border-radius: 6px; background: #fafafa; position: relative; }}
@@ -5123,6 +5129,7 @@ class ReportGenerator:
             <div class="top-section">
                 <div class="network-panel">
                     <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| 点击节点复制样本</span></div>
+                    <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">复制模式</button>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
                 <div class="gene-gwas-panel">
@@ -5817,6 +5824,22 @@ function copyAllHaplotypes() {
         document.execCommand('copy');
         document.body.removeChild(textArea);
     });
+}
+
+// 网络图模式切换：复制模式 vs 拖拽模式
+var networkMode = 'drag'; // 'drag' 或 'copy'
+
+function toggleNetworkMode() {
+    var btn = document.getElementById('networkModeBtn');
+    if (networkMode === 'drag') {
+        networkMode = 'copy';
+        btn.textContent = '拖拽模式';
+        btn.classList.add('active');
+    } else {
+        networkMode = 'drag';
+        btn.textContent = '复制模式';
+        btn.classList.remove('active');
+    }
 }
 
 function copyNodeSamples(nodeId) {
@@ -8771,9 +8794,9 @@ function initNetwork() {{
         .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
         .style('cursor', 'pointer')
         .call(d3.drag()
-            .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
-            .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
+            .on('start', function(event, d) {{ if (networkMode !== 'drag') return; if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
+            .on('drag', function(event, d) {{ if (networkMode !== 'drag') return; d.fx = event.x; d.fy = event.y; }})
+            .on('end', function(event, d) {{ if (networkMode !== 'drag') return; if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
         );
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
@@ -8790,13 +8813,9 @@ function initNetwork() {{
         d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
         tooltip.style('display', 'none');
     }}).on('click', function(event, d) {{
-        // 点击节点复制样本名
-        copyNodeSamples(d.id);
-        event.stopPropagation();
-    }});
-    
-    // 阻止 tooltip 点击触发节点点击
-    tooltip.on('click', function(event) {{
+        if (networkMode === 'copy') {{
+            copyNodeSamples(d.id);
+        }}
         event.stopPropagation();
     }});
     
