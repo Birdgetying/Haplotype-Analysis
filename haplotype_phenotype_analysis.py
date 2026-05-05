@@ -6620,7 +6620,14 @@ function drawNetworkPlot() {
 
     var nodeG = zoomG.append('g').selectAll('g').data(nodes).join('g')
         .style('cursor','pointer')
+        .on('click', function(event, d) {
+            if (networkMode === 'copy') {
+                copyNodeSamples(d.id);
+                event.stopPropagation();
+            }
+        })
         .call(d3.drag()
+            .filter(function(event) { return networkMode === 'drag'; })
             .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
             .on('drag',  function(e,d) {
                 // 随缩放比例动态计算可拖动边界（zoomG内部坐标系）
@@ -6690,7 +6697,7 @@ function drawNetworkPlot() {
     var tip = document.getElementById('d3-tooltip');
     nodeG.on('mouseover', function(e,d) {
         d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
-        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean;
+        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean+'<br><span style="color:#e74c3c">📋 点击复制样本</span>';
         tip.style.display = 'block';
     }).on('mousemove', function(e) {
         tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY-10)+'px';
