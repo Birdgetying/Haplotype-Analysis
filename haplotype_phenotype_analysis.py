@@ -8793,10 +8793,17 @@ function initNetwork() {{
     const node = networkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
         .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
         .style('cursor', 'pointer')
+        .on('click', function(event, d) {{
+            if (networkMode === 'copy') {{
+                copyNodeSamples(d.id);
+                event.stopPropagation();
+            }}
+        }})
         .call(d3.drag()
-            .on('start', function(event, d) {{ if (networkMode !== 'drag') return; if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
-            .on('drag', function(event, d) {{ if (networkMode !== 'drag') return; d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (networkMode !== 'drag') return; if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
+            .filter(function(event) {{ return networkMode === 'drag'; }})
+            .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
+            .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
+            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
         );
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
