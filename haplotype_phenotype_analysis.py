@@ -2170,13 +2170,14 @@ class PhenotypeAssociation:
         exclude_cols = ['SampleID', 'Hap_Name', 'Haplotype_Seq']
         return [c for c in self.merged_df.columns if c not in exclude_cols]
     
-    def association_test(self, phenotype_col: str, method: str = 'auto') -> dict:
+    def association_test(self, phenotype_col: str, method: str = 'auto', pc_covariates: pd.DataFrame = None) -> dict:
         """
         单倍型-表型关联检验
         
         Args:
             phenotype_col: 表型列名
             method: 检验方法 ('auto', 'ttest', 'anova', 'kruskal')
+            pc_covariates: PCA协变量DataFrame（包含SampleID + PC1, PC2, ...），用于群体结构矫正
         
         Returns:
             dict: 包含统计结果的字典
@@ -2269,11 +2270,139 @@ class PhenotypeAssociation:
         result['significant'] = result.get('p_value', 1) < 0.05
         result['highly_significant'] = result.get('p_value', 1) < 0.01
         
+        # ===== 群体结构矫正：ANCOVA =====
+        if pc_covariates is not None and not pc_covariates.empty:
+            corrected_result = self._ancova_test(df, phenotype_col, pc_covariates)
+            if corrected_result and 'error' not in corrected_result:
+                result['corrected'] = corrected_result
+                # 用矫正后的P值覆盖显著性判断
+                result['corrected_significant'] = corrected_result.get('p_value', 1) < 0.05
+                result['corrected_highly_significant'] = corrected_result.get('p_value', 1) < 0.01
+        
         return result
     
-    def regression_analysis(self, phenotype_col: str) -> dict:
+    def _ancova_test(self, df: pd.DataFrame, phenotype_col: str, pc_covariates: pd.DataFrame) -> dict:
+        """
+        ANCOVA（协方差分析）- 群体结构矫正后的关联检验
+        
+        使用OLS回归：表型 ~ 单倍型哑变量 + PC协变量
+        通过比较全模型（含单倍型+PC）与简化模型（仅PC）的F检验来判断单倍型效应
+        
+        Args:
+            df: 已过滤的merged_df
+            phenotype_col: 表型列名
+            pc_covariates: PCA协变量DataFrame（SampleID + PC1, PC2, ...）
+        
+        Returns:
+            dict: 矫正后的统计结果
+        """
+        try:
+            # 合并PC协变量
+            pc_cols = [c for c in pc_covariates.columns if c.startswith('PC')]
+            if not pc_cols:
+                return {'error': 'PC协变量列不存在'}
+            
+            df_merged = pd.merge(df, pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
+            
+            if len(df_merged) < 5:
+                return {'error': f'合并PC协变量后样本不足({len(df_merged)})'}
+            
+            # 检查PC列是否有有效值
+            pc_valid = df_merged[pc_cols].dropna()
+            if len(pc_valid) < 5:
+                return {'error': 'PC协变量有效值不足'}
+            
+            # 使用最大频率的单倍型作为参考
+            ref_hap = df_merged['Hap_Name'].value_counts().index[0]
+            
+            # 创建哑变量
+            dummies = pd.get_dummies(df_merged['Hap_Name'], prefix='Hap', drop_first=False)
+            hap_cols = [c for c in dummies.columns if c != f'Hap_{ref_hap}']
+            
+            if not hap_cols:
+                return {'error': '单倍型分组不足'}
+            
+            # 构建特征矩阵
+            X_hap = dummies[hap_cols].values
+            X_pc = df_merged[pc_cols].fillna(0).values
+            y = df_merged[phenotype_col].values
+            n = len(y)
+            
+            # ---- 全模型：单倍型 + PC + 截距 ----
+            X_full = np.column_stack([np.ones(n), X_hap, X_pc])
+            model_full = LinearRegression(fit_intercept=False)
+            model_full.fit(X_full, y)
+            y_pred_full = model_full.predict(X_full)
+            ss_res_full = np.sum((y - y_pred_full) ** 2)
+            
+            # ---- 简化模型：仅PC + 截距 ----
+            X_reduced = np.column_stack([np.ones(n), X_pc])
+            model_reduced = LinearRegression(fit_intercept=False)
+            model_reduced.fit(X_reduced, y)
+            y_pred_reduced = model_reduced.predict(X_reduced)
+            ss_res_reduced = np.sum((y - y_pred_reduced) ** 2)
+            
+            # F检验：全模型 vs 简化模型
+            p_hap = len(hap_cols)  # 单倍型参数数
+            p_full = X_full.shape[1]  # 全模型参数数
+            df_num = p_hap  # 分子自由度
+            df_den = n - p_full  # 分母自由度
+            
+            if df_den <= 0:
+                return {'error': '自由度不足'}
+            
+            ss_diff = ss_res_reduced - ss_res_full
+            ms_diff = ss_diff / df_num if df_num > 0 else 0
+            ms_res = ss_res_full / df_den
+            
+            f_stat = ms_diff / ms_res if ms_res > 0 else 0
+            
+            from scipy.stats import f as f_dist
+            p_value = 1 - f_dist.cdf(f_stat, df_num, df_den) if f_stat > 0 else 1.0
+            
+            # 全模型R²
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r_squared_full = 1 - ss_res_full / ss_tot if ss_tot > 0 else 0
+            
+            # 简化模型R²（仅PC）
+            r_squared_reduced = 1 - ss_res_reduced / ss_tot if ss_tot > 0 else 0
+            
+            # 偏R²（单倍型在控制PC后的额外解释率）
+            partial_r_squared = (ss_res_reduced - ss_res_full) / ss_res_reduced if ss_res_reduced > 0 else 0
+            
+            # 各单倍型系数
+            coef_dict = {}
+            for i, col in enumerate(hap_cols):
+                hap_name = col.replace('Hap_', '')
+                coef_dict[hap_name] = float(model_full.coef_[i + 1])  # +1跳过截距
+            
+            result = {
+                'test_type': 'ANCOVA (PCA corrected)',
+                'f_statistic': float(f_stat),
+                'p_value': float(p_value),
+                'df_num': int(df_num),
+                'df_den': int(df_den),
+                'r_squared_full': float(r_squared_full),
+                'r_squared_reduced': float(r_squared_reduced),
+                'partial_r_squared': float(partial_r_squared),
+                'n_pc_components': len(pc_cols),
+                'reference_haplotype': ref_hap,
+                'coefficients': coef_dict,
+                'n_samples': n,
+            }
+            
+            return result
+            
+        except Exception as e:
+            return {'error': f'ANCOVA计算失败: {e}'}
+    
+    def regression_analysis(self, phenotype_col: str, pc_covariates: pd.DataFrame = None) -> dict:
         """
         线性回归分析 - 单倍型作为分类变量
+        
+        Args:
+            phenotype_col: 表型列名
+            pc_covariates: PCA协变量DataFrame（包含SampleID + PC1, PC2, ...），用于群体结构矫正
         
         Returns:
             dict: 回归分析结果
@@ -2285,6 +2414,17 @@ class PhenotypeAssociation:
         
         if len(df) < 10:
             return {'error': '样本量不足进行回归分析'}
+        
+        # 合并PC协变量（如果有）
+        pc_cols = []
+        if pc_covariates is not None and not pc_covariates.empty:
+            pc_cols = [c for c in pc_covariates.columns if c.startswith('PC')]
+            if pc_cols:
+                df = pd.merge(df, pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
+                df = df[df[pc_cols].notna().all(axis=1)]  # 去除PC缺失的样本
+        
+        if len(df) < 10:
+            return {'error': '合并PC协变量后样本量不足进行回归分析'}
         
         # 使用最大频率的单倍型作为参考
         ref_hap = df['Hap_Name'].value_counts().index[0]
@@ -2300,7 +2440,9 @@ class PhenotypeAssociation:
         
         try:
             # 准备特征矩阵和目标变量
-            X = df[hap_cols].values
+            X_hap = df[hap_cols].values
+            X_pc = df[pc_cols].fillna(0).values if pc_cols else np.empty((len(df), 0))
+            X = np.column_stack([X_hap, X_pc]) if pc_cols else X_hap
             y = df[phenotype_col].values
             
             # 添加截距项
@@ -2318,7 +2460,7 @@ class PhenotypeAssociation:
             
             # 计算调整后R²
             n = len(y)
-            p = len(hap_cols)
+            p = X.shape[1]  # 总特征数（单倍型+PC）
             adj_r_squared = 1 - (1 - r_squared) * (n - 1) / (n - p - 1) if n > p + 1 else 0
             
             # 计算F统计量
@@ -2342,7 +2484,7 @@ class PhenotypeAssociation:
             
             result = {
                 'phenotype': phenotype_col,
-                'method': 'OLS Regression',
+                'method': 'OLS Regression (PCA corrected)' if pc_cols else 'OLS Regression',
                 'reference_haplotype': ref_hap,
                 'r_squared': r_squared,
                 'adj_r_squared': adj_r_squared,
@@ -2350,13 +2492,23 @@ class PhenotypeAssociation:
                 'f_pvalue': f_pvalue,
                 'n_samples': len(df),
                 'coefficients': {},
-                'p_values': {}
+                'p_values': {},
+                'n_pc_components': len(pc_cols),
             }
             
             for i, col in enumerate(hap_cols):
                 if i < len(model.coef_) - 1:
                     result['coefficients'][col] = model.coef_[i + 1]
                     result['p_values'][col] = coef_pvalues[i] if i < len(coef_pvalues) else 1.0
+            
+            # 如果有PC协变量，也输出PC系数
+            if pc_cols:
+                pc_coef = {}
+                for i, col in enumerate(pc_cols):
+                    idx = len(hap_cols) + i
+                    if idx < len(model.coef_) - 1:
+                        pc_coef[col] = model.coef_[idx + 1]
+                result['pc_coefficients'] = pc_coef
             
             return result
             
@@ -2777,6 +2929,127 @@ class AMOVAAnalyzer:
             return df
         
         return pd.DataFrame()
+
+
+# ============================================================================
+# 模块3.5: 群体结构矫正
+# ============================================================================
+
+class PopulationStructureCorrector:
+    """
+    群体结构矫正模块
+    基于基因型PCA计算群体结构协变量，用于关联分析中的群体结构矫正
+    
+    原理：
+    1. 从变异位点构建基因型矩阵（样本 × 位点）
+    2. 对基因型矩阵进行PCA降维
+    3. 取前K个主成分作为群体结构协变量
+    4. 在关联分析中（ANCOVA / 线性回归）加入PC协变量
+    """
+    
+    def __init__(self, hap_sample_df: pd.DataFrame, n_components: int = 3):
+        """
+        Args:
+            hap_sample_df: 包含 SampleID, Hap_Name, Haplotype_Seq 的数据框
+            n_components: 保留的PCA主成分数（默认3）
+        """
+        self.hap_sample_df = hap_sample_df
+        self.n_components = n_components
+        self.pc_df = None  # 样本ID -> PC坐标
+        self.var_explained = []
+    
+    def compute_pca_covariates(self) -> pd.DataFrame:
+        """
+        从单倍型序列计算PCA协变量
+        
+        Returns:
+            pd.DataFrame: 包含 SampleID, PC1, PC2, ... 的数据框
+        """
+        logger = get_logger()
+        
+        if 'Haplotype_Seq' not in self.hap_sample_df.columns:
+            logger.warning("[群体结构] 缺少 Haplotype_Seq 列，无法计算PCA")
+            return pd.DataFrame()
+        
+        df = self.hap_sample_df[
+            (self.hap_sample_df['Hap_Name'] != 'Other') &
+            (self.hap_sample_df['Haplotype_Seq'].notna())
+        ].copy()
+        
+        if len(df) < 5:
+            logger.warning(f"[群体结构] 样本数不足({len(df)})，无法计算PCA")
+            return pd.DataFrame()
+        
+        try:
+            from sklearn.decomposition import PCA
+            from sklearn.impute import SimpleImputer
+            
+            # 构建基因型数值矩阵
+            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': np.nan}
+            samples = []
+            sample_ids = []
+            for _, row in df.iterrows():
+                seq = row['Haplotype_Seq'].replace('|', '')
+                numeric_seq = [base_map.get(b.upper(), np.nan) for b in seq]
+                samples.append(numeric_seq)
+                sample_ids.append(row['SampleID'])
+            
+            if len(samples) < 5:
+                logger.warning(f"[群体结构] 有效样本不足({len(samples)})")
+                return pd.DataFrame()
+            
+            # 统一序列长度
+            max_len = max(len(s) for s in samples)
+            samples = [s + [np.nan] * (max_len - len(s)) for s in samples]
+            X = np.array(samples)
+            
+            # 用均值填充NaN
+            imputer = SimpleImputer(strategy='mean')
+            X_imputed = imputer.fit_transform(X)
+            
+            # 标准化
+            X_std = (X_imputed - X_imputed.mean(axis=0)) / (X_imputed.std(axis=0) + 1e-10)
+            
+            # PCA
+            n_pc = min(self.n_components, len(samples) - 1, X_std.shape[1])
+            pca = PCA(n_components=n_pc)
+            pca_result = pca.fit_transform(X_std)
+            self.var_explained = [float(v * 100) for v in pca.explained_variance_ratio_]
+            
+            # 构建结果DataFrame
+            pc_data = {'SampleID': sample_ids}
+            for i in range(n_pc):
+                pc_data[f'PC{i+1}'] = pca_result[:, i]
+            
+            self.pc_df = pd.DataFrame(pc_data)
+            
+            logger.info(f"[群体结构] PCA计算完成: {n_pc} 个主成分")
+            for i, v in enumerate(self.var_explained):
+                logger.info(f"  PC{i+1}: {v:.1f}% 方差解释率")
+            
+            return self.pc_df
+            
+        except Exception as e:
+            logger.warning(f"[群体结构] PCA计算失败: {e}")
+            return pd.DataFrame()
+    
+    def get_pc_covariates_for_samples(self, sample_ids: list) -> pd.DataFrame:
+        """
+        获取指定样本的PC协变量
+        
+        Args:
+            sample_ids: 样本ID列表
+            
+        Returns:
+            pd.DataFrame: 指定样本的PC协变量
+        """
+        if self.pc_df is None:
+            self.compute_pca_covariates()
+        
+        if self.pc_df is None or self.pc_df.empty:
+            return pd.DataFrame()
+        
+        return self.pc_df[self.pc_df['SampleID'].isin(sample_ids)]
 
 
 # ============================================================================
@@ -4254,9 +4527,12 @@ class ReportGenerator:
                 'Test_Method': assoc.get('test_type', 'NA'),
                 'Statistic': assoc.get('statistic', np.nan),
                 'P_Value': assoc.get('p_value', np.nan),
+                'P_Value_PCA_Corrected': assoc.get('corrected', {}).get('p_value', np.nan) if 'corrected' in assoc else np.nan,
+                'Partial_R2_Hap|PC': assoc.get('corrected', {}).get('partial_r_squared', np.nan) if 'corrected' in assoc else np.nan,
                 'PVE(%)': pve.get('pve_percent', np.nan),
                 'Effect_Size': pve.get('effect_size', 'NA'),
-                'Significant': '***' if assoc.get('highly_significant') else ('*' if assoc.get('significant') else '')
+                'Significant': '***' if assoc.get('highly_significant') else ('*' if assoc.get('significant') else ''),
+                'Significant_PCA': '***' if assoc.get('corrected_highly_significant') else ('*' if assoc.get('corrected_significant') else '') if 'corrected' in assoc else ''
             }
             rows.append(row)
         
@@ -4331,6 +4607,24 @@ class ReportGenerator:
         <tr class="{sig_class}"><td>P-value</td><td>{fmt(assoc.get('p_value'), '.2e')}</td></tr>
     </table>
 """
+            # 群体结构矫正结果
+            if 'corrected' in assoc:
+                corr = assoc['corrected']
+                corr_sig_class = 'significant' if assoc.get('corrected_significant') else ''
+                html_content += f"""
+    <h2>Population Structure Correction (ANCOVA)</h2>
+    <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Corrected Test</td><td>{corr.get('test_type', 'NA')}</td></tr>
+        <tr><td>PCA Components</td><td>{corr.get('n_pc_components', 'NA')}</td></tr>
+        <tr><td>F-statistic (corrected)</td><td>{fmt(corr.get('f_statistic'), '.4f')}</td></tr>
+        <tr class="{corr_sig_class}"><td>P-value (PCA corrected)</td><td>{fmt(corr.get('p_value'), '.2e')}</td></tr>
+        <tr><td>R² (full model)</td><td>{fmt(corr.get('r_squared_full'), '.4f')}</td></tr>
+        <tr><td>R² (PC only)</td><td>{fmt(corr.get('r_squared_reduced'), '.4f')}</td></tr>
+        <tr><td>Partial R² (Haplotype|PC)</td><td>{fmt(corr.get('partial_r_squared'), '.4f')}</td></tr>
+        <tr><td>Reference Haplotype</td><td>{corr.get('reference_haplotype', 'NA')}</td></tr>
+    </table>
+"""
         
         # PVE 结果
         if 'pve' in self.results:
@@ -4378,7 +4672,8 @@ class ReportGenerator:
                                   variant_pvalues: dict = None,
                                   network_data: dict = None,
                                   has_promoter_variants: bool = False,
-                                  promoter_actual_length: int = 2000) -> str:
+                                  promoter_actual_length: int = 2000,
+                                  pca_correction: dict = None) -> str:
         """生成综合HTML大图（整合基因结构、GWAS P值、网络图、效应图、箱线图、单倍型序列）
         
         布局设计：
@@ -8424,6 +8719,7 @@ if (promoterStart < promoterEnd) {{
         manhattan_json = json.dumps(manhattan_points, cls=NumpyEncoder)
         pca_json = json.dumps(pca_points, cls=NumpyEncoder)
         var_explained_json = json.dumps(var_explained, cls=NumpyEncoder)
+        pca_correction_json = json.dumps(pca_correction or {}, cls=NumpyEncoder)
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -8516,6 +8812,7 @@ if (promoterStart < promoterEnd) {{
             <span>Variants: {len(variant_positions or [])}</span>
             <span>Haplotypes: {n_haps}</span>
             <span>Total Samples: {sum(hap_counts.values())}</span>
+            {f'<span style="color:#f1c40f">PCA Correction: {pca_correction["n_components"]} PCs ({', '.join(f'PC{i+1}: {v:.1f}%' for i, v in enumerate(pca_correction['var_explained']))})</span>' if pca_correction and pca_correction.get('var_explained') else ''}
         </div>
     </div>
     
@@ -8601,7 +8898,8 @@ if (promoterStart < promoterEnd) {{
         
         <!-- PCA面板 -->
         <div id="pca" class="tab-content">
-            <div class="panel-header"><h3>Principal Component Analysis (PCA)</h3></div>
+            <div class="panel-header"><h3>Principal Component Analysis (PCA) - Population Structure Correction</h3></div>
+            <div id="pca-correction-info" style="padding: 8px 15px; background: #eaf6ff; border-radius: 4px; margin: 5px 15px; font-size: 12px; color: #2c3e50;"></div>
             <div class="panel-controls">
                 <label>X-axis:</label>
                 <select id="pcaXAxis" onchange="updatePCA()">
@@ -8635,6 +8933,7 @@ const networkEdges = {network_edges_json};
 const manhattanData = {manhattan_json};
 const pcaData = {pca_json};
 const varExplained = {var_explained_json};
+const pcaCorrectionInfo = {pca_correction_json};
 const regionStart = {region_start};
 const regionEnd = {region_end};
 const geneStart = {gene_start};
@@ -9143,6 +9442,23 @@ document.addEventListener('DOMContentLoaded', () => {{
         initMiniNetwork();
         initMiniManhattan();
     }}, 200);
+    
+    // 显示PCA群体结构矫正信息
+    if (pcaCorrectionInfo && pcaCorrectionInfo.var_explained) {{
+        const infoDiv = document.getElementById('pca-correction-info');
+        if (infoDiv) {{
+            let html = '<strong>群体结构矫正 (Population Structure Correction)</strong> | ';
+            html += pcaCorrectionInfo.n_components + ' 个主成分 | ';
+            html += pcaCorrectionInfo.n_samples + ' 个样本 | ';
+            html += '方差解释率: ';
+            pcaCorrectionInfo.var_explained.forEach((v, i) => {{
+                html += 'PC' + (i+1) + ': ' + v.toFixed(1) + '%';
+                if (i < pcaCorrectionInfo.var_explained.length - 1) html += ', ';
+            }});
+            html += ' | <em style="color:#7f8c8d">ANCOVA模型已矫正群体结构对关联分析的影响</em>';
+            infoDiv.innerHTML = html;
+        }}
+    }}
 }});
 
 // 键盘快捷键
@@ -10107,6 +10423,34 @@ class HaplotypePhenotypeAnalyzer:
                     logger.warning(f"  AMOVA分析失败: {amova_result.get('error')}")
         except Exception as e:
             logger.warning(f"  AMOVA分析异常: {e}")
+        
+        # 2.2 群体结构矫正（PCA协变量计算）
+        pc_covariates = None
+        pca_result_info = None
+        logger.info("[Step 2.2] 群体结构矫正 - PCA协变量计算...")
+        try:
+            pop_corrector = PopulationStructureCorrector(self.hap_sample_df, n_components=3)
+            pc_covariates = pop_corrector.compute_pca_covariates()
+            if pc_covariates is not None and not pc_covariates.empty:
+                n_pc = len([c for c in pc_covariates.columns if c.startswith('PC')])
+                var_explained = pop_corrector.var_explained
+                pca_result_info = {
+                    'n_components': n_pc,
+                    'var_explained': var_explained,
+                    'n_samples': len(pc_covariates),
+                }
+                logger.info(f"  PCA计算完成: {n_pc} 个主成分, {len(pc_covariates)} 个样本")
+                for i, v in enumerate(var_explained):
+                    logger.info(f"    PC{i+1}: {v:.1f}% 方差解释率")
+                # 保存PCA协变量
+                pc_csv = os.path.join(self.output_dir, "pca_covariates.csv")
+                pc_covariates.to_csv(pc_csv, index=False)
+                logger.info(f"  PCA协变量已保存: {pc_csv}")
+            else:
+                logger.info("  PCA协变量计算失败或样本不足，将使用未矫正的关联分析")
+        except Exception as e:
+            logger.warning(f"  群体结构矫正异常: {e}")
+            pc_covariates = None
             
         if phenotype_cols is None:
             phenotype_cols = assoc_module.get_phenotype_columns()
@@ -10122,7 +10466,8 @@ class HaplotypePhenotypeAnalyzer:
             },
             'n_variants': len(self.positions),
             'n_haplotypes': len(self.hap_df),
-            'phenotype_results': {}
+            'phenotype_results': {},
+            'pca_correction': pca_result_info  # 群体结构矫正结果
         }
             
         # 3. PVE 计算
@@ -10133,8 +10478,8 @@ class HaplotypePhenotypeAnalyzer:
         for pheno in phenotype_cols:
             logger.info(f"  分析表型: {pheno}")
                 
-            # 关联检验
-            assoc_result = assoc_module.association_test(pheno)
+            # 关联检验（含群体结构矫正）
+            assoc_result = assoc_module.association_test(pheno, pc_covariates=pc_covariates)
                 
             # PVE 计算
             pve_result = pve_module.calculate_pve(pheno)
@@ -10151,8 +10496,15 @@ class HaplotypePhenotypeAnalyzer:
                 pve_val = pve_result.get('pve_percent', 0)
                 p_val_str = f"{p_val:.2e}" if isinstance(p_val, (int, float)) else 'NA'
                 pve_str = f"{pve_val:.2f}" if isinstance(pve_val, (int, float)) else 'NA'
-                logger.info(f"    P-value: {p_val_str} {sig}")
+                logger.info(f"    P-value (未矫正): {p_val_str} {sig}")
                 logger.info(f"    PVE: {pve_str}%")
+                # 矫正后结果
+                if 'corrected' in assoc_result:
+                    corr = assoc_result['corrected']
+                    corr_p = corr.get('p_value', 1)
+                    corr_sig = "***" if corr_p < 0.01 else ("*" if corr_p < 0.05 else "")
+                    logger.info(f"    P-value (PCA矫正): {corr_p:.2e} {corr_sig}")
+                    logger.info(f"    偏R²(单倍型|PC): {corr.get('partial_r_squared', 0):.4f}")
             else:
                 logger.warning(f"    关联分析失败: {assoc_result.get('error')}")
                 
@@ -10404,6 +10756,7 @@ class HaplotypePhenotypeAnalyzer:
                 variant_pvalues=variant_pvalues,
                 has_promoter_variants=has_promoter_variants,
                 promoter_actual_length=promoter_actual_length,
+                pca_correction=pca_result_info,  # 群体结构矫正结果
             )
             
             # 5.2 生成新可视化功能
