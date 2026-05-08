@@ -4360,6 +4360,7 @@ class HaplotypeScorer:
         'missense_non_conservative': 5, 'frameshift': 5,
         'missense_semi_conservative': 4, 'missense_conservative': 3,
         'stop_gain': 3, 'SV': 3,
+        'INS': 3.5, 'DEL': 3.5,     # 小indel（<50bp），介于frameshift和missense之间
         'UTR': 2, 'splice_region': 2,
         'promoter_core': 2.5,       # -50bp to TSS, 核心启动子
         'promoter_proximal': 2.0,   # -200 to -50bp
@@ -4435,13 +4436,16 @@ class HaplotypeScorer:
                     return 'SV'
                 ref, alt = str(vinfo.get('ref', '')), str(vinfo.get('alt', ''))
                 if len(ref) != len(alt):
-                    return 'SV' if abs(len(ref) - len(alt)) >= 50 else 'other'
+                    if abs(len(ref) - len(alt)) >= 50:
+                        return 'SV'
+                    # 小indel(<50bp)：保留原注释(UTR/promoter)，不被降级为'other'
             # 启动子分级：检查是否在启动子区域内
             if ann == 'promoter' and self.gene_start is not None:
                 return self._grade_promoter(pos)
             return ann if ann in self.FUNCTIONAL_WEIGHTS else 'other'
 
         # 2. variant_info 回退（len_diff / is_sv）
+        # 仅在此识别大型结构变异，小indel由后续位置推断分类
         if pos in self.variant_info:
             vinfo = self.variant_info[pos]
             if vinfo.get('is_sv', False):
@@ -4451,10 +4455,7 @@ class HaplotypeScorer:
                 return 'SV'
             if abs(len(ref) - len(alt)) >= 50:
                 return 'SV'
-            if len(alt) > len(ref):
-                return 'other'
-            if len(ref) > len(alt):
-                return 'other'
+            # 小indel(<50bp)：不再返回'other'，继续走位置推断逻辑
 
         # 3. 位置推断：CDS > UTR > intron > promoter > intergenic
         in_exon = any(es <= pos <= ee for es, ee in self.exons)
@@ -4509,7 +4510,7 @@ class HaplotypeScorer:
             pval = d.get('pvalue', 1.0)
             if pos is not None and pval is not None and pval > 0:
                 gwas_map[pos] = -np.log10(pval)
-            else:
+            elif pos is not None:
                 gwas_map[pos] = 0.0
         # Fill missing positions
         for pos in self.variant_positions:
@@ -4708,11 +4709,7 @@ class HaplotypeScorer:
 
             distances[hap_i] = weighted_sum / total_other if total_other > 0 else 0.0
 
-        # 归一化
-        max_dist = max(distances.values()) if distances else 1.0
-        if max_dist > 0:
-            return {hap: d / max_dist for hap, d in distances.items()}
-        return {hap: 0.0 for hap in self.unique_haps}
+        return distances
 
     def _get_ld_r2(self, pos_i, pos_j):
         """查询两个位点之间的LD r²值"""
@@ -11508,7 +11505,7 @@ class HaplotypePhenotypeAnalyzer:
                                         if in_exon and not in_cds:
                                             snp_effects[pos] = 'UTR'
                                         elif in_cds:
-                                            snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
+                                            snp_effects[pos] = 'synonymous'  # CDS区但无法判断missense/synonymous，至少等同同义突变
                                         elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
                                             snp_effects[pos] = 'intron'
                                         else:
