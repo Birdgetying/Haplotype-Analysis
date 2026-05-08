@@ -1,4 +1,4 @@
-"""
+﻿"""
 单倍型-表型关联分析平台 (Haplotype-Phenotype Association Analysis Platform)
 ==============================================================================
 基于基因单倍型进行表型关联分析，挖掘传统GWAS遗漏的关联信号。
@@ -656,7 +656,11 @@ class SimpleVCFParser:
         # 尝试使用 pysam 的 tabix（如果可用）
         try:
             import pysam
-            tbi = pysam.TabixFile(self.filepath)
+            # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
+            tbi_path = self.filepath + '.tbi'
+            csi_path = self.filepath + '.csi'
+            index_path = csi_path if os.path.exists(csi_path) else tbi_path
+            tbi = pysam.TabixFile(self.filepath, index=index_path)
             for row in tbi.fetch(chrom, start, end):
                 record = self._parse_line(row + '\n')
                 if record:
@@ -783,7 +787,7 @@ class DataConfig:
     LOCAL_VCF_ID_PATH = "./Variation/CSIAAS/VCFID.txt"
     
     # 输出路径
-    OUTPUT_DIR = "./results/haplotype_analysis"
+    OUTPUT_DIR = "./results3"
 
 
 # ============================================================================
@@ -1295,7 +1299,9 @@ def _build_coding_context(chrom: str, cds_intervals, strand: str, fasta_path: st
 
 def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: str,
                                      cds_intervals: list, exon_intervals: list,
-                                     gene_strand: str, positions: list) -> dict:
+                                     gene_strand: str, positions: list,
+                                     gene_start: int = None, gene_end: int = None,
+                                     promoter_start: int = None, promoter_end: int = None) -> dict:
     """
     计算指定位点列表的 SNP 功能注释
     返回: {pos: 'missense'|'synonymous'|'UTR'|'indel'|'SV'|'other'}
@@ -1313,6 +1319,9 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
     # 定义变异类型判断函数
     def classify_variant(ref, alt):
         """根据ref/alt长度判断变异类型: SNP, indel, SV, INS, DEL"""
+        # 首先检查符号等位基因（<DEL>, <INS>等）
+        if isinstance(alt, str) and alt.startswith('<') and alt.endswith('>'):
+            return 'SV'
         len_diff = abs(len(ref) - len(alt))
         if len(ref) == 1 and len(alt) == 1:
             return 'SNP'
@@ -1331,7 +1340,7 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
         return effects
 
     if not PYSAM_AVAILABLE or not fasta_path or not os.path.exists(fasta_path):
-        # 没有 FASTA，只能判断 UTR vs other
+        # 没有 FASTA，无法判断 missense/synonymous，但仍可判断 promoter/intron/UTR
         for pos in positions:
             in_cds = _pos_in_any_interval(pos, cds_intervals)
             in_exon = _pos_in_any_interval(pos, exon_intervals)
@@ -1339,6 +1348,11 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                 effects[pos] = 'UTR'
             elif in_cds:
                 effects[pos] = 'other'  # 无法判断 missense/synonymous
+            elif promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                effects[pos] = 'promoter'
+            elif gene_start is not None and gene_end is not None and gene_start <= pos <= gene_end:
+                effects[pos] = 'intron'
+            # else: keep 'other' (intergenic)
         return effects
 
     try:
@@ -1350,10 +1364,14 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
 
         # 优先用 tabix 按区域查询（秒级），否则逐行扫描（慢）
         tabix_ok = False
-        if vcf_file.endswith('.gz') and os.path.exists(vcf_file + '.tbi') and PYSAM_AVAILABLE:
+        tbi_exists = vcf_file and os.path.exists(vcf_file + '.tbi')
+        csi_exists = vcf_file and os.path.exists(vcf_file + '.csi')
+        if vcf_file and vcf_file.endswith('.gz') and (tbi_exists or csi_exists) and PYSAM_AVAILABLE:
             try:
                 import pysam as _pysam
-                tbx = _pysam.TabixFile(vcf_file)
+                # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
+                index_path = (vcf_file + '.csi') if csi_exists else (vcf_file + '.tbi')
+                tbx = _pysam.TabixFile(vcf_file, index=index_path)
                 if positions:
                     region_min = min(positions)
                     region_max = max(positions)
@@ -1377,7 +1395,7 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         in_cds  = _pos_in_any_interval(pos, cds_intervals)
                         in_exon = _pos_in_any_interval(pos, exon_intervals)
                         
-                        # 先判断SV/indel（不区分位置，统一标记）
+                        # 先判断SV/indel
                         if var_type == 'SV':
                             effects[pos] = 'SV'
                         elif var_type in ('INS', 'DEL'):
@@ -1385,8 +1403,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         elif var_type == 'indel':
                             effects[pos] = 'indel'
                         elif not in_exon:
-                            # 区分内含子和基因间区
-                            if gene_start and gene_end and gene_start <= pos <= gene_end:
+                            # 区分启动子、内含子和基因间区
+                            if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                                effects[pos] = 'promoter'
+                            elif gene_start and gene_end and gene_start <= pos <= gene_end:
                                 effects[pos] = 'intron'  # 在基因边界内但不在外显子中 = 内含子
                             else:
                                 effects[pos] = 'other'  # 基因间区
@@ -1452,8 +1472,10 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                     elif var_type == 'indel':
                         effects[pos] = 'indel'
                     elif not in_exon:
-                        # 区分内含子和基因间区
-                        if gene_start and gene_end and gene_start <= pos <= gene_end:
+                        # 区分启动子、内含子和基因间区
+                        if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
+                            effects[pos] = 'promoter'
+                        elif gene_start and gene_end and gene_start <= pos <= gene_end:
                             effects[pos] = 'intron'  # 在基因边界内但不在外显子中 = 内含子
                         else:
                             effects[pos] = 'other'  # 基因间区
@@ -1507,7 +1529,17 @@ class HaplotypeExtractor:
         - 缺失(DEL): 返回 '-' (会在variant_info中记录具体缺失长度)
         """
         # 判断变异类型，确定如何展示ALT
-        if len(ref) == 1 and len(alt0) == 1:
+        # 首先检查符号等位基因（SV表示：<DEL>, <INS>, <DUP>, <INV>等）
+        is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+        if is_symbolic:
+            sym = alt0.strip('<>').upper()
+            if 'DEL' in sym:
+                alt_repr = '-'  # 缺失
+            elif 'INS' in sym or 'DUP' in sym:
+                alt_repr = '+'  # 插入/重复
+            else:
+                alt_repr = 'N'  # INV, BND等无法用单字符表示
+        elif len(ref) == 1 and len(alt0) == 1:
             # SNP: 直接用实际碱基
             alt_repr = alt0.upper()
         elif len(alt0) > len(ref):  # 插入
@@ -1691,12 +1723,34 @@ class HaplotypeExtractor:
                         maf = counts[1] / n_valid  # 次等位基因频率
                 
                 # 存储变异信息
-                len_diff = len(alt0) - len(ref)
+                # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
+                is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+                if is_symbolic:
+                    # 符号等位基因：尝试从INFO字段获取SVLEN
+                    try:
+                        svlen = rec.info.get('SVLEN')
+                        if svlen is not None:
+                            if isinstance(svlen, (list, tuple)):
+                                svlen = svlen[0]
+                            len_diff = int(svlen)  # SVLEN通常为负数表示缺失
+                        else:
+                            # 尝试从END字段推断长度
+                            sv_end = rec.info.get('END')
+                            if sv_end is not None:
+                                len_diff = -(int(sv_end) - pos)  # 缺失为负
+                            else:
+                                len_diff = 0  # 无法确定长度
+                    except Exception:
+                        len_diff = 0
+                    is_sv = True
+                else:
+                    len_diff = len(alt0) - len(ref)
+                    is_sv = abs(len_diff) >= 50
                 variant_info[pos] = {
                     'ref': ref,
                     'alt': alt0,
                     'len_diff': len_diff,
-                    'is_sv': abs(len_diff) >= 50,
+                    'is_sv': is_sv,
                     'maf': maf,
                     'missing_rate': missing_rate
                 }
@@ -1752,12 +1806,32 @@ class HaplotypeExtractor:
                         maf = counts[1] / n_valid  # 次等位基因频率
                 
                 # 存储变异信息
-                len_diff = len(alt0) - len(ref)
+                # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
+                is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+                if is_symbolic:
+                    try:
+                        svlen = rec.info.get('SVLEN')
+                        if svlen is not None:
+                            if isinstance(svlen, (list, tuple)):
+                                svlen = svlen[0]
+                            len_diff = int(svlen)
+                        else:
+                            sv_end = rec.info.get('END')
+                            if sv_end is not None:
+                                len_diff = -(int(sv_end) - pos)
+                            else:
+                                len_diff = 0
+                    except Exception:
+                        len_diff = 0
+                    is_sv = True
+                else:
+                    len_diff = len(alt0) - len(ref)
+                    is_sv = abs(len_diff) >= 50
                 variant_info[pos] = {
                     'ref': ref,
                     'alt': alt0,
                     'len_diff': len_diff,
-                    'is_sv': abs(len_diff) >= 50,
+                    'is_sv': is_sv,
                     'maf': maf,
                     'missing_rate': missing_rate
                 }
@@ -2096,13 +2170,14 @@ class PhenotypeAssociation:
         exclude_cols = ['SampleID', 'Hap_Name', 'Haplotype_Seq']
         return [c for c in self.merged_df.columns if c not in exclude_cols]
     
-    def association_test(self, phenotype_col: str, method: str = 'auto') -> dict:
+    def association_test(self, phenotype_col: str, method: str = 'auto', pc_covariates: pd.DataFrame = None) -> dict:
         """
         单倍型-表型关联检验
         
         Args:
             phenotype_col: 表型列名
             method: 检验方法 ('auto', 'ttest', 'anova', 'kruskal')
+            pc_covariates: PCA协变量DataFrame（包含SampleID + PC1, PC2, ...），用于群体结构矫正
         
         Returns:
             dict: 包含统计结果的字典
@@ -2195,11 +2270,139 @@ class PhenotypeAssociation:
         result['significant'] = result.get('p_value', 1) < 0.05
         result['highly_significant'] = result.get('p_value', 1) < 0.01
         
+        # ===== 群体结构矫正：ANCOVA =====
+        if pc_covariates is not None and not pc_covariates.empty:
+            corrected_result = self._ancova_test(df, phenotype_col, pc_covariates)
+            if corrected_result and 'error' not in corrected_result:
+                result['corrected'] = corrected_result
+                # 用矫正后的P值覆盖显著性判断
+                result['corrected_significant'] = corrected_result.get('p_value', 1) < 0.05
+                result['corrected_highly_significant'] = corrected_result.get('p_value', 1) < 0.01
+        
         return result
     
-    def regression_analysis(self, phenotype_col: str) -> dict:
+    def _ancova_test(self, df: pd.DataFrame, phenotype_col: str, pc_covariates: pd.DataFrame) -> dict:
+        """
+        ANCOVA（协方差分析）- 群体结构矫正后的关联检验
+        
+        使用OLS回归：表型 ~ 单倍型哑变量 + PC协变量
+        通过比较全模型（含单倍型+PC）与简化模型（仅PC）的F检验来判断单倍型效应
+        
+        Args:
+            df: 已过滤的merged_df
+            phenotype_col: 表型列名
+            pc_covariates: PCA协变量DataFrame（SampleID + PC1, PC2, ...）
+        
+        Returns:
+            dict: 矫正后的统计结果
+        """
+        try:
+            # 合并PC协变量
+            pc_cols = [c for c in pc_covariates.columns if c.startswith('PC')]
+            if not pc_cols:
+                return {'error': 'PC协变量列不存在'}
+            
+            df_merged = pd.merge(df, pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
+            
+            if len(df_merged) < 5:
+                return {'error': f'合并PC协变量后样本不足({len(df_merged)})'}
+            
+            # 检查PC列是否有有效值
+            pc_valid = df_merged[pc_cols].dropna()
+            if len(pc_valid) < 5:
+                return {'error': 'PC协变量有效值不足'}
+            
+            # 使用最大频率的单倍型作为参考
+            ref_hap = df_merged['Hap_Name'].value_counts().index[0]
+            
+            # 创建哑变量
+            dummies = pd.get_dummies(df_merged['Hap_Name'], prefix='Hap', drop_first=False)
+            hap_cols = [c for c in dummies.columns if c != f'Hap_{ref_hap}']
+            
+            if not hap_cols:
+                return {'error': '单倍型分组不足'}
+            
+            # 构建特征矩阵
+            X_hap = dummies[hap_cols].values
+            X_pc = df_merged[pc_cols].fillna(0).values
+            y = df_merged[phenotype_col].values
+            n = len(y)
+            
+            # ---- 全模型：单倍型 + PC + 截距 ----
+            X_full = np.column_stack([np.ones(n), X_hap, X_pc])
+            model_full = LinearRegression(fit_intercept=False)
+            model_full.fit(X_full, y)
+            y_pred_full = model_full.predict(X_full)
+            ss_res_full = np.sum((y - y_pred_full) ** 2)
+            
+            # ---- 简化模型：仅PC + 截距 ----
+            X_reduced = np.column_stack([np.ones(n), X_pc])
+            model_reduced = LinearRegression(fit_intercept=False)
+            model_reduced.fit(X_reduced, y)
+            y_pred_reduced = model_reduced.predict(X_reduced)
+            ss_res_reduced = np.sum((y - y_pred_reduced) ** 2)
+            
+            # F检验：全模型 vs 简化模型
+            p_hap = len(hap_cols)  # 单倍型参数数
+            p_full = X_full.shape[1]  # 全模型参数数
+            df_num = p_hap  # 分子自由度
+            df_den = n - p_full  # 分母自由度
+            
+            if df_den <= 0:
+                return {'error': '自由度不足'}
+            
+            ss_diff = ss_res_reduced - ss_res_full
+            ms_diff = ss_diff / df_num if df_num > 0 else 0
+            ms_res = ss_res_full / df_den
+            
+            f_stat = ms_diff / ms_res if ms_res > 0 else 0
+            
+            from scipy.stats import f as f_dist
+            p_value = 1 - f_dist.cdf(f_stat, df_num, df_den) if f_stat > 0 else 1.0
+            
+            # 全模型R²
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r_squared_full = 1 - ss_res_full / ss_tot if ss_tot > 0 else 0
+            
+            # 简化模型R²（仅PC）
+            r_squared_reduced = 1 - ss_res_reduced / ss_tot if ss_tot > 0 else 0
+            
+            # 偏R²（单倍型在控制PC后的额外解释率）
+            partial_r_squared = (ss_res_reduced - ss_res_full) / ss_res_reduced if ss_res_reduced > 0 else 0
+            
+            # 各单倍型系数
+            coef_dict = {}
+            for i, col in enumerate(hap_cols):
+                hap_name = col.replace('Hap_', '')
+                coef_dict[hap_name] = float(model_full.coef_[i + 1])  # +1跳过截距
+            
+            result = {
+                'test_type': 'ANCOVA (PCA corrected)',
+                'f_statistic': float(f_stat),
+                'p_value': float(p_value),
+                'df_num': int(df_num),
+                'df_den': int(df_den),
+                'r_squared_full': float(r_squared_full),
+                'r_squared_reduced': float(r_squared_reduced),
+                'partial_r_squared': float(partial_r_squared),
+                'n_pc_components': len(pc_cols),
+                'reference_haplotype': ref_hap,
+                'coefficients': coef_dict,
+                'n_samples': n,
+            }
+            
+            return result
+            
+        except Exception as e:
+            return {'error': f'ANCOVA计算失败: {e}'}
+    
+    def regression_analysis(self, phenotype_col: str, pc_covariates: pd.DataFrame = None) -> dict:
         """
         线性回归分析 - 单倍型作为分类变量
+        
+        Args:
+            phenotype_col: 表型列名
+            pc_covariates: PCA协变量DataFrame（包含SampleID + PC1, PC2, ...），用于群体结构矫正
         
         Returns:
             dict: 回归分析结果
@@ -2211,6 +2414,17 @@ class PhenotypeAssociation:
         
         if len(df) < 10:
             return {'error': '样本量不足进行回归分析'}
+        
+        # 合并PC协变量（如果有）
+        pc_cols = []
+        if pc_covariates is not None and not pc_covariates.empty:
+            pc_cols = [c for c in pc_covariates.columns if c.startswith('PC')]
+            if pc_cols:
+                df = pd.merge(df, pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
+                df = df[df[pc_cols].notna().all(axis=1)]  # 去除PC缺失的样本
+        
+        if len(df) < 10:
+            return {'error': '合并PC协变量后样本量不足进行回归分析'}
         
         # 使用最大频率的单倍型作为参考
         ref_hap = df['Hap_Name'].value_counts().index[0]
@@ -2226,7 +2440,9 @@ class PhenotypeAssociation:
         
         try:
             # 准备特征矩阵和目标变量
-            X = df[hap_cols].values
+            X_hap = df[hap_cols].values
+            X_pc = df[pc_cols].fillna(0).values if pc_cols else np.empty((len(df), 0))
+            X = np.column_stack([X_hap, X_pc]) if pc_cols else X_hap
             y = df[phenotype_col].values
             
             # 添加截距项
@@ -2244,7 +2460,7 @@ class PhenotypeAssociation:
             
             # 计算调整后R²
             n = len(y)
-            p = len(hap_cols)
+            p = X.shape[1]  # 总特征数（单倍型+PC）
             adj_r_squared = 1 - (1 - r_squared) * (n - 1) / (n - p - 1) if n > p + 1 else 0
             
             # 计算F统计量
@@ -2268,7 +2484,7 @@ class PhenotypeAssociation:
             
             result = {
                 'phenotype': phenotype_col,
-                'method': 'OLS Regression',
+                'method': 'OLS Regression (PCA corrected)' if pc_cols else 'OLS Regression',
                 'reference_haplotype': ref_hap,
                 'r_squared': r_squared,
                 'adj_r_squared': adj_r_squared,
@@ -2276,13 +2492,23 @@ class PhenotypeAssociation:
                 'f_pvalue': f_pvalue,
                 'n_samples': len(df),
                 'coefficients': {},
-                'p_values': {}
+                'p_values': {},
+                'n_pc_components': len(pc_cols),
             }
             
             for i, col in enumerate(hap_cols):
                 if i < len(model.coef_) - 1:
                     result['coefficients'][col] = model.coef_[i + 1]
                     result['p_values'][col] = coef_pvalues[i] if i < len(coef_pvalues) else 1.0
+            
+            # 如果有PC协变量，也输出PC系数
+            if pc_cols:
+                pc_coef = {}
+                for i, col in enumerate(pc_cols):
+                    idx = len(hap_cols) + i
+                    if idx < len(model.coef_) - 1:
+                        pc_coef[col] = model.coef_[idx + 1]
+                result['pc_coefficients'] = pc_coef
             
             return result
             
@@ -2703,6 +2929,127 @@ class AMOVAAnalyzer:
             return df
         
         return pd.DataFrame()
+
+
+# ============================================================================
+# 模块3.5: 群体结构矫正
+# ============================================================================
+
+class PopulationStructureCorrector:
+    """
+    群体结构矫正模块
+    基于基因型PCA计算群体结构协变量，用于关联分析中的群体结构矫正
+    
+    原理：
+    1. 从变异位点构建基因型矩阵（样本 × 位点）
+    2. 对基因型矩阵进行PCA降维
+    3. 取前K个主成分作为群体结构协变量
+    4. 在关联分析中（ANCOVA / 线性回归）加入PC协变量
+    """
+    
+    def __init__(self, hap_sample_df: pd.DataFrame, n_components: int = 3):
+        """
+        Args:
+            hap_sample_df: 包含 SampleID, Hap_Name, Haplotype_Seq 的数据框
+            n_components: 保留的PCA主成分数（默认3）
+        """
+        self.hap_sample_df = hap_sample_df
+        self.n_components = n_components
+        self.pc_df = None  # 样本ID -> PC坐标
+        self.var_explained = []
+    
+    def compute_pca_covariates(self) -> pd.DataFrame:
+        """
+        从单倍型序列计算PCA协变量
+        
+        Returns:
+            pd.DataFrame: 包含 SampleID, PC1, PC2, ... 的数据框
+        """
+        logger = get_logger()
+        
+        if 'Haplotype_Seq' not in self.hap_sample_df.columns:
+            logger.warning("[群体结构] 缺少 Haplotype_Seq 列，无法计算PCA")
+            return pd.DataFrame()
+        
+        df = self.hap_sample_df[
+            (self.hap_sample_df['Hap_Name'] != 'Other') &
+            (self.hap_sample_df['Haplotype_Seq'].notna())
+        ].copy()
+        
+        if len(df) < 5:
+            logger.warning(f"[群体结构] 样本数不足({len(df)})，无法计算PCA")
+            return pd.DataFrame()
+        
+        try:
+            from sklearn.decomposition import PCA
+            from sklearn.impute import SimpleImputer
+            
+            # 构建基因型数值矩阵
+            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': np.nan}
+            samples = []
+            sample_ids = []
+            for _, row in df.iterrows():
+                seq = row['Haplotype_Seq'].replace('|', '')
+                numeric_seq = [base_map.get(b.upper(), np.nan) for b in seq]
+                samples.append(numeric_seq)
+                sample_ids.append(row['SampleID'])
+            
+            if len(samples) < 5:
+                logger.warning(f"[群体结构] 有效样本不足({len(samples)})")
+                return pd.DataFrame()
+            
+            # 统一序列长度
+            max_len = max(len(s) for s in samples)
+            samples = [s + [np.nan] * (max_len - len(s)) for s in samples]
+            X = np.array(samples)
+            
+            # 用均值填充NaN
+            imputer = SimpleImputer(strategy='mean')
+            X_imputed = imputer.fit_transform(X)
+            
+            # 标准化
+            X_std = (X_imputed - X_imputed.mean(axis=0)) / (X_imputed.std(axis=0) + 1e-10)
+            
+            # PCA
+            n_pc = min(self.n_components, len(samples) - 1, X_std.shape[1])
+            pca = PCA(n_components=n_pc)
+            pca_result = pca.fit_transform(X_std)
+            self.var_explained = [float(v * 100) for v in pca.explained_variance_ratio_]
+            
+            # 构建结果DataFrame
+            pc_data = {'SampleID': sample_ids}
+            for i in range(n_pc):
+                pc_data[f'PC{i+1}'] = pca_result[:, i]
+            
+            self.pc_df = pd.DataFrame(pc_data)
+            
+            logger.info(f"[群体结构] PCA计算完成: {n_pc} 个主成分")
+            for i, v in enumerate(self.var_explained):
+                logger.info(f"  PC{i+1}: {v:.1f}% 方差解释率")
+            
+            return self.pc_df
+            
+        except Exception as e:
+            logger.warning(f"[群体结构] PCA计算失败: {e}")
+            return pd.DataFrame()
+    
+    def get_pc_covariates_for_samples(self, sample_ids: list) -> pd.DataFrame:
+        """
+        获取指定样本的PC协变量
+        
+        Args:
+            sample_ids: 样本ID列表
+            
+        Returns:
+            pd.DataFrame: 指定样本的PC协变量
+        """
+        if self.pc_df is None:
+            self.compute_pca_covariates()
+        
+        if self.pc_df is None or self.pc_df.empty:
+            return pd.DataFrame()
+        
+        return self.pc_df[self.pc_df['SampleID'].isin(sample_ids)]
 
 
 # ============================================================================
@@ -4180,9 +4527,12 @@ class ReportGenerator:
                 'Test_Method': assoc.get('test_type', 'NA'),
                 'Statistic': assoc.get('statistic', np.nan),
                 'P_Value': assoc.get('p_value', np.nan),
+                'P_Value_PCA_Corrected': assoc.get('corrected', {}).get('p_value', np.nan) if 'corrected' in assoc else np.nan,
+                'Partial_R2_Hap|PC': assoc.get('corrected', {}).get('partial_r_squared', np.nan) if 'corrected' in assoc else np.nan,
                 'PVE(%)': pve.get('pve_percent', np.nan),
                 'Effect_Size': pve.get('effect_size', 'NA'),
-                'Significant': '***' if assoc.get('highly_significant') else ('*' if assoc.get('significant') else '')
+                'Significant': '***' if assoc.get('highly_significant') else ('*' if assoc.get('significant') else ''),
+                'Significant_PCA': '***' if assoc.get('corrected_highly_significant') else ('*' if assoc.get('corrected_significant') else '') if 'corrected' in assoc else ''
             }
             rows.append(row)
         
@@ -4257,6 +4607,24 @@ class ReportGenerator:
         <tr class="{sig_class}"><td>P-value</td><td>{fmt(assoc.get('p_value'), '.2e')}</td></tr>
     </table>
 """
+            # 群体结构矫正结果
+            if 'corrected' in assoc:
+                corr = assoc['corrected']
+                corr_sig_class = 'significant' if assoc.get('corrected_significant') else ''
+                html_content += f"""
+    <h2>Population Structure Correction (ANCOVA)</h2>
+    <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Corrected Test</td><td>{corr.get('test_type', 'NA')}</td></tr>
+        <tr><td>PCA Components</td><td>{corr.get('n_pc_components', 'NA')}</td></tr>
+        <tr><td>F-statistic (corrected)</td><td>{fmt(corr.get('f_statistic'), '.4f')}</td></tr>
+        <tr class="{corr_sig_class}"><td>P-value (PCA corrected)</td><td>{fmt(corr.get('p_value'), '.2e')}</td></tr>
+        <tr><td>R² (full model)</td><td>{fmt(corr.get('r_squared_full'), '.4f')}</td></tr>
+        <tr><td>R² (PC only)</td><td>{fmt(corr.get('r_squared_reduced'), '.4f')}</td></tr>
+        <tr><td>Partial R² (Haplotype|PC)</td><td>{fmt(corr.get('partial_r_squared'), '.4f')}</td></tr>
+        <tr><td>Reference Haplotype</td><td>{corr.get('reference_haplotype', 'NA')}</td></tr>
+    </table>
+"""
         
         # PVE 结果
         if 'pve' in self.results:
@@ -4302,7 +4670,10 @@ class ReportGenerator:
                                   cluster_haplotypes: bool = False,
                                   variant_info: dict = None,
                                   variant_pvalues: dict = None,
-                                  network_data: dict = None) -> str:
+                                  network_data: dict = None,
+                                  has_promoter_variants: bool = False,
+                                  promoter_actual_length: int = 2000,
+                                  pca_correction: dict = None) -> str:
         """生成综合HTML大图（整合基因结构、GWAS P值、网络图、效应图、箱线图、单倍型序列）
         
         布局设计：
@@ -4425,10 +4796,15 @@ class ReportGenerator:
                 if pos in snp_effects:
                     ann = snp_effects[pos]
                     # 对于UTR/other类型，额外检查variant_info看是否是indel
-                    if ann in ('UTR', 'other') and variant_info and pos in variant_info:
+                    if ann in ('UTR', 'other', 'promoter') and variant_info and pos in variant_info:
                         vinfo = variant_info[pos]
                         ref = vinfo.get('ref', '')
                         alt = vinfo.get('alt', '')
+                        # 检查符号等位基因
+                        is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
+                        if is_symbolic or vinfo.get('is_sv', False):
+                            print(f"[DEBUG] get_var_color: pos={pos}, snp_effects={ann}, but variant_info shows SV (symbolic={is_symbolic})")
+                            return var_type_colors['SV'], 'SV'
                         len_diff = abs(len(ref) - len(alt))
                         if len_diff > 0 and len_diff < 50:  # indel
                             if len(alt) > len(ref):
@@ -4450,6 +4826,11 @@ class ReportGenerator:
                 ref = vinfo.get('ref', '')
                 alt = vinfo.get('alt', '')
                 print(f"[DEBUG] variant_info fallback: pos={pos}, ref={ref}, alt={alt}, ref_len={len(ref)}, alt_len={len(alt)}")
+                # 检查符号等位基因或is_sv标记
+                is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
+                if is_symbolic or vinfo.get('is_sv', False):
+                    print(f"[DEBUG] -> SV color (symbolic={is_symbolic}, is_sv={vinfo.get('is_sv')})")
+                    return var_type_colors['SV'], 'SV'
                 if len(alt) > len(ref):
                     print(f"[DEBUG] -> INS color")
                     return var_type_colors['INS'], 'INS'
@@ -4473,7 +4854,7 @@ class ReportGenerator:
             elif in_cds_b:
                 return var_type_colors['other'], 'other'
             elif g_start and g_end and g_start <= pos <= g_end:
-                return var_type_colors['other'], 'intron'  # 在基因边界内 = 内含子
+                return var_type_colors['intron'], 'intron'  # 在基因边界内 = 内含子
             return var_type_colors['other'], 'other'
         
         # 从 Haplotype_Seq 获取序列 - 显示全部变异位点
@@ -4532,6 +4913,84 @@ class ReportGenerator:
         else:
             display_positions = variant_positions if variant_positions else []
             display_orig_indices = list(range(len(display_positions)))  # 顺序索引
+        
+        # ==================== 计算LD r²矩阵（用于倒三角图） ====================
+        ld_r2_matrix = []
+        ld_positions_list = list(display_positions)  # 与display_positions完全一致
+        n_dp = len(ld_positions_list)
+        if n_dp >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
+            try:
+                # 构建每个样本在每个显示位置的基因型（0=主要等位基因，1=次要等位基因，NaN=缺失）
+                # 第一步：先收集所有位置的碱基序列
+                all_bases_at_positions = []  # shape: (n_positions, n_samples)
+                for pos_i, orig_idx in enumerate(display_orig_indices):
+                    bases_list = []
+                    for _, sample_row in hap_sample_df.iterrows():
+                        seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
+                        if orig_idx < len(seq):
+                            base = seq[orig_idx].upper()
+                            bases_list.append(base)
+                        else:
+                            bases_list.append('N')  # 超出序列长度视为缺失
+                    all_bases_at_positions.append(bases_list)
+                
+                # 第二步：对每个位置，找主要碱基（出现最多的）编码为0，其他编码为1，N=NaN
+                geno_matrix = []  # shape: (n_samples, n_positions)
+                for sample_i in range(len(hap_sample_df)):
+                    geno_vec = []
+                    for pos_i in range(n_dp):
+                        base = all_bases_at_positions[pos_i][sample_i]
+                        if base == 'N':
+                            geno_vec.append(np.nan)
+                        else:
+                            # 统计该位置所有非N碱基的频率
+                            all_non_n = [b for b in all_bases_at_positions[pos_i] if b != 'N']
+                            if len(all_non_n) == 0:
+                                geno_vec.append(np.nan)
+                            else:
+                                from collections import Counter
+                                base_counts = Counter(all_non_n)
+                                major_base = base_counts.most_common(1)[0][0]  # 出现最多的碱基
+                                geno_vec.append(0 if base == major_base else 1)
+                    geno_matrix.append(geno_vec)
+                
+                geno_array = np.array(geno_matrix, dtype=float)  # (n_samples, n_positions)
+                
+                # 计算r²矩阵
+                n_pos = geno_array.shape[1]
+                r2_mat = [[1.0] * n_pos for _ in range(n_pos)]
+                for i in range(n_pos):
+                    for j in range(i + 1, n_pos):
+                        xi = geno_array[:, i]
+                        xj = geno_array[:, j]
+                        # 过滤掉缺失值
+                        mask = (~np.isnan(xi)) & (~np.isnan(xj))
+                        xi_m = xi[mask]
+                        xj_m = xj[mask]
+                        if len(xi_m) < 4:
+                            r2 = 0.0
+                        else:
+                            pi = np.mean(xi_m)
+                            pj = np.mean(xj_m)
+                            if pi <= 0 or pi >= 1 or pj <= 0 or pj >= 1:
+                                r2 = 0.0
+                            else:
+                                cov = np.mean(xi_m * xj_m) - pi * pj
+                                denom = (pi * (1 - pi) * pj * (1 - pj)) ** 0.5
+                                r2 = (cov / denom) ** 2 if denom > 0 else 0.0
+                                r2 = min(1.0, max(0.0, r2))
+                        r2_mat[i][j] = r2
+                        r2_mat[j][i] = r2
+                ld_r2_matrix = r2_mat
+                print(f"[INFO] LD r²矩阵计算完成: {n_pos}x{n_pos}")
+            except Exception as e:
+                print(f"[WARNING] LD r²矩阵计算失败: {e}")
+                import traceback
+                traceback.print_exc()
+                ld_r2_matrix = []
+        
+        ld_r2_json = json.dumps(ld_r2_matrix) if ld_r2_matrix else '[]'
+        # ==================== LD计算结束 ====================
         
         effects = effect_results.get('haplotype_effects', []) if effect_results else []
         grand_mean = effect_results.get('grand_mean', 0) if effect_results else 0
@@ -4602,19 +5061,19 @@ class ReportGenerator:
                     ann = snp_effects[ip]
                 elif pos in snp_effects:
                     ann = snp_effects[pos]
-            # 构建功能注释信息（用于indel分类）
+            # 构建功能注释信息（用于indel/SV的位置分类，决定过滤行为）
             functional_ann = ann
-            # 如果是indel，尝试获取更详细的功能注释
-            if ann in ('indel', 'INS', 'DEL'):
-                # 检查位置是否在CDS区域
+            if ann in ('indel', 'INS', 'DEL', 'SV'):
                 in_cds_check = any(cs <= ip <= ce for cs, ce in cds) if cds else False
                 in_exon_check = any(es <= ip <= ee for es, ee in exons) if exons else False
                 if in_cds_check:
-                    functional_ann = 'missense'  # 在CDS区域的indel归类为错义
+                    functional_ann = 'missense'
                 elif in_exon_check:
                     functional_ann = 'UTR'
                 elif g_start and g_end and g_start <= ip <= g_end:
                     functional_ann = 'intron'
+                elif promoter_start and promoter_end and promoter_start <= ip <= promoter_end:
+                    functional_ann = 'promoter'
                 else:
                     functional_ann = 'other'
             
@@ -4711,13 +5170,17 @@ class ReportGenerator:
                 else:
                     color = '#9b59b6'  # 默认紫色
                 
+                # 获取该单倍型的样本列表
+                samples_for_hap = hap_samples_map.get(hap, [])
+                
                 network_nodes.append({
                     'id': hap,
                     'count': count,
                     'size': size,
                     'color': color,
                     'phenoMean': round(hap_pheno_means.get(hap, 0), 3),
-                    'isLead': is_lead_hap
+                    'isLead': is_lead_hap,
+                    'samples': samples_for_hap  # 样本列表，用于点击复制
                 })
                 
                 # 计算边（Hamming距离）
@@ -4767,6 +5230,17 @@ class ReportGenerator:
         gwas_data_json = json.dumps(gwas_data, cls=NumpyEncoder)
         network_nodes_json = json.dumps(network_nodes, cls=NumpyEncoder)
         network_edges_json = json.dumps(network_edges, cls=NumpyEncoder)
+        has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
+        promoter_actual_length_json = str(promoter_actual_length)
+        
+        # 计算协变量列数（用于布局对齐）
+        covariate_cols_early = [c for c in hap_sample_df.columns
+                                if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
+        n_cov_cols = len(covariate_cols_early)
+        # 网络图宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图精确对齐
+        # 对齐公式：network_w + 14(gap) + 86(gwas_left_margin) = gene_area_start(450 + n_cov*180)
+        # → network_w = 350 + n_cov*180
+        network_w = 350 + n_cov_cols * 180
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -4812,21 +5286,30 @@ class ReportGenerator:
         .content-wrapper {{ overflow-x: visible; overflow-y: auto; max-height: calc(100vh - 200px); }}
         .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
         
-        /* 表格滚动容器 */
-        .table-scroll-container {{ overflow-x: auto; overflow-y: visible; margin-top: 0; padding-bottom: 10px; min-width: 100%; }}
+        /* 表格容器 - 移除滚动条，确保基因结构和序列对齐 */
+        .table-scroll-container {{ overflow-x: visible; overflow-y: visible; margin-top: 0; padding-bottom: 10px; width: 100%; }}
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        /* top-section 使用 flex row 布局（非 absolute），确保 GWAS X 轴与基因结构图精确对齐 */
+        .top-section {{ display: flex; flex-direction: row; align-items: flex-start; gap: 0; position: relative; height: 280px; }}
         .main-data-section {{ }} /* 移除 fit-content，使用滚动容器 */
-        .network-panel {{ width: 350px; min-width: 350px; height: 280px; 
+        /* 网络图：flex item，宽度随协变量列数扩展以保持 GWAS 对齐 */
+        .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: 280px; 
                          border: 1px solid #e0e0e0; border-radius: 6px; 
-                         background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; }}
+                         background: #fafafa; flex-shrink: 0; overflow: hidden; position: relative; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px; 
                                font-size: 12px; font-weight: 600; color: #2c3e50; 
                                background: rgba(255,255,255,0.9); padding: 2px 6px; 
                                border-radius: 3px; z-index: 10; }}
-        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 363px; border: 1px solid #e0e0e0; 
+        .network-mode-btn {{ position: absolute; top: 8px; right: 60px; 
+                            font-size: 11px; padding: 3px 8px; border: 1px solid #3498db; 
+                            background: white; color: #3498db; border-radius: 3px; 
+                            cursor: pointer; z-index: 10; }}
+        .network-mode-btn:hover {{ background: #3498db; color: white; }}
+        .network-mode-btn.active {{ background: #3498db; color: white; }}
+        /* GWAS 面板：14px 间距，left edge = network_w + 14，内部 gwas_left_margin=86 → x=regionStart 位于 network_w+100 = gene_area_start */
+        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 14px; border: 1px solid #e0e0e0; 
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px; 
                            font-size: 12px; font-weight: 600; color: #2c3e50; 
@@ -4849,8 +5332,8 @@ class ReportGenerator:
         .ref-tag {{ background: #e74c3c; color: white; font-size: 8px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }}
         .base {{ font-family: Consolas, monospace; font-weight: 700; font-size: 13px; }}
         .effect-cell {{ width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }}
-        .box-cell {{ width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; }}
-        .bar-container {{ position: relative; height: 20px; background: #f8f9fa; border-radius: 3px; overflow: hidden; }}
+        .box-cell {{ width: 180px; min-width: 180px; max-width: 180px; position: relative; height: 35px; overflow: visible !important; }}
+        .bar-container {{ position: relative; height: 20px; background: #f8f9fa; border-radius: 3px; overflow: visible !important; }}
         .bar-center {{ position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #333; border-left: 1px dashed #333; }}
         /* 森林图样式 */
         .forest-ci {{ position: absolute; top: 50%; height: 2px; transform: translateY(-50%); }}
@@ -4890,19 +5373,31 @@ class ReportGenerator:
             <span class="filter-value" id="missingValue">0.2</span>
         </div>
         <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
-            <label style="width:100%;margin-bottom:4px;">Annotation:</label>
+            <label style="width:100%;margin-bottom:4px;">Position:</label>
             <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
-                <label><input type="checkbox" class="ann-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
-                <label><input type="checkbox" class="ann-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
                 <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="applyFilters()"> UTR</label>
                 <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="applyFilters()"> Intron</label>
-                <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="applyFilters()"> Promoter</label>
-                <label><input type="checkbox" class="ann-cb" value="SV" checked onchange="applyFilters()"> SV</label>
-                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Other</label>
+                <label><input type="checkbox" class="ann-cb" value="other" checked onchange="applyFilters()"> Intergenic</label>
+            </span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">Variant Type:</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="type-cb" value="INS" checked onchange="applyFilters()"> INS</label>
+                <label><input type="checkbox" class="type-cb" value="DEL" checked onchange="applyFilters()"> DEL</label>
+                <label><input type="checkbox" class="type-cb" value="SV" checked onchange="applyFilters()"> SV</label>
+                <label><input type="checkbox" class="type-cb" value="SNP" checked onchange="applyFilters()"> SNP</label>
+            </span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">CDS Mutation:</label>
+            <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
+                <label><input type="checkbox" class="syn-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
+                <label><input type="checkbox" class="syn-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
             </span>
         </div>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
-        <button class="filter-btn" onclick="applyFilters()">Apply Filter</button>
     </div>
     
     <div class="zoom-controls">
@@ -4928,7 +5423,8 @@ class ReportGenerator:
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
             <div class="top-section">
                 <div class="network-panel">
-                    <div class="network-panel-title">Haplotype Network</div>
+                    <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| 点击节点复制样本</span></div>
+                    <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">复制模式</button>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
                 <div class="gene-gwas-panel">
@@ -4946,7 +5442,10 @@ class ReportGenerator:
         hap_col_w = 90
         eff_col_w = 180
         box_col_w = 180
-        gene_area_start = hap_col_w + eff_col_w + box_col_w  # = 450px
+        # gene_area_start：基因区域在SVG中的起始X坐标
+        # 必须与表格序列列的起始像素对齐：hap(90) + eff(180) + box(180) + n_cov×box(180)
+        # 这样连线从基因结构位置出发，几乎垂直到达对应的序列列（斜率适中）
+        gene_area_start = hap_col_w + eff_col_w + box_col_w + n_cov_cols * box_col_w
         seq_col_w = 20  # 每个变异列宽度（调小以适应更多变异）
         gene_area_width = n_vars * seq_col_w
         legend_w = 220  # 图例宽度（增加以容纳双列图例）
@@ -5167,7 +5666,7 @@ class ReportGenerator:
         html += f'<text x="{var_leg_x}" y="{axis_y}" font-size="8.5" fill="#333" font-weight="600">Variant Type</text>\n'
         # 按顺序排列变异类型（包含错义突变分级）
         ordered_types = ['missense_non_conservative', 'missense_semi_conservative', 'missense_conservative', 
-                        'missense', 'synonymous', 'UTR', 'promoter', 'INS', 'DEL', 'SV', 'other']
+                        'missense', 'synonymous', 'UTR', 'promoter', 'intron', 'INS', 'DEL', 'SV', 'other']
         found_types = [t for t in ordered_types if t in var_types_found]
         # 双列布局
         items_per_col = 5
@@ -5185,14 +5684,13 @@ class ReportGenerator:
                 
         html += '</svg>\n'
                 
-        # HTML表格 - 用滚动容器包裹，确保 n 列不被遮挡
-        # 表格宽度 = Haplotype(90) + Effect(180) + Phenotype(180) + 序列列(n_vars*20) + n(60)
+        # 表格容器 - 不使用滚动，确保SVG和表格对齐
         n_vars = len(display_positions)  # 重新获取，确保与 colgroup 一致
         n_col_w = 60
-        table_width = 90 + 180 + 180 + (n_vars * 20) + n_col_w  # 精确计算
+        # table_width = 90 + 180 + 180 + (n_vars * 20) + n_col_w  # 精确计算（注释掉，不再使用）
         
-        # 添加滚动容器
-        html += f'<div class="table-scroll-container" style="min-width:{table_width}px;">\n'
+        # 添加容器（移除min-width，使用100%宽度）
+        html += f'<div class="table-scroll-container" style="width:100%;">\n'
         
         # 使用 colgroup 强制定义每列宽度（最可靠的方式）
         html += f'<table class="data-table" style="width:auto;">\n'
@@ -5200,13 +5698,14 @@ class ReportGenerator:
         html += f'<col style="width:90px;min-width:90px;max-width:90px;">\n'  # Haplotype
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
-        for _ in display_positions:
-            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
-        # 新增：协变量箱线图列
-        covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col] and ('pheno' in c.lower() or 'tpm' in c.lower() or 'expr' in c.lower() or 'WT' in c or 'SA' in c)]
+        # 新增：协变量箱线图列 - 排除已知列后的所有列
+        covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
         for cov_col in covariate_cols:
             html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # 协变量列
+        
+        for _ in display_positions:
+            html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
         html += f'<col style="width:auto;min-width:60px;">\n'  # n 列
         html += '</colgroup>\n'
@@ -5216,21 +5715,21 @@ class ReportGenerator:
         html += '    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>\n'
         html += '    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>\n'
         
+        # 协变量表头（序列列之前）
+        for cov_col in covariate_cols:
+            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
+        
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
             pos_str = f'{pos:,}'  # 千分位逗号
-            html += (f'<th style="width:20px;min-width:20px;max-width:20px;padding:0;'
+            html += (f'<th class="seq-col-th" data-pos="{pos}" style="width:20px;min-width:20px;max-width:20px;padding:0;'
                      f'vertical-align:top;overflow:hidden;">'
                      f'<div style="writing-mode:vertical-rl;transform:rotate(180deg);'
                      f'width:20px;height:60px;display:flex;align-items:center;justify-content:center;'
                      f'font-size:9px;color:#f5f5f5;background:#2c3e50;'
                      f'font-weight:600;letter-spacing:0;box-sizing:border-box;">{pos_str}</div></th>\n')
         
-        # 新增：协变量表头
-        for cov_col in covariate_cols:
-            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
-        
-        html += '<th style="min-width:60px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
+        html += '<th class="n-cell" style="min-width:60px;vertical-align:middle;height:60px;">n</th></tr></thead><tbody>\n'
         
         # 数据行
         for i, hap in enumerate(top_haps):
@@ -5308,6 +5807,58 @@ class ReportGenerator:
         {box_html}
     </td>\n'''
             
+            # 协变量箱线图列（序列列之前）
+            for cov_col in covariate_cols:
+                # 计算该协变量的箱线图数据
+                cov_box_data = {}
+                for h in top_haps:
+                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == h]
+                    if cov_col in hap_rows.columns:
+                        values = hap_rows[cov_col].dropna().tolist()
+                        if values:
+                            cov_box_data[h] = {
+                                'mean': np.mean(values), 'median': np.median(values),
+                                'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
+                                'min': min(values), 'max': max(values), 'n': len(values),
+                                'values': values
+                            }
+                
+                # 计算全局范围
+                if cov_box_data:
+                    cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
+                    cov_global_min = min(cov_all_vals)
+                    cov_global_max = max(cov_all_vals)
+                    cov_global_range = cov_global_max - cov_global_min if cov_global_max > cov_global_min else 1
+                else:
+                    cov_global_min, cov_global_max, cov_global_range = 0, 1, 1
+                
+                # 生成箱线图 HTML（含散点）
+                cov_bd = cov_box_data.get(hap, {})
+                if cov_bd:
+                    cov_w_left = ((cov_bd['min'] - cov_global_min) / cov_global_range) * 100
+                    cov_w_right = ((cov_bd['max'] - cov_global_min) / cov_global_range) * 100
+                    cov_b_left = ((cov_bd['q1'] - cov_global_min) / cov_global_range) * 100
+                    cov_b_width = ((cov_bd['q3'] - cov_bd['q1']) / cov_global_range) * 100
+                    cov_m_pos = ((cov_bd['median'] - cov_global_min) / cov_global_range) * 100
+                    # 散点
+                    import random
+                    random.seed(hash(hap + cov_col) % 9999)
+                    cov_dots_html = ''
+                    for val in cov_bd.get('values', []):
+                        x_pct = ((val - cov_global_min) / cov_global_range) * 100
+                        top_pct = random.randint(15, 85)
+                        cov_dots_html += f'<div class="data-dot" style="left:{x_pct:.1f}%;top:{top_pct}%;"></div>'
+                    cov_box_html = f'''<div class="bar-container">
+                        <div class="bar-whisker" style="left:{cov_w_left}%;width:{max(cov_w_right-cov_w_left,1)}%;"></div>
+                        <div class="bar-box" style="left:{cov_b_left}%;width:{max(cov_b_width,2)}%;"></div>
+                        <div class="bar-median" style="left:{cov_m_pos}%;"></div>
+                        {cov_dots_html}
+                    </div>'''
+                else:
+                    cov_box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
+                
+                html += f'    <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">\n        {cov_box_html}\n    </td>\n'
+            
             # 序列列
             if 'Haplotype_Seq' in row.index:
                 seq = row['Haplotype_Seq'].replace('|', '')
@@ -5353,50 +5904,7 @@ class ReportGenerator:
                     else:
                         font_size = "9px"
                     
-                    html += f'<td style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
-            
-            # 新增：协变量箱线图列
-            for cov_col in covariate_cols:
-                # 计算该协变量的箱线图数据
-                cov_box_data = {}
-                for h in top_haps:
-                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == h]
-                    if cov_col in hap_rows.columns:
-                        values = hap_rows[cov_col].dropna().tolist()
-                        if values:
-                            cov_box_data[h] = {
-                                'mean': np.mean(values), 'median': np.median(values),
-                                'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
-                                'min': min(values), 'max': max(values), 'n': len(values)
-                            }
-                
-                # 计算全局范围
-                if cov_box_data:
-                    cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
-                    cov_global_min = min(cov_all_vals)
-                    cov_global_max = max(cov_all_vals)
-                    cov_global_range = cov_global_max - cov_global_min if cov_global_max > cov_global_min else 1
-                else:
-                    cov_global_min, cov_global_max, cov_global_range = 0, 1, 1
-                
-                # 生成箱线图 HTML
-                cov_bd = cov_box_data.get(hap, {})
-                if cov_bd:
-                    cov_w_left = ((cov_bd['min'] - cov_global_min) / cov_global_range) * 100
-                    cov_w_right = ((cov_bd['max'] - cov_global_min) / cov_global_range) * 100
-                    cov_b_left = ((cov_bd['q1'] - cov_global_min) / cov_global_range) * 100
-                    cov_b_width = ((cov_bd['q3'] - cov_bd['q1']) / cov_global_range) * 100
-                    cov_m_pos = ((cov_bd['median'] - cov_global_min) / cov_global_range) * 100
-                    
-                    cov_box_html = f'''<div class="bar-container">
-                        <div class="bar-whisker" style="left:{cov_w_left}%;width:{max(cov_w_right-cov_w_left,1)}%;"></div>
-                        <div class="bar-box" style="left:{cov_b_left}%;width:{max(cov_b_width,2)}%;"></div>
-                        <div class="bar-median" style="left:{cov_m_pos}%;"></div>
-                    </div>'''
-                else:
-                    cov_box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
-                
-                html += f'    <td class="box-cell">\n        {cov_box_html}\n    </td>\n'
+                    html += f'<td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
             html += f'<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">{cnt}</td>\n'
             
@@ -5440,10 +5948,7 @@ class ReportGenerator:
             html += '</div>'
         html += '</td>\n'
         
-        # 序列列（空）
-        html += f'<td colspan="{len(display_positions)}" style="border:none;"></td>\n'
-        
-        # 新增：协变量列坐标轴
+        # 协变量列坐标轴（序列列之前）
         for cov_col in covariate_cols:
             # 计算该协变量的箱线图数据
             cov_box_data = {}
@@ -5456,7 +5961,7 @@ class ReportGenerator:
                             'min': min(values), 'max': max(values)
                         }
             
-            html += '<td style="border:none;position:relative;">'
+            html += '<td class="box-cell" style="border:none;position:relative;">'
             if cov_box_data:
                 cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
                 cov_global_min = min(cov_all_vals)
@@ -5477,11 +5982,28 @@ class ReportGenerator:
                 html += '</div>'
             html += '</td>\n'
         
+        # 序列列（逐个输出空td，与数据行一一对应，确保列对齐）
+        for _ in display_positions:
+            html += '<td style="border:none;"></td>'
+        
         # n 列（空）
-        html += '<td style="border:none;"></td>\n'
+        html += '<td class="n-cell" style="border:none;"></td>\n'
         html += '</tr>\n'
         
         html += r'''</tbody></table>
+
+<!-- LD 倒三角图容器：在 table-scroll-container 内部，与表格共享同一滚动上下文 -->
+<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:visible;width:auto;display:block;">
+    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
+    <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
+        <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
+        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
+        <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">½</span>
+        <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
+        <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
+    </div>
+</div>
 </div><!-- table-scroll-container -->
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
@@ -5599,6 +6121,42 @@ function copyAllHaplotypes() {
     });
 }
 
+// 网络图模式切换：复制模式 vs 拖拽模式
+var networkMode = 'drag'; // 'drag' 或 'copy'
+
+function toggleNetworkMode() {
+    var btn = document.getElementById('networkModeBtn');
+    if (networkMode === 'drag') {
+        networkMode = 'copy';
+        btn.textContent = '拖拽模式';
+        btn.classList.add('active');
+    } else {
+        networkMode = 'drag';
+        btn.textContent = '复制模式';
+        btn.classList.remove('active');
+    }
+}
+
+function copyNodeSamples(nodeId) {
+    var node = networkNodes.find(n => n.id === nodeId);
+    var samples = node ? (node.samples || []) : [];
+    if (!samples || samples.length === 0) {
+        alert('No samples for ' + nodeId);
+        return;
+    }
+    var text = samples.join(',');
+    navigator.clipboard.writeText(text).then(function() {
+        console.log('Copied samples for ' + nodeId);
+    }).catch(function(err) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+}
+
 // ==================== D3 数据 ====================
 var gwasData     = {gwas_data_json};
 var networkNodes = {network_nodes_json};
@@ -5607,6 +6165,7 @@ var regionStart  = {region_start};
 var regionEnd    = {region_end};
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
+var hasPromoter  = {has_promoter_variants_json};  // 是否有启动子变异
 var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
 var gwasPlotWidth = {gwas_plot_width};  // GWAS图绘图区域宽度（基因区域+图例）
 var gwasLeftMargin = {gwas_left_margin};  // GWAS图左边距（与基因结构图基因区域起始对齐）
@@ -5614,6 +6173,7 @@ var leadVariantPos = __LEAD_POS__;
 var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
 var displayPositions = __DISPLAY_POSITIONS__;  // 显示的变异位置列表
+var ldR2Matrix = __LD_R2_MATRIX__;  // LD r²矩阵（n x n），与displayPositions对应
 
 // ==================== 过滤功能 ====================
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
@@ -5621,38 +6181,55 @@ var currentFilter = { maf: 0.05, missingRate: 0.2 };
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
     
-    // **关键修复**：检查启动子变异是否与其他基因CDS重叠
-    // 如果overlaps_cds为true，说明这个"启动子变异"实际位于其他基因的编码区
-    // 应该将其归类为'missense'或'synonymous'（而不是promoter）
+    // 启动子SNP：若与其他基因CDS重叠，归类为other
     if (a === 'promoter' && d.overlaps_cds === true) {
-        // 如果overlapping_genes字段存在，说明与其他基因CDS重叠
-        // 将其归类为other，避免被promoter过滤器误选
         return 'other';
     }
     
-    // 处理 missense 变体（包括各种亚型）
+    // missense 归一化
     if (a.indexOf('missense') !== -1) {
         return 'missense';
     }
     
-    // 处理 indel/SV - 根据功能分配到对应分类
-    // 优先使用 functional_ann 字段（由Python端根据位置计算）
-    if (d.functional_ann && (a === 'indel' || a === 'INS' || a === 'DEL' || a === 'SV')) {
-        var fa = String(d.functional_ann).toLowerCase();
-        if (fa.indexOf('missense') !== -1) return 'missense';
-        if (fa.indexOf('synonymous') !== -1) return 'synonymous';
-        if (fa.indexOf('utr') !== -1) return 'UTR';
-        if (fa.indexOf('intron') !== -1) return 'intron';
-        if (fa.indexOf('promoter') !== -1) {
-            // 再次检查overlaps_cds
-            if (d.overlaps_cds === true) return 'other';
-            return 'promoter';
-        }
-        return 'other';
+    // synonymous 归一化
+    if (a.indexOf('synonymous') !== -1) {
+        return 'synonymous';
     }
     
-    // 直接返回原始类型（包括 intron, UTR, synonymous, promoter 等）
+    // INS/DEL/SV/indel：按 functional_ann 确定位置分类，返回Position标签
+    if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {
+        if (d.functional_ann) {
+            var fa = String(d.functional_ann).toLowerCase();
+            // 注意：INS/DEL/SV不应该归一化为missense/synonymous，因为那是CDS突变标签
+            // 应该只返回Position标签：promoter/UTR/intron/other
+            if (fa.indexOf('utr') !== -1) return 'UTR';
+            if (fa.indexOf('intron') !== -1) return 'intron';
+            if (fa.indexOf('promoter') !== -1) {
+                if (d.overlaps_cds === true) return 'other';
+                return 'promoter';
+            }
+        }
+        return 'other';  // 兜底：基因间区 / 未知位置
+    }
+    
     return a;
+}
+
+// 类型归一化：返回变异的结构类型
+function typeNorm(d) {
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : '';
+    if (a === 'INS') return 'INS';
+    if (a === 'DEL') return 'DEL';
+    if (a === 'SV') return 'SV';
+    if (a === 'indel') return 'INS';  // 兼容旧数据
+    return 'SNP';  // 其余均为SNP
+}
+
+// 类型过滤：检查 type-cb 复选框
+function typeAllowed(d) {
+    var t = typeNorm(d);
+    var cb = document.querySelector('.type-cb[value="' + t + '"]');
+    return cb ? cb.checked : true;
 }
 
 function annAllowed(d) {
@@ -5661,6 +6238,29 @@ function annAllowed(d) {
     if (cb) return cb.checked;
     var o = document.querySelector('.ann-cb[value="other"]');
     return o ? o.checked : true;
+}
+
+// CDS突变过滤：检查syn-cb复选框（synonymous/missense）
+// 只有CDS内的SNP才受此过滤控制，非CDS变异自动通过
+function synAllowed(d) {
+    var a = String(d.annotation || '');
+    // 非SNP（INS/DEL/SV等）不受syn过滤控制
+    if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {
+        return true;
+    }
+    // SNP但不在CDS区域，不受syn过滤控制
+    var isInCDS = false;
+    if (d.functional_ann) {
+        var fa = String(d.functional_ann).toLowerCase();
+        if (fa.indexOf('missense') !== -1 || fa.indexOf('synonymous') !== -1) {
+            isInCDS = true;
+        }
+    }
+    if (!isInCDS) return true;
+    // CDS内SNP：检查syn-cb
+    var normA = annNorm(d);
+    var cb = document.querySelector('.syn-cb[value="' + normA + '"]');
+    return cb ? cb.checked : true;
 }
 
 function updateFilterDisplay(type, value) {
@@ -5681,6 +6281,8 @@ function resetFilters() {
     document.getElementById('mafValue').textContent    = '0.05';
     document.getElementById('missingValue').textContent = '0.2';
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
+    document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
+    document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
     applyFilters();
 }
 
@@ -5729,13 +6331,13 @@ function updateConnectorLines() {
     console.log('[DEBUG] Total th count:', allThsList.length);
     
     var visibleThs = allThsList.filter(function(th, idx) {
-        // 跳过前3列和最后一列，只保留变异列
-        if (idx < 3) return false;
-        if (idx >= allThsList.length - 1) return false;
+        // 使用 seq-col-th class 识别序列列（而非 idx<3 硬编码）
+        // 这样无论有多少协变量列，都能正确跳过
+        if (!th.classList.contains('seq-col-th')) return false;
         // 只保留可见的列
         var isVisible = th.style.display !== 'none';
         if (isVisible) {
-            console.log('[DEBUG] Visible th idx:', idx, 'text:', th.textContent.trim().substring(0, 20));
+            console.log('[DEBUG] Visible seq th idx:', idx, 'pos:', th.getAttribute('data-pos'));
         }
         return isVisible;
     });
@@ -5832,6 +6434,246 @@ window.addEventListener('load', updateConnectorLines);
 // 窗口大小改变时重新计算
 window.addEventListener('resize', updateConnectorLines);
 
+// ==================== LD 倒三角图 ====================
+function r2ToColor(r2) {
+    // r² 转颜色：0=深蓝，0.5=浅蓝/白，1=深红
+    // 颜色条：#313695 -> #abd9e9 -> #fee090 -> #d73027
+    var colors = [
+        { stop: 0.0, r: 49, g: 54, b: 149 },   // #313695 深蓝
+        { stop: 0.25, r: 69, g: 117, b: 180 }, // #4575b4
+        { stop: 0.4, r: 116, g: 173, b: 209 }, // #74add1
+        { stop: 0.5, r: 171, g: 217, b: 233 }, // #abd9e9 浅蓝
+        { stop: 0.55, r: 224, g: 243, b: 248 }, // #e0f3f8
+        { stop: 0.6, r: 254, g: 224, b: 144 },  // #fee090 浅黄
+        { stop: 0.7, r: 253, g: 174, b: 97 },   // #fdae61 橙
+        { stop: 0.8, r: 244, g: 109, b: 67 },   // #f46d43 红橙
+        { stop: 0.9, r: 215, g: 48, b: 39 },    // #d73027 红
+        { stop: 1.0, r: 165, g: 0, b: 38 }      // #a50026 深红
+    ];
+    var r = 0, g = 0, b = 0;
+    if (r2 <= 0) return 'rgb(200,200,200)';
+    if (r2 >= 1) return 'rgb(165,0,38)';
+    // 找到所在区间
+    for (var i = 1; i < colors.length; i++) {
+        if (r2 <= colors[i].stop) {
+            var t = (r2 - colors[i-1].stop) / (colors[i].stop - colors[i-1].stop);
+            r = Math.round(colors[i-1].r + t * (colors[i].r - colors[i-1].r));
+            g = Math.round(colors[i-1].g + t * (colors[i].g - colors[i-1].g));
+            b = Math.round(colors[i-1].b + t * (colors[i].b - colors[i-1].b));
+            break;
+        }
+    }
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+function drawLDTriangle() {
+    var canvas = document.getElementById('ld-triangle-canvas');
+    if (!canvas) { console.log('[LD] canvas not found'); return; }
+    
+    var matrix = ldR2Matrix;
+    if (!matrix || matrix.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        console.log('[LD] no LD data, hiding');
+        return;
+    }
+    var n = matrix.length;
+    
+    // 获取表格中所有可见变异列的屏幕坐标
+    var table = document.querySelector('.data-table');
+    if (!table) { console.log('[LD] table not found'); return; }
+    var allThs = Array.from(table.querySelectorAll('thead th'));
+    // 用 seq-col-th class 识别序列列
+    var visibleVarThs = allThs.filter(function(th, idx) {
+        return th.classList.contains('seq-col-th') && th.style.display !== 'none';
+    });
+    
+    if (visibleVarThs.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }
+    
+    // 计算每列的坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
+    var colInfos = [];  // {svgX, matIdx}
+    var canvasEl = canvas;
+    
+    // wrapper 现在在 table-scroll-container 内部，直接用 th.offsetLeft 计算
+    var tableEl = document.querySelector('.data-table');
+    if (!tableEl) { console.log('[LD] table not found'); return; }
+        
+    visibleVarThs.forEach(function(th) {
+        // 直接用 th.offsetLeft（相对于 table 的偏移）
+        var thOffsetLeft = th.offsetLeft;
+        var svgX = thOffsetLeft + th.offsetWidth / 2;  // 列中心
+        // 找该列在displayPositions中的索引
+        var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
+        var posVal = parseInt(posText);
+        var matIdx = -1;
+        for (var pi = 0; pi < displayPositions.length; pi++) {
+            if (displayPositions[pi] === posVal) { matIdx = pi; break; }
+        }
+        if (matIdx >= 0) {
+            colInfos.push({ svgX: svgX, matIdx: matIdx });
+        }
+    });
+    
+    if (colInfos.length < 2) {
+        document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        return;
+    }
+    
+    // 计算canvas尺寸（基于SVG逻辑坐标）
+    var cellW = colInfos.length > 1 ? 
+        (colInfos[colInfos.length-1].svgX - colInfos[0].svgX) / (colInfos.length - 1) : 20;
+    cellW = Math.max(cellW, 10);
+    var halfCell = cellW / 2;
+    
+    var nc = colInfos.length;
+    var paddingTop = 10;
+    var paddingBottom = 20;
+    // 倒三角高度：深度从1到nc-1，所以总高度 = (nc-1) * halfCell
+    var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
+    
+    // canvas宽度只覆盖序列列区域，不包括固定列（Haplotype/Effect/Phenotype等）
+    // 第一列的svgX即为wrapper.paddingLeft（与SVG对齐）
+    var firstColX = colInfos[0].svgX;
+    var lastColX = colInfos[colInfos.length-1].svgX;
+    var canvasW = Math.ceil(lastColX - firstColX + cellW);
+    canvasW = Math.max(canvasW, 100); // 最小宽度100px
+    
+    // wrapper 在 table-scroll-container 内部，不需要 paddingLeft
+    // canvas 左边缘对齐表格左边缘（table 处理滚动）
+    var wrapper = document.getElementById('ld-triangle-wrapper');
+    wrapper.style.paddingLeft = '0px';
+    
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    canvas.style.width = canvasW + 'px';
+    canvas.style.height = canvasH + 'px';
+    canvas.style.marginLeft = firstColX + 'px';  // canvas 向右偏移，对齐第一个序列列
+    
+    // 计算canvas显示尺寸与内部坐标的比例
+    var canvasDisplayRect = canvas.getBoundingClientRect();
+    // canvasScaleX: canvas内部像素坐标 / canvas显示CSS像素坐标的比率
+    var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
+    
+    // 将所有colInfos的svgX转换为canvas内部坐标（相对canvas左上角）
+    // firstColX 是第一个序列列的左边缘（offsetLeft），canvasX=0 对应第一个列的左边缘
+    for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
+        colInfos[ci2].canvasX = (colInfos[ci2].svgX - firstColX) * canvasScaleX;
+    }
+    
+    // 用canvas内部坐标重新计算细胞宽度
+    if (colInfos.length > 1) {
+        halfCell = (colInfos[colInfos.length-1].canvasX - colInfos[0].canvasX) / (colInfos.length - 1) / 2;
+        halfCell = Math.max(halfCell, 8); // 增加最小宽度以避免重叠
+    }
+    
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    
+    // 绘制倒三角图形单元（经典Haploview风格）
+    for (var i = 0; i < nc; i++) {
+        for (var j = i + 1; j < nc; j++) {
+            var mi = colInfos[i].matIdx;
+            var mj = colInfos[j].matIdx;
+            var r2val = (mi >= 0 && mj >= 0 && matrix[mi] && matrix[mi][mj] !== undefined) 
+                        ? matrix[mi][mj] : 0;
+            
+            // 菱形中心X：两个位点之间的中间位置
+            var cx = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+            // 菱形中心Y：深度(j-i)决定垂直位置（经典倒三角布局）
+            var depth = j - i;
+            var cy = paddingTop + depth * halfCell;
+            
+            // 菱形尺寸：固定大小，与位点间距无关
+            var hw = halfCell; // 菱形半宽 = halfCell
+            var hh = halfCell; // 菱形半高 = halfCell
+            
+            ctx.beginPath();
+            ctx.moveTo(cx,      cy - hh);
+            ctx.lineTo(cx + hw, cy);
+            ctx.lineTo(cx,      cy + hh);
+            ctx.lineTo(cx - hw, cy);
+            ctx.closePath();
+            ctx.fillStyle = r2ToColor(r2val);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(180,180,180,0.3)';
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+            
+            // 如果r²较高且格子足够大，显示数字
+            if (halfCell >= 8 && r2val > 0.05) {
+                var label = r2val >= 0.995 ? '1' : r2val.toFixed(2).replace('0.', '.');
+                ctx.fillStyle = r2val > 0.6 ? 'white' : '#333';
+                var fontSize = Math.min(halfCell * 0.6, 9);
+                if (fontSize >= 6) {
+                    ctx.font = 'bold ' + fontSize + 'px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(label, cx, cy);
+                }
+            }
+        }
+    }
+    
+    // 底部坐标轴刻度线（与displayPositions对齐）
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 1;
+    for (var k = 0; k < colInfos.length; k++) {
+        var tx = colInfos[k].canvasX;
+        ctx.beginPath();
+        ctx.moveTo(tx, paddingTop + (nc - 1) * halfCell);
+        ctx.lineTo(tx, paddingTop + (nc - 1) * halfCell + 4);
+        ctx.stroke();
+    }
+    
+    // 鼠标悬停显示r²数字
+    canvas.onmousemove = function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var scaleX2 = canvas.width / (rect.width || canvas.width);
+        var scaleY2 = canvas.height / (rect.height || canvas.height);
+        var mx = (e.clientX - rect.left) * scaleX2;
+        var my = (e.clientY - rect.top) * scaleY2;
+        var info = '';
+        for (var i = 0; i < nc; i++) {
+            for (var j = i + 1; j < nc; j++) {
+                var cx2 = (colInfos[i].canvasX + colInfos[j].canvasX) / 2;
+                var depth2 = j - i;
+                var cy2 = paddingTop + (depth2 - 0.5) * halfCell;
+                var hw2 = depth2 * halfCell;
+                var hh2 = hw2;
+                var dx = mx - cx2;
+                var dy = my - cy2;
+                if (Math.abs(dx) + Math.abs(dy) <= hw2) {
+                    var mi2 = colInfos[i].matIdx;
+                    var mj2 = colInfos[j].matIdx;
+                    var r2v = (matrix[mi2] && matrix[mi2][mj2] !== undefined) ? matrix[mi2][mj2] : 0;
+                    var p1 = displayPositions[mi2] ? displayPositions[mi2].toLocaleString() : '?';
+                    var p2 = displayPositions[mj2] ? displayPositions[mj2].toLocaleString() : '?';
+                    info = 'r²(' + p1 + ', ' + p2 + ') = ' + r2v.toFixed(3);
+                    break;
+                }
+            }
+            if (info) break;
+        }
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = info;
+    };
+    canvas.onmouseleave = function() {
+        var tipEl = document.getElementById('ld-tooltip-info');
+        if (tipEl) tipEl.textContent = '';
+    };
+    
+    console.log('[LD] LD倒三角图绘制完成: ' + nc + '个列, 菱形数量' + nc*(nc-1)/2);
+}
+
+// 过滤更新时重绘LD图
+var _origApplyFilters = applyFilters;
+applyFilters = function() {
+    _origApplyFilters();
+    requestAnimationFrame(function() { drawLDTriangle(); });
+};
+
 function applyFilters() {
     console.log('[DEBUG] ==================== applyFilters START ====================');
     console.log('[DEBUG] applyFilters called at:', new Date().toISOString());
@@ -5849,13 +6691,15 @@ function applyFilters() {
         var mafPass = d.maf >= currentFilter.maf;
         var missPass = d.missing_rate <= currentFilter.missingRate;
         var annPass = annAllowed(d);
+        var typePass = typeAllowed(d);
+        var synPass = synAllowed(d);
         var normAnn = annNorm(d);
-        if (!mafPass || !missPass || !annPass) {
+        if (!mafPass || !missPass || !annPass || !typePass || !synPass) {
             console.log('[DEBUG] Filtered OUT pos:', d.pos, 'maf:', d.maf, 'missing:', d.missing_rate, 
                         'ann:', d.annotation, 'normAnn:', normAnn, 'functional_ann:', d.functional_ann,
-                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass);
+                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass, 'typePass:', typePass, 'synPass:', synPass);
         }
-        return mafPass && missPass && annPass;
+        return mafPass && missPass && annPass && typePass && synPass;
     });
     console.log('[DEBUG] Filtered data count:', filtered.length, 'of', gwasData.length);
     
@@ -5881,25 +6725,29 @@ function applyFilters() {
     var varPositions = [];  // 记录保留的位置
     var totalThs = allThs.length;
     
-    allThs.forEach(function(th, idx) {
+    allThs.forEach(function(th, idx) {{
         var thText = th.textContent.trim().substring(0, 30);
-        if (idx >= 3 && idx < totalThs - 1) {  // 跳过前3列和最后一列(n)
-            var posText = th.textContent.trim().replace(/,/g,'');
+        // 判断是否为序列列（带 seq-col-th class）
+        var isSeqCol = th.classList.contains('seq-col-th');
+        // 判断是否为固定列（非seq-col-th的列）
+        var isFixedCol = !isSeqCol;
+        if (!isFixedCol) {{
+            var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g,'');
             var pos = parseInt(posText);
             var inPosSet = posSet[pos] !== undefined;
             console.log('[DEBUG] Checking column idx:', idx, 'text:', thText, 'posText:', posText, 'parsedPos:', pos, 'inPosSet:', inPosSet);
             // 检查该位置是否通过过滤
-            if (inPosSet) {
+            if (inPosSet) {{
                 varIndices.push(idx);
                 varPositions.push(pos);
                 console.log('[DEBUG] >>> KEEPING column idx:', idx, 'pos:', pos);
-            } else {
+            }} else {{
                 console.log('[DEBUG] --- SKIPPING column idx:', idx, 'pos:', pos, '(not in posSet)');
-            }
-        } else {
-            console.log('[DEBUG] --- SKIPPING column idx:', idx, 'text:', thText, '(fixed column: <3 or last)');
-        }
-    });
+            }}
+        }} else {{
+            console.log('[DEBUG] --- SKIPPING column idx:', idx, 'text:', thText, '(fixed column)');
+        }}
+    }});
     console.log('[DEBUG] Final varIndices:', varIndices);
     console.log('[DEBUG] Final varPositions:', varPositions);
     console.log('[DEBUG] ==================== applyFilters END ====================');
@@ -5911,9 +6759,8 @@ function applyFilters() {
         // 检查是否通过过滤（基于posSet）
         var passed = posSet[pos] !== undefined;
         
-        // 设置显示/隐藏
-        el.style.display = passed ? 'block' : 'none';
-        el.style.opacity = passed ? '1' : '0.1';
+        // 设置显示/隐藏（保留SVG元素原始opacity，如var-up-line的0.5）
+        el.style.display = passed ? '' : 'none';
     });
     
     // 同步更新表格：隐藏被过滤的列，重新排列保留的列
@@ -5947,41 +6794,45 @@ function updateTableColumns(keepIndices, keepPositions) {
     console.log('[DEBUG] updateTableColumns: keepIndicesSet:', Array.from(keepIndicesSet));
     
     // 处理表头
-    allThs.forEach(function(th, idx) {
+    allThs.forEach(function(th, idx) {{
         var text = th.textContent.trim().substring(0, 20);
-        if (idx < 3 || idx >= allThs.length - 1) {
-            // 前3列和最后一列始终显示
+        // 判断是否为序列列（带 seq-col-th class）
+        var isFixedCol = !th.classList.contains('seq-col-th');
+        if (isFixedCol) {{
+            // 固定列始终显示
             console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - FIXED, showing');
             th.style.display = '';
-        } else {
+        }} else {{
             // 变异列：根据keepIndicesSet决定是否显示
             var shouldShow = keepIndicesSet.has(idx);
             console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - var column, shouldShow:', shouldShow);
-            if (shouldShow) {
+            if (shouldShow) {{
                 th.style.display = '';
-            } else {
+            }} else {{
                 th.style.display = 'none';
-            }
-        }
-    });
+            }}
+        }}
+    }});
     
     // 处理数据行
-    tbodyRows.forEach(function(row) {
+    tbodyRows.forEach(function(row) {{
         var tds = Array.from(row.querySelectorAll('td'));
-        tds.forEach(function(td, idx) {
-            if (idx < 3 || idx >= tds.length - 1) {
-                // 前3列和最后一列始终显示
+        tds.forEach(function(td, idx) {{
+            // 判断是否为序列列（带 seq-col-th class）
+            var isFixedCol = !td.classList.contains('seq-col-th');
+            if (isFixedCol) {{
+                // 固定列始终显示
                 td.style.display = '';
-            } else {
+            }} else {{
                 // 变异列：根据keepIndicesSet决定是否显示
-                if (keepIndicesSet.has(idx)) {
+                if (keepIndicesSet.has(idx)) {{
                     td.style.display = '';
-                } else {
+                }} else {{
                     td.style.display = 'none';
-                }
-            }
-        });
-    });
+                }}
+            }}
+        }});
+    }});
 }
 
 // ==================== 单倍型网络图（D3 force simulation） ====================
@@ -6064,15 +6915,29 @@ function drawNetworkPlot() {
 
     var nodeG = zoomG.append('g').selectAll('g').data(nodes).join('g')
         .style('cursor','pointer')
+        .on('click', function(event, d) {
+            if (networkMode === 'copy') {
+                copyNodeSamples(d.id);
+                event.stopPropagation();
+            }
+        })
         .call(d3.drag()
+            .filter(function(event) { return networkMode === 'drag'; })
             .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
             .on('drag',  function(e,d) {
-                // 限制拖拽范围在容器内
+                // 随缩放比例动态计算可拖动边界（zoomG内部坐标系）
+                // zoomG transform: translate(W/2,H/2) scale(s) translate(-W/2,-H/2)
+                // 视觉边界[0,W]在内部坐标中为[W/2*(1-1/s), W/2*(1+1/s)]
                 var r = d.size * 0.5 + 5;
-                d.fx = Math.max(r, Math.min(W - r, e.x));
-                d.fy = Math.max(r, Math.min(H - r, e.y));
+                var s = currentScale;
+                var xMin = W/2 * (1 - 1/s) + r;
+                var xMax = W/2 * (1 + 1/s) - r;
+                var yMin = H/2 * (1 - 1/s) + r;
+                var yMax = H/2 * (1 + 1/s) - r;
+                d.fx = Math.max(xMin, Math.min(xMax, e.x));
+                d.fy = Math.max(yMin, Math.min(yMax, e.y));
             })
-            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); sim.stop(); /* 完全停止simulation，节点保持在拖动后的位置 */ })
         );
 
     nodeG.append('circle')
@@ -6127,7 +6992,7 @@ function drawNetworkPlot() {
     var tip = document.getElementById('d3-tooltip');
     nodeG.on('mouseover', function(e,d) {
         d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
-        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean;
+        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean+'<br><span style="color:#e74c3c">📋 点击复制样本</span>';
         tip.style.display = 'block';
     }).on('mousemove', function(e) {
         tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY-10)+'px';
@@ -6371,6 +7236,8 @@ document.addEventListener('DOMContentLoaded', function() {
     drawGWASPlot(gwasData);
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
+    // 初始化LD倒三角图
+    setTimeout(function() { drawLDTriangle(); }, 300);
 });
 </script>
 </body>
@@ -6392,6 +7259,8 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{gwas_data_json}',     gwas_data_json)
         html = html.replace('{network_nodes_json}', network_nodes_json)
         html = html.replace('{network_edges_json}', network_edges_json)
+        html = html.replace('{has_promoter_variants_json}', has_promoter_variants_json)
+        html = html.replace('{promoter_actual_length}', promoter_actual_length_json)
         html = html.replace('{region_start}',       str(region_start))
         html = html.replace('{region_end}',         str(region_end))
         html = html.replace('{gene_start}',         str(g_start))
@@ -6407,6 +7276,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__EXON_REGIONS__", _exon_json)
         html = html.replace("__GENE_LABEL__", _glabel)
         html = html.replace("__DISPLAY_POSITIONS__", _display_pos_json)
+        html = html.replace("__LD_R2_MATRIX__", ld_r2_json)
         
         # DEBUG: 检查exportSVG是否存在
         if 'exportSVG' in html:
@@ -6418,7 +7288,12 @@ document.addEventListener('DOMContentLoaded', function() {
         else:
             print("[DEBUG] WARNING: SVG button NOT found in HTML before saving")
 
-        out = os.path.join(self.output_dir, "integrated_analysis.html")
+        # 使用基因名作为HTML文件名（如果提供了gene_id）
+        if gene_id:
+            html_filename = f"{gene_id}.html"
+        else:
+            html_filename = "integrated_analysis.html"
+        out = os.path.join(self.output_dir, html_filename)
         with open(out, 'w', encoding='utf-8') as f:
             f.write(html)
         print(f"[INFO] 综合HTML报告已保存: {out}")
@@ -6749,10 +7624,9 @@ const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
             d.fx = Math.max(r, Math.min(width - r, e.x));
             d.fy = Math.max(r, Math.min(height - r, e.y));
         }})
-        .on('end', function(e, d) {{ 
-            if (!e.active) sim.alphaTarget(0); 
-            d.fx = null; 
-            d.fy = null; 
+        .on('end', function(e, d) {{
+            if (!e.active) sim.alphaTarget(0);
+            sim.stop();
         }})
     );
 
@@ -7404,7 +8278,9 @@ updateLegend('haplotype');
                                       region_end: int,
                                       gene_start: int = None,
                                       gene_end: int = None,
-                                      chrom: str = None) -> str:
+                                      chrom: str = None,
+                                      has_promoter_variants: bool = False,
+                                      promoter_actual_length: int = 2000) -> str:
         """
         生成P值热图叠加（在基因结构上叠加显著性热图）
         
@@ -7439,6 +8315,10 @@ updateLegend('haplotype');
         # 按位置排序
         heatmap_data.sort(key=lambda x: x['pos'])
         heatmap_json = json.dumps(heatmap_data, cls=NumpyEncoder)
+        
+        # **新增**: 启动子相关变量
+        has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
+        promoter_actual_length_json = str(promoter_actual_length)
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -7541,20 +8421,24 @@ svg.append('rect')
     .attr('height', geneH)
     .attr('rx', 3);
 
-// 启动子区域（基因5'端上游2kb）
-const promoterEnd = geneStart;
-const promoterStart = Math.max(regionStart, geneStart - 2000);
-if (promoterStart < promoterEnd) {{
-    svg.append('rect')
-        .attr('class', 'promoter-region')
-        .attr('x', xScale(promoterStart))
-        .attr('y', geneY - geneH/2)
-        .attr('width', xScale(promoterEnd) - xScale(promoterStart))
-        .attr('height', geneH)
-        .attr('rx', 2)
-        .attr('stroke', '#e67e22')
-        .attr('stroke-width', 1)
-        .attr('stroke-dasharray', '3,2');
+// 启动子区域（基因5'端上游）- **根据实际扩展情况绘制**
+if (hasPromoter) {{
+    // 从 gene_info.json 中读取实际启动子长度
+    var promoterActualLength = {promoter_actual_length};
+    var promoterEnd = geneStart;
+    var promoterStart = Math.max(regionStart, geneStart - promoterActualLength);
+    if (promoterStart < promoterEnd) {{
+        svg.append('rect')
+            .attr('class', 'promoter-region')
+            .attr('x', xScale(promoterStart))
+            .attr('y', geneY - geneH/2)
+            .attr('width', xScale(promoterEnd) - xScale(promoterStart))
+            .attr('height', geneH)
+            .attr('rx', 2)
+            .attr('stroke', '#e67e22')
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '3,2');
+    }}
 }}
 
 // 坐标轴
@@ -7646,6 +8530,10 @@ if (promoterStart < promoterEnd) {{
 </script>
 </body>
 </html>'''
+        
+        # **新增**: 替换启动子相关变量
+        html = html.replace('{has_promoter_variants_json}', has_promoter_variants_json)
+        html = html.replace('{promoter_actual_length}', promoter_actual_length_json)
         
         out = os.path.join(self.output_dir, "pvalue_heatmap.html")
         with open(out, 'w', encoding='utf-8') as f:
@@ -7766,13 +8654,20 @@ if (promoterStart < promoterEnd) {{
                 pval = 1e-300
             # 添加变异信息用于过滤
             info = variant_info.get(ip, variant_info.get(pos, {}))
+            # 使用 snp_effects 覆盖 annotation（与集成页 gwas_data 保持一致）
+            ann = info.get('annotation', 'other')
+            if snp_effects:
+                if ip in snp_effects:
+                    ann = snp_effects[ip]
+                elif pos in snp_effects:
+                    ann = snp_effects[pos]
             manhattan_points.append({
                 'pos': int(pos),
                 'pvalue': float(pval),
                 'logp': float(-np.log10(pval)),
                 'maf': float(info.get('maf', 0.5)),
                 'missing_rate': float(info.get('missing_rate', 0.0)),
-                'annotation': info.get('annotation', 'other'),
+                'annotation': ann,
                 'ref': info.get('ref', ''),
                 'alt': info.get('alt', '')
             })
@@ -7824,6 +8719,7 @@ if (promoterStart < promoterEnd) {{
         manhattan_json = json.dumps(manhattan_points, cls=NumpyEncoder)
         pca_json = json.dumps(pca_points, cls=NumpyEncoder)
         var_explained_json = json.dumps(var_explained, cls=NumpyEncoder)
+        pca_correction_json = json.dumps(pca_correction or {}, cls=NumpyEncoder)
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -7916,6 +8812,7 @@ if (promoterStart < promoterEnd) {{
             <span>Variants: {len(variant_positions or [])}</span>
             <span>Haplotypes: {n_haps}</span>
             <span>Total Samples: {sum(hap_counts.values())}</span>
+            {f'<span style="color:#f1c40f">PCA Correction: {pca_correction["n_components"]} PCs ({', '.join(f'PC{i+1}: {v:.1f}%' for i, v in enumerate(pca_correction['var_explained']))})</span>' if pca_correction and pca_correction.get('var_explained') else ''}
         </div>
     </div>
     
@@ -7956,7 +8853,6 @@ if (promoterStart < promoterEnd) {{
                         </span>
                     </div>
                     <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
-                    <button class="filter-btn" onclick="applyFilters()">Apply</button>
                 </div>
                 
                 <!-- 顶部面板区域 -->
@@ -8002,7 +8898,8 @@ if (promoterStart < promoterEnd) {{
         
         <!-- PCA面板 -->
         <div id="pca" class="tab-content">
-            <div class="panel-header"><h3>Principal Component Analysis (PCA)</h3></div>
+            <div class="panel-header"><h3>Principal Component Analysis (PCA) - Population Structure Correction</h3></div>
+            <div id="pca-correction-info" style="padding: 8px 15px; background: #eaf6ff; border-radius: 4px; margin: 5px 15px; font-size: 12px; color: #2c3e50;"></div>
             <div class="panel-controls">
                 <label>X-axis:</label>
                 <select id="pcaXAxis" onchange="updatePCA()">
@@ -8036,6 +8933,7 @@ const networkEdges = {network_edges_json};
 const manhattanData = {manhattan_json};
 const pcaData = {pca_json};
 const varExplained = {var_explained_json};
+const pcaCorrectionInfo = {pca_correction_json};
 const regionStart = {region_start};
 const regionEnd = {region_end};
 const geneStart = {gene_start};
@@ -8054,7 +8952,15 @@ function getAnnotationEnabledMp() {{
 }}
 
 function annAllowedMp(d) {{
-    const a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    // 归一化注释类型：SV 保持为 SV
+    if (a === 'SV') {{ /* keep SV */ }}
+    // missense_* 归一化为 missense
+    else if (a.indexOf('missense') !== -1) {{ a = 'missense'; }}
+    // synonymous_* 归一化为 synonymous
+    else if (a.indexOf('synonymous') !== -1) {{ a = 'synonymous'; }}
+    // INS/DEL 归一化为 indel
+    else if (a === 'INS' || a === 'DEL') {{ a = 'indel'; }}
     const cb = document.querySelector('.ann-cb-mp[value="' + a + '"]');
     if (cb) return cb.checked;
     const o = document.querySelector('.ann-cb-mp[value="other"]');
@@ -8193,10 +9099,17 @@ function initNetwork() {{
     const node = networkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
         .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
         .style('cursor', 'pointer')
+        .on('click', function(event, d) {{
+            if (networkMode === 'copy') {{
+                copyNodeSamples(d.id);
+                event.stopPropagation();
+            }}
+        }})
         .call(d3.drag()
+            .filter(function(event) {{ return networkMode === 'drag'; }})
             .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
             .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }})
+            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
         );
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
@@ -8206,12 +9119,22 @@ function initNetwork() {{
     node.on('mouseover', function(event, d) {{
         d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
         tooltip.style('display', 'block').html(
-            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p>`);
+            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p><p style='color:#e74c3c;cursor:pointer;' onclick='copyNodeSamples("${{d.id}}")'>📋 点击复制样本</p>`);
     }}).on('mousemove', function(event) {{
         tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
     }}).on('mouseout', function() {{
         d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
         tooltip.style('display', 'none');
+    }}).on('click', function(event, d) {{
+        if (networkMode === 'copy') {{
+            copyNodeSamples(d.id);
+        }}
+        event.stopPropagation();
+    }});
+    
+    // 阻止 tooltip 点击触发节点点击
+    tooltip.on('click', function(event) {{
+        event.stopPropagation();
     }});
     
     networkSimulation.on('tick', () => {{
@@ -8519,6 +9442,23 @@ document.addEventListener('DOMContentLoaded', () => {{
         initMiniNetwork();
         initMiniManhattan();
     }}, 200);
+    
+    // 显示PCA群体结构矫正信息
+    if (pcaCorrectionInfo && pcaCorrectionInfo.var_explained) {{
+        const infoDiv = document.getElementById('pca-correction-info');
+        if (infoDiv) {{
+            let html = '<strong>群体结构矫正 (Population Structure Correction)</strong> | ';
+            html += pcaCorrectionInfo.n_components + ' 个主成分 | ';
+            html += pcaCorrectionInfo.n_samples + ' 个样本 | ';
+            html += '方差解释率: ';
+            pcaCorrectionInfo.var_explained.forEach((v, i) => {{
+                html += 'PC' + (i+1) + ': ' + v.toFixed(1) + '%';
+                if (i < pcaCorrectionInfo.var_explained.length - 1) html += ', ';
+            }});
+            html += ' | <em style="color:#7f8c8d">ANCOVA模型已矫正群体结构对关联分析的影响</em>';
+            infoDiv.innerHTML = html;
+        }}
+    }}
 }});
 
 // 键盘快捷键
@@ -8780,7 +9720,9 @@ class HaplotypePhenotypeAnalyzer:
                                      region_start: int, region_end: int,
                                      cds_intervals: list, exon_intervals: list,
                                      gene_strand: str, promoter_start: int = None, 
-                                     promoter_end: int = None) -> dict:
+                                     promoter_end: int = None,
+                                     gene_body_start: int = None,
+                                     gene_body_end: int = None) -> dict:
         """
         用 tabix 只读目标区间，做 SNP 精细分类 (missense/synonymous/UTR/promoter/SV/indel/other)
         读取范围：gene_chrom:region_start-region_end (含启动子)
@@ -8814,7 +9756,14 @@ class HaplotypePhenotypeAnalyzer:
                 for pos in positions_list:
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
-                    effects[pos] = 'UTR' if (in_exon and not in_cds) else 'other'
+                    in_gene_body = (gene_body_start is not None and
+                                    gene_body_end is not None and
+                                    gene_body_start <= pos <= gene_body_end)
+                    if in_exon and not in_cds:
+                        effects[pos] = 'UTR'
+                    elif not in_exon and in_gene_body:
+                        effects[pos] = 'intron'
+                    # else: stays 'other'
                 return effects
             
             # 构建 CDS 上下文（用于翻译）
@@ -8844,27 +9793,45 @@ class HaplotypePhenotypeAnalyzer:
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
                     
+                    # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
+                    is_symbolic = isinstance(alt_allele, str) and alt_allele.startswith('<') and alt_allele.endswith('>')
+                    # 检查INFO字段的SVTYPE
+                    svtype = None
+                    try:
+                        svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
+                    except Exception:
+                        pass
+                    
+                    if is_symbolic or svtype:
+                        # 符号等位基因或有SVTYPE标记 → 直接标记为SV
+                        effects[pos] = 'SV'
+                        continue
+                    
                     # 计算变异长度差异（用于判断 SV/indel）
                     len_diff = abs(len(ref) - len(alt_allele))
                     
-                    # 优先级判断：exon/CDS > UTR > promoter > SV/indel > other
+                    # 优先级判断：exon/CDS > UTR > SV/INS/DEL > promoter(SNP) > intron > other
                     if not in_exon:
-                        # 不在外显子区，检查是否在启动子区
+                        # 不在外显子区
                         in_promoter = (promoter_start is not None and 
                                       promoter_end is not None and 
                                       promoter_start <= pos <= promoter_end)
+                        in_gene_body = (gene_body_start is not None and
+                                       gene_body_end is not None and
+                                       gene_body_start <= pos <= gene_body_end)
                         
-                        if in_promoter:
-                            # 启动子区域变异
-                            effects[pos] = 'promoter'
-                        elif len_diff >= 50:
-                            # 结构变异
+                        # 结构变异优先保留类型信息（INS/DEL/SV），位置信息由 functional_ann 处理
+                        if len_diff >= 50:
                             effects[pos] = 'SV'
-                        elif len_diff > 0:
-                            # 小插入缺失
-                            effects[pos] = 'indel'
+                        elif len(alt_allele) > len(ref) and len_diff > 0:
+                            effects[pos] = 'INS'
+                        elif len(ref) > len(alt_allele) and len_diff > 0:
+                            effects[pos] = 'DEL'
+                        elif in_promoter:
+                            effects[pos] = 'promoter'
+                        elif in_gene_body:
+                            effects[pos] = 'intron'
                         else:
-                            # 其他区域
                             effects[pos] = 'other'
                     elif not in_cds:
                         # 在 exon 但不在 CDS（UTR 区域）
@@ -8873,8 +9840,10 @@ class HaplotypePhenotypeAnalyzer:
                         # CDS 区的非单碱基变异
                         if len_diff >= 50:
                             effects[pos] = 'SV'
-                        elif len_diff > 0:
-                            effects[pos] = 'indel'
+                        elif len(alt_allele) > len(ref):
+                            effects[pos] = 'INS'
+                        elif len(ref) > len(alt_allele):
+                            effects[pos] = 'DEL'
                         else:
                             effects[pos] = 'other'
                     elif not cds_seq or pos not in cds_pos_to_idx:
@@ -8918,10 +9887,13 @@ class HaplotypePhenotypeAnalyzer:
         
         return effects
     
-    def _analyze_promoter_variants(self, chrom: str, promoter_start: int, promoter_end: int, gene_id: str = None):
+    def _analyze_promoter_variants(self, chrom: str, promoter_start: int, promoter_end: int, gene_id: str = None) -> bool:
         """
         分析启动子区域的变异
         优先从数据库加载预计算的启动子变异信息，如果没有则尝试从VCF提取
+        
+        Returns:
+            bool: True=找到变异, False=无变异
         """
         logger = get_logger()
         
@@ -8945,10 +9917,10 @@ class HaplotypePhenotypeAnalyzer:
                             promoter_detail_dst = os.path.join(self.output_dir, "promoter_variants_detail.txt")
                             shutil.copy2(promoter_detail_src, promoter_detail_dst)
                             logger.info(f"  - [数据库] 启动子变异详情已复制到: {promoter_detail_dst}")
-                        return
+                        return True
                     else:
                         logger.info(f"  - [数据库] 启动子区域未发现变异")
-                        return
+                        return False
                 except Exception as e:
                     logger.warning(f"  - [数据库] 加载启动子变异信息失败: {e}，尝试从VCF提取")
         
@@ -8986,18 +9958,41 @@ class HaplotypePhenotypeAnalyzer:
                     alt = rec.alts[0] if rec.alts else ""
                     
                     # 判断变异类型
-                    len_diff = abs(len(ref) - len(alt))
-                    if len(ref) == 1 and len(alt) == 1:
-                        var_type = "SNP"
-                    elif len_diff >= 50:
-                        var_type = "SV"
-                    else:
-                        var_type = "indel"
-                    
+                    # 检查符号等位基因（<DEL>, <INS>等）
+                    is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
                     # 检查INFO字段是否有SVTYPE
                     svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
-                    if svtype:
-                        var_type = f"SV({svtype})"
+                    
+                    if is_symbolic or svtype:
+                        # 符号等位基因或有SVTYPE → SV
+                        if svtype:
+                            var_type = f"SV({svtype})"
+                        else:
+                            sym = alt.strip('<>').upper()
+                            var_type = f"SV({sym})"
+                        # 从SVLEN或END获取实际长度差
+                        try:
+                            svlen = rec.info.get('SVLEN')
+                            if svlen is not None:
+                                if isinstance(svlen, (list, tuple)):
+                                    svlen = svlen[0]
+                                len_diff = abs(int(svlen))
+                            else:
+                                sv_end = rec.info.get('END')
+                                if sv_end is not None:
+                                    len_diff = abs(int(sv_end) - rec.pos)
+                                else:
+                                    len_diff = 0
+                        except Exception:
+                            len_diff = 0
+                    else:
+                        len_diff = abs(len(ref) - len(alt))
+                        if len(ref) == 1 and len(alt) == 1:
+                            var_type = "SNP"
+                        elif len_diff >= 50:
+                            var_type = "SV"
+                        else:
+                            var_type = "indel"
                     
                     variants.append({
                         'pos': rec.pos,
@@ -9037,11 +10032,14 @@ class HaplotypePhenotypeAnalyzer:
                     for v in variants:
                         f.write(f"{v['pos']:,}\t{v['type']}\tref:{v['ref']}\talt:{v['alt']}\tlen_diff:{v['len_diff']}\n")
                 logger.info(f"  - 详细信息已保存: {promoter_var_file}")
+                return True
             else:
                 logger.warning(f"  - 启动子区域未发现任何变异!")
+                return False
                 
         except Exception as e:
             logger.warning(f"  - 启动子变异分析失败: {e}")
+            return False
     
     def analyze_gene(self, chrom: str, start: int, end: int, 
                      gene_id: str = None, phenotype_cols: list = None,
@@ -9091,7 +10089,8 @@ class HaplotypePhenotypeAnalyzer:
                                 'len_diff': row.get('len_diff', 0),
                                 'is_sv': row.get('is_sv', False),
                                 'maf': row.get('maf', 0.5),
-                                'missing_rate': row.get('missing_rate', 0.0)
+                                'missing_rate': row.get('missing_rate', 0.0),
+                                'annotation': row.get('annotation', 'other')  # 关键：包含annotation字段
                             }
                             for _, row in variant_info_df.iterrows()
                         }
@@ -9116,6 +10115,35 @@ class HaplotypePhenotypeAnalyzer:
                         logger.info(f"[数据库] 已加载 haplotype_samples: {len(preloaded_data['hap_sample_df'])} 个样本")
                     except Exception as e:
                         logger.warning(f"[数据库] 加载 haplotype_samples 失败: {e}")
+                
+                # 3.5 **关键修复**: 从 phenotype_data.csv 加载协变量数据
+                phenotype_data_path = os.path.join(gene_db_dir, 'phenotype_data.csv')
+                if os.path.exists(phenotype_data_path) and 'hap_sample_df' in preloaded_data:
+                    try:
+                        pheno_df = pd.read_csv(phenotype_data_path)
+                        # 提取协变量列（排除 SampleID, Hap_Name, Haplotype_Seq, 表型列）
+                        covariate_cols = [c for c in pheno_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
+                        # 找到表型列（phenotype_cols 参数指定的列）
+                        if phenotype_cols:
+                            pheno_col = phenotype_cols[0] if phenotype_cols[0] in pheno_df.columns else None
+                        else:
+                            pheno_col = None
+                        
+                        if pheno_col:
+                            covariate_cols = [c for c in covariate_cols if c != pheno_col]
+                        
+                        if covariate_cols:
+                            # 合并协变量到 hap_sample_df
+                            merge_cols = ['SampleID'] + covariate_cols
+                            preloaded_data['hap_sample_df'] = pd.merge(
+                                preloaded_data['hap_sample_df'],
+                                pheno_df[merge_cols],
+                                on='SampleID',
+                                how='left'
+                            )
+                            logger.info(f"[数据库] 已加载协变量: {covariate_cols}")
+                    except Exception as e:
+                        logger.warning(f"[数据库] 加载 phenotype_data 失败: {e}")
                 
                 # 4. gene_info
                 gene_info_path = os.path.join(gene_db_dir, 'gene_info.json')
@@ -9157,7 +10185,17 @@ class HaplotypePhenotypeAnalyzer:
             strand = gene_info.get('strand', '+')
             gene_body_start = gene_info.get('gene_start') or start
             gene_body_end = gene_info.get('gene_end') or end
-            logger.info(f"[数据库] 使用预加载的 gene_info")
+            # 优先使用gene_info中保存的promoter坐标
+            if 'promoter_start' in gene_info and 'promoter_end' in gene_info:
+                promoter_start_pos = gene_info['promoter_start']
+                promoter_end_pos = gene_info['promoter_end']
+                promoter_actual_length = gene_info.get('promoter_actual_length', promoter_end_pos - promoter_start_pos)
+                logger.info(f"[数据库] 使用预加载的promoter坐标, promoter_actual_length={promoter_actual_length}")
+            else:
+                promoter_actual_length = gene_info.get('promoter_actual_length', 2000)
+                logger.info(f"[数据库] 使用预加载的gene_info, promoter_actual_length={promoter_actual_length}")
+                promoter_start_pos = None
+                promoter_end_pos = None
         else:
             # 从GTF解析
             gtf_data = parse_gtf_for_gene(self.gtf_file, gene_id)
@@ -9167,27 +10205,37 @@ class HaplotypePhenotypeAnalyzer:
             strand = gtf_data.get('strand', '+')
             gene_body_start = gtf_data.get('gene_start') or start
             gene_body_end = gtf_data.get('gene_end') or end
+            # 默认识2000bp
+            promoter_actual_length = 2000
+            promoter_start_pos = None
+            promoter_end_pos = None
         
         logger.info(f"  - GTF 解析：{len(exons_list)} 个外显子，{len(cds_list)} 个 CDS, strand={strand}")
         logger.info(f"  - 基因体坐标: {gene_body_start:,}-{gene_body_end:,}")
         step0_time = perf_monitor.step_end("Step_0_GTF_Parser")
         logger.info(f"  - Step 0 耗时：{step0_time:.2f}s")
         
-        # 计算启动子区域（使用GTF中的真实基因体坐标）
+        # 计算启动子区域（优先使用gene_info中保存的promoter坐标）
         promoter_annotator = PromoterAnnotator()
-        promoter_start_pos, promoter_end_pos = promoter_annotator.get_promoter_region(
-            chrom, gene_body_start, gene_body_end, strand=strand, upstream=2000
-        )
-        logger.info(f"  - 启动子区域: {promoter_start_pos:,}-{promoter_end_pos:,} (strand={strand})")
+        if promoter_start_pos is None or promoter_end_pos is None:
+            promoter_start_pos, promoter_end_pos = promoter_annotator.get_promoter_region(
+                chrom, gene_body_start, gene_body_end, strand=strand, upstream=promoter_actual_length
+            )
+        logger.info(f"  - 启动子区域: {promoter_start_pos:,}-{promoter_end_pos:,} (strand={strand}, length={promoter_actual_length})")
         
         # **新增**: 直接分析VCF中启动子区域的变异
         logger.info("[Step 0.5] 分析VCF中启动子区域的变异...")
-        self._analyze_promoter_variants(chrom, promoter_start_pos, promoter_end_pos, gene_id)
+        has_promoter_variants = self._analyze_promoter_variants(chrom, promoter_start_pos, promoter_end_pos, gene_id)
         
-        # 扩展区域以包含启动子
-        extended_start = min(start, promoter_start_pos)
-        extended_end = max(end, promoter_end_pos)
-        logger.info(f"  - 扩展后区域: {extended_start:,}-{extended_end:,}")
+        # **关键修复**: 只有找到启动子变异时才扩展区域
+        if has_promoter_variants:
+            extended_start = min(start, promoter_start_pos)
+            extended_end = max(end, promoter_end_pos)
+            logger.info(f"  - [启动子有变异] 扩展区域: {extended_start:,}-{extended_end:,}")
+        else:
+            extended_start = start
+            extended_end = end
+            logger.info(f"  - [启动子无变异] 不扩展区域: {extended_start:,}-{extended_end:,}")
         
         # 1. 提取单倍型（使用扩展后的区域，包含启动子）
         logger.info("[Step 1] 提取单倍型...")
@@ -9207,19 +10255,40 @@ class HaplotypePhenotypeAnalyzer:
             
             if not is_marker_file:
                 logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
+                # 备份原始variant_info（可能包含SNP+SV合并后的数据）
+                # 防止VCF提取失败时variant_info被覆盖为仅SNP的数据
+                _orig_variant_info = preloaded_data.get('variant_info', {}).copy()
                 try:
                     # 使用数据库VCF创建临时extractor
                     temp_extractor = HaplotypeExtractor(vcf_path)
                     self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
                         chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
                     )
-                    # 复制variant_info
-                    if hasattr(temp_extractor, 'variant_info'):
+                    # 复制variant_info（VCF提取的variant_info通常包含更完整信息）
+                    if hasattr(temp_extractor, 'variant_info') and temp_extractor.variant_info:
                         preloaded_data['variant_info'] = temp_extractor.variant_info
                         self.variant_info = temp_extractor.variant_info
                     logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
+                    
+                    # **关键修复**: 从VCF提取后，hap_sample_df只有3列(SampleID,Hap_Name,Haplotype_Seq)
+                    # 需要把之前加载的协变量列合并回来
+                    if 'hap_sample_df' in preloaded_data:
+                        preloaded_hap = preloaded_data['hap_sample_df']
+                        cov_cols_in_preloaded = [c for c in preloaded_hap.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
+                        if cov_cols_in_preloaded:
+                            merge_cols = ['SampleID'] + cov_cols_in_preloaded
+                            self.hap_sample_df = pd.merge(
+                                self.hap_sample_df,
+                                preloaded_hap[merge_cols].drop_duplicates(subset=['SampleID']),
+                                on='SampleID',
+                                how='left'
+                            )
+                            logger.info(f"[数据库] 从VCF提取后合并协变量列: {cov_cols_in_preloaded}, hap_sample_df列: {list(self.hap_sample_df.columns)}")
+                    
                 except Exception as e:
                     logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
+                    # 恢复原始variant_info（不含被覆盖的仅SNP数据）
+                    preloaded_data['variant_info'] = _orig_variant_info
                     # 回退到CSV数据
                     if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
                         self.hap_df = preloaded_data['hap_df']
@@ -9269,6 +10338,19 @@ class HaplotypePhenotypeAnalyzer:
             self.positions, self.hap_df, self.hap_sample_df = self.extractor.extract_region(
                 chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
             )
+            # 合并协变量列（如果有）
+            if 'hap_sample_df' in preloaded_data:
+                preloaded_hap = preloaded_data['hap_sample_df']
+                cov_cols_in_preloaded = [c for c in preloaded_hap.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
+                if cov_cols_in_preloaded:
+                    merge_cols = ['SampleID'] + cov_cols_in_preloaded
+                    self.hap_sample_df = pd.merge(
+                        self.hap_sample_df,
+                        preloaded_hap[merge_cols].drop_duplicates(subset=['SampleID']),
+                        on='SampleID',
+                        how='left'
+                    )
+                    logger.info(f"[数据库] 原始VCF提取后合并协变量列: {cov_cols_in_preloaded}")
         
         # 如果数据库中有variant_info，设置到extractor（如果extractor存在）
         # 注意：如果已经从VCF提取了variant_info，这里不再覆盖
@@ -9341,6 +10423,34 @@ class HaplotypePhenotypeAnalyzer:
                     logger.warning(f"  AMOVA分析失败: {amova_result.get('error')}")
         except Exception as e:
             logger.warning(f"  AMOVA分析异常: {e}")
+        
+        # 2.2 群体结构矫正（PCA协变量计算）
+        pc_covariates = None
+        pca_result_info = None
+        logger.info("[Step 2.2] 群体结构矫正 - PCA协变量计算...")
+        try:
+            pop_corrector = PopulationStructureCorrector(self.hap_sample_df, n_components=3)
+            pc_covariates = pop_corrector.compute_pca_covariates()
+            if pc_covariates is not None and not pc_covariates.empty:
+                n_pc = len([c for c in pc_covariates.columns if c.startswith('PC')])
+                var_explained = pop_corrector.var_explained
+                pca_result_info = {
+                    'n_components': n_pc,
+                    'var_explained': var_explained,
+                    'n_samples': len(pc_covariates),
+                }
+                logger.info(f"  PCA计算完成: {n_pc} 个主成分, {len(pc_covariates)} 个样本")
+                for i, v in enumerate(var_explained):
+                    logger.info(f"    PC{i+1}: {v:.1f}% 方差解释率")
+                # 保存PCA协变量
+                pc_csv = os.path.join(self.output_dir, "pca_covariates.csv")
+                pc_covariates.to_csv(pc_csv, index=False)
+                logger.info(f"  PCA协变量已保存: {pc_csv}")
+            else:
+                logger.info("  PCA协变量计算失败或样本不足，将使用未矫正的关联分析")
+        except Exception as e:
+            logger.warning(f"  群体结构矫正异常: {e}")
+            pc_covariates = None
             
         if phenotype_cols is None:
             phenotype_cols = assoc_module.get_phenotype_columns()
@@ -9356,7 +10466,8 @@ class HaplotypePhenotypeAnalyzer:
             },
             'n_variants': len(self.positions),
             'n_haplotypes': len(self.hap_df),
-            'phenotype_results': {}
+            'phenotype_results': {},
+            'pca_correction': pca_result_info  # 群体结构矫正结果
         }
             
         # 3. PVE 计算
@@ -9367,8 +10478,8 @@ class HaplotypePhenotypeAnalyzer:
         for pheno in phenotype_cols:
             logger.info(f"  分析表型: {pheno}")
                 
-            # 关联检验
-            assoc_result = assoc_module.association_test(pheno)
+            # 关联检验（含群体结构矫正）
+            assoc_result = assoc_module.association_test(pheno, pc_covariates=pc_covariates)
                 
             # PVE 计算
             pve_result = pve_module.calculate_pve(pheno)
@@ -9385,8 +10496,15 @@ class HaplotypePhenotypeAnalyzer:
                 pve_val = pve_result.get('pve_percent', 0)
                 p_val_str = f"{p_val:.2e}" if isinstance(p_val, (int, float)) else 'NA'
                 pve_str = f"{pve_val:.2f}" if isinstance(pve_val, (int, float)) else 'NA'
-                logger.info(f"    P-value: {p_val_str} {sig}")
+                logger.info(f"    P-value (未矫正): {p_val_str} {sig}")
                 logger.info(f"    PVE: {pve_str}%")
+                # 矫正后结果
+                if 'corrected' in assoc_result:
+                    corr = assoc_result['corrected']
+                    corr_p = corr.get('p_value', 1)
+                    corr_sig = "***" if corr_p < 0.01 else ("*" if corr_p < 0.05 else "")
+                    logger.info(f"    P-value (PCA矫正): {corr_p:.2e} {corr_sig}")
+                    logger.info(f"    偏R²(单倍型|PC): {corr.get('partial_r_squared', 0):.4f}")
             else:
                 logger.warning(f"    关联分析失败: {assoc_result.get('error')}")
                 
@@ -9482,10 +10600,19 @@ class HaplotypePhenotypeAnalyzer:
             # 扩展分析区域以包含启动子（确保启动子在图中可见）
             promoter_start_pos = promoter_report.get('promoter_start')
             promoter_end_pos = promoter_report.get('promoter_end')
-            plot_region_start = min(start, promoter_start_pos) if promoter_start_pos else start
-            plot_region_end = max(end, promoter_end_pos) if promoter_end_pos else end
-                    
-            logger.info(f"  - 绘图区域：{plot_region_start:,}-{plot_region_end:,} (包含启动子 {promoter_start_pos:,}-{promoter_end_pos:,})")
+            
+            # **关键修复**: 绘图区域必须包含启动子区域（无论是否扩展）
+            # 启动子始终需要在图中可见
+            if has_promoter_variants and promoter_start_pos and promoter_end_pos:
+                # 有启动子变异，绘图区域必须包含启动子
+                plot_region_start = min(gene_body_start, promoter_start_pos)
+                plot_region_end = max(gene_body_end, promoter_end_pos)
+                logger.info(f"  - [有启动子变异] 绘图区域：{plot_region_start:,}-{plot_region_end:,} (包含启动子 {promoter_start_pos:,}-{promoter_end_pos:,})")
+            else:
+                # 无启动子变异，使用基因体区间
+                plot_region_start = gene_body_start
+                plot_region_end = gene_body_end
+                logger.info(f"  - [无启动子变异] 绘图区域：{plot_region_start:,}-{plot_region_end:,} (gene_body)")
             
             # SNP 精细分类：优先从数据库重建，如果失败则尝试VCF
             snp_effects = {}
@@ -9498,27 +10625,36 @@ class HaplotypePhenotypeAnalyzer:
                         variant_info_df = pd.read_csv(variant_info_path)
                         for _, row in variant_info_df.iterrows():
                             pos = row['position']
-                            len_diff = row.get('len_diff', 0)
-                            is_sv = row.get('is_sv', False)
                             
-                            # 基于变异类型和位置分类
-                            if is_sv or abs(len_diff) >= 50:
-                                snp_effects[pos] = 'SV'
-                            elif len_diff > 0:
-                                snp_effects[pos] = 'INS'
-                            elif len_diff < 0:
-                                snp_effects[pos] = 'DEL'
+                            # 优先使用数据库中已有的annotation字段（包含missense/synonymous/promoter/intron/UTR等精细分类）
+                            if 'annotation' in row and pd.notna(row['annotation']) and row['annotation'] != '':
+                                snp_effects[pos] = row['annotation']
                             else:
-                                # 根据位置判断：启动子、UTR、内含子
-                                if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
-                                    snp_effects[pos] = 'promoter'
+                                # 回退：根据变异类型和位置分类
+                                len_diff = row.get('len_diff', 0)
+                                is_sv = row.get('is_sv', False)
+                                
+                                if is_sv or abs(len_diff) >= 50:
+                                    snp_effects[pos] = 'SV'
+                                elif len_diff > 0:
+                                    snp_effects[pos] = 'INS'
+                                elif len_diff < 0:
+                                    snp_effects[pos] = 'DEL'
                                 else:
-                                    in_exon = any(es <= pos <= ee for es, ee in exons_list)
-                                    in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
-                                    if in_exon and not in_cds:
-                                        snp_effects[pos] = 'UTR'
+                                    # 根据位置判断：启动子、UTR、内含子
+                                    if promoter_start_pos and promoter_end_pos and promoter_start_pos <= pos <= promoter_end_pos:
+                                        snp_effects[pos] = 'promoter'
                                     else:
-                                        snp_effects[pos] = 'other'
+                                        in_exon = any(es <= pos <= ee for es, ee in exons_list)
+                                        in_cds = any(cs <= pos <= ce for cs, ce in cds_list)
+                                        if in_exon and not in_cds:
+                                            snp_effects[pos] = 'UTR'
+                                        elif in_cds:
+                                            snp_effects[pos] = 'other'  # CDS区但无法判断missense/synonymous
+                                        elif gene_body_start and gene_body_end and gene_body_start <= pos <= gene_body_end:
+                                            snp_effects[pos] = 'intron'
+                                        else:
+                                            snp_effects[pos] = 'other'
                         logger.info(f"  - 从数据库重建SNP注释: {len(snp_effects)} 个位点")
                     except Exception as e:
                         logger.warning(f"  - 从数据库重建SNP注释失败: {e}")
@@ -9539,7 +10675,9 @@ class HaplotypePhenotypeAnalyzer:
                         exon_intervals=exons_list,
                         gene_strand=strand,
                         promoter_start=promoter_start_pos,
-                        promoter_end=promoter_end_pos
+                        promoter_end=promoter_end_pos,
+                        gene_body_start=gene_body_start,
+                        gene_body_end=gene_body_end
                     )
                 except Exception as e:
                     logger.warning(f"  - VCF注释也失败: {e}")
@@ -9603,8 +10741,8 @@ class HaplotypePhenotypeAnalyzer:
                 region_start=plot_region_start,  # 扩展后的起始位置
                 region_end=plot_region_end,      # 扩展后的终止位置
                 phenotype_col=first_pheno,
-                gene_start=start,
-                gene_end=end,
+                gene_start=gene_body_start,  # **修复**: 使用基因体起始，不是扩展后的start
+                gene_end=gene_body_end,      # **修复**: 使用基因体终止，不是扩展后的end
                 promoter_start=promoter_start_pos,
                 promoter_end=promoter_end_pos,
                 strand=strand,
@@ -9616,6 +10754,9 @@ class HaplotypePhenotypeAnalyzer:
                 cluster_haplotypes=cluster_haplotypes,
                 variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info) else (self.variant_info if self.variant_info else {}),
                 variant_pvalues=variant_pvalues,
+                has_promoter_variants=has_promoter_variants,
+                promoter_actual_length=promoter_actual_length,
+                pca_correction=pca_result_info,  # 群体结构矫正结果
             )
             
             # 5.2 生成新可视化功能
@@ -9664,9 +10805,11 @@ class HaplotypePhenotypeAnalyzer:
                     variant_pvalues=variant_pvalues,
                     region_start=plot_region_start,
                     region_end=plot_region_end,
-                    gene_start=start,
-                    gene_end=end,
-                    chrom=chrom
+                    gene_start=gene_body_start,  # **修复**: 使用基因体起始
+                    gene_end=gene_body_end,      # **修复**: 使用基因体终止
+                    chrom=chrom,
+                    has_promoter_variants=has_promoter_variants,
+                    promoter_actual_length=promoter_actual_length,
                 )
                 logger.info("  - P值热图生成成功")
             except Exception as e:

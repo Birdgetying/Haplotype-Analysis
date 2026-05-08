@@ -47,7 +47,7 @@ except ImportError:
 try:
     from haplotype_phenotype_analysis import (
         HaplotypeExtractor, DataConfig, setup_logging, PerformanceMonitor,
-        HaplotypePhenotypeAnalyzer
+        HaplotypePhenotypeAnalyzer, annotate_snp_effects_for_region
     )
     HAPLOTYPE_MODULE_AVAILABLE = True
     print("[INFO] haplotype_phenotype_analysis 模块导入成功")
@@ -89,11 +89,12 @@ except ImportError:
 # VCF 工具函数
 # ============================================================================
 
-def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int, 
+def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
                       output_vcf: str, sample_ids: list = None):
     """
-    从原始VCF中提取指定区域和样本的子集VCF（纯Python实现，不依赖pysam）
-    
+    从原始VCF中提取指定区域和样本的子集VCF（优先使用tabix快速查询，回退到逐行扫描）。
+    输出优先使用bgzip压缩（支持pysam随机访问），无bgzip时用gzip。
+
     Args:
         input_vcf: 输入VCF文件路径
         chrom: 染色体
@@ -102,31 +103,74 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         output_vcf: 输出VCF文件路径
         sample_ids: 要保留的样本ID列表（None表示保留所有样本）
     """
-    import gzip
-    
-    print(f"[DEBUG] 开始提取VCF子集: {chrom}:{start}-{end}")
-    
-    # 打开输入VCF
-    if input_vcf.endswith('.gz'):
-        f_in = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
-    else:
-        f_in = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
-    
-    # 读取头部
-    header_lines = []
-    sample_line = None
+    import time, gzip, subprocess, tempfile, os
+    _t0 = time.time()
+
+    print(f"[INFO] 开始提取VCF子集: {chrom}:{start}-{end}")
+
+    # 检查是否有tabix索引，优先使用
+    tbi_path = input_vcf + '.tbi'
+    csi_path = input_vcf + '.csi'
+    use_tabix = PYSAM_AVAILABLE and (os.path.exists(tbi_path) or os.path.exists(csi_path))
+
+    # 检查bgzip是否可用（用于输出bgzip格式VCF，支持pysam随机访问）
+    _bgzip_available = False
+    try:
+        r = subprocess.run(['bgzip', '--version'], capture_output=True, check=False)
+        if r.returncode == 0:
+            _bgzip_available = True
+            print(f"[DEBUG] 检测到bgzip可用，输出VCF将使用bgzip压缩（支持pysam随机访问）")
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    # ---------- 读取header和样本列表 ----------
+    header_lines = []   # 仅存储 ## 开头的元信息行
+    sample_line = None  # 单独存储 #CHROM 行
     all_samples = []
-    
-    for line in f_in:
-        if line.startswith('##'):
-            header_lines.append(line.rstrip('\n'))
-        elif line.startswith('#CHROM'):
-            sample_line = line.rstrip('\n')
-            parts = line.rstrip('\n').split('\t')
-            all_samples = parts[9:] if len(parts) > 9 else []
-            break
-    
-    # 确定要保留的样本
+    tbx = None
+
+    if use_tabix:
+        # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
+        index_path = csi_path if os.path.exists(csi_path) else tbi_path
+        print(f"[DEBUG] 使用tabix索引快速查询: {index_path}")
+        try:
+            import pysam as _pysam
+            tbx = _pysam.TabixFile(input_vcf, index=index_path)
+            # tbx.header 包含所有 # 开头的行（含 #CHROM），需分离
+            for line in tbx.header:
+                l = line.rstrip('\n')
+                if l.startswith('#CHROM'):
+                    sample_line = l
+                    parts = l.split('\t')
+                    all_samples = parts[9:] if len(parts) > 9 else []
+                else:
+                    header_lines.append(l)
+
+        except Exception as _e:
+            print(f"[WARNING] tabix查询失败，回退到逐行扫描: {_e}")
+            use_tabix = False
+            tbx = None
+
+    # 如果 header 或 #CHROM 行未读取（tabix不可用、失败、或tbx.header不含#CHROM），从文件扫描读取
+    if not header_lines or sample_line is None:
+        header_lines = []   # 重置，避免与tabix部分读取的内容重复
+        sample_line = None
+        all_samples = []
+        if input_vcf.endswith('.gz'):
+            _hf = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
+        else:
+            _hf = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
+        for line in _hf:
+            if line.startswith('##'):
+                header_lines.append(line.rstrip('\n'))
+            elif line.startswith('#CHROM'):
+                sample_line = line.rstrip('\n')
+                parts = sample_line.split('\t')
+                all_samples = parts[9:] if len(parts) > 9 else []
+                break
+        _hf.close()
+
+    # ---------- 确定要保留的样本 ----------
     if sample_ids:
         available_samples = set(all_samples)
         filtered_samples = [s for s in sample_ids if s in available_samples]
@@ -134,71 +178,116 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
             missing = set(sample_ids) - available_samples
             print(f"[WARNING] 以下样本在VCF中不存在: {missing}")
     else:
-        filtered_samples = all_samples
-    
-    # 如果需要过滤样本，重新构建样本行
-    if sample_ids and filtered_samples != all_samples:
-        # 找到样本在原始样本列表中的索引
+        filtered_samples = list(all_samples)
+
+    # 构建样本索引映射
+    _need_sample_filter = bool(sample_ids) and (set(filtered_samples) != set(all_samples))
+    if _need_sample_filter:
         sample_indices = [all_samples.index(s) for s in filtered_samples if s in all_samples]
-        # 重新构建样本行
-        parts = sample_line.split('\t')[:9]  # 前9个字段
-        sample_fields = filtered_samples
-        new_sample_line = '\t'.join(parts + sample_fields)
+        # 构建新的 #CHROM 行
+        parts = sample_line.split('\t')[:9] if sample_line else ['#CHROM','POS','ID','REF','ALT','QUAL','FILTER','INFO','FORMAT']
+        new_sample_line = '\t'.join(parts + filtered_samples)
     else:
-        new_sample_line = sample_line
+        filtered_samples = list(all_samples)
         sample_indices = list(range(len(all_samples)))
-    
-    # 打开输出VCF
-    if output_vcf.endswith('.gz'):
-        f_out = gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6)
-    else:
-        f_out = open(output_vcf, 'w', encoding='utf-8')
-    
-    # 写入头部
+        new_sample_line = sample_line
+
+    # ---------- 写入VCF（优先bgzip，否则gzip） ----------
+    # 先写文本到临时文件，再bgzip压缩
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.vcf', prefix='subset_')
+    os.close(tmp_fd)
+    tmp_handle = open(tmp_path, 'w', encoding='utf-8')
+
+    # 写入 ## 头部
     for line in header_lines:
-        f_out.write(line + '\n')
-    f_out.write(new_sample_line + '\n')
-    
-    # 提取指定区域的记录
+        tmp_handle.write(line + '\n')
+    # 写入 #CHROM 行（可能是过滤后的）
+    if new_sample_line:
+        tmp_handle.write(new_sample_line + '\n')
+
     record_count = 0
-    for line in f_in:
-        if line.startswith('#'):
-            continue
-        
-        parts = line.rstrip('\n').split('\t')
-        if len(parts) < 8:
-            continue
-        
-        rec_chrom = parts[0]
-        rec_pos = int(parts[1])
-        
-        # 检查染色体
-        if rec_chrom != chrom and rec_chrom != chrom.replace('chr', ''):
-            continue
-        
-        # 检查位置
-        if rec_pos < start:
-            continue
-        if rec_pos > end:
-            break  # 超出区域，停止（假设文件按位置排序）
-        
-        # 如果需要过滤样本
-        if sample_ids and sample_indices != list(range(len(all_samples))):
-            # 保留前9个字段 + 指定样本的数据
-            selected_parts = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
-            f_out.write('\t'.join(selected_parts) + '\n')
+    _source = 'tabix' if (use_tabix and tbx is not None) else '逐行扫描'
+
+    if use_tabix and tbx is not None:
+        # ---------- tabix分支：fetch数据 ----------
+        try:
+            # 使用 region 字符串格式（1-based，与VCF坐标一致）
+            for row in tbx.fetch(region=f"{chrom}:{start}-{end}"):
+                parts = str(row).split('\t')
+                if _need_sample_filter:
+                    sel = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
+                    tmp_handle.write('\t'.join(sel) + '\n')
+                else:
+                    tmp_handle.write(str(row) + '\n')
+                record_count += 1
+        except Exception as fetch_err:
+            print(f"[WARNING] tabix fetch失败: {fetch_err}")
+        finally:
+            tbx.close()
+    else:
+        # ---------- 回退：逐行扫描（慢速） ----------
+        print(f"[INFO] 使用逐行扫描模式提取VCF子集")
+
+        if input_vcf.endswith('.gz'):
+            f_in = gzip.open(input_vcf, 'rt', encoding='utf-8', errors='ignore')
         else:
-            # 保留所有样本
-            f_out.write(line)
-        
-        record_count += 1
-    
-    f_in.close()
-    f_out.close()
-    
-    print(f"[INFO] 子集VCF创建完成: {record_count} 个变异, {len(filtered_samples)} 个样本")
+            f_in = open(input_vcf, 'r', encoding='utf-8', errors='ignore')
 
+        for line in f_in:
+            if line.startswith('#'):
+                continue
+            parts = line.rstrip('\n').split('\t')
+            if len(parts) < 8:
+                continue
+            rec_chrom = parts[0]
+            rec_pos = int(parts[1])
+            if rec_chrom != chrom and rec_chrom != chrom.replace('chr', ''):
+                continue
+            if rec_pos < start:
+                continue
+            if rec_pos > end:
+                break  # 假设文件按位置排序，超出则停止
+            if _need_sample_filter:
+                sel = parts[:9] + [parts[9 + i] for i in sample_indices if 9 + i < len(parts)]
+                tmp_handle.write('\t'.join(sel) + '\n')
+            else:
+                tmp_handle.write(line)
+            record_count += 1
 
+        f_in.close()
+
+    tmp_handle.close()
+
+    # bgzip压缩（支持pysam随机访问），失败则回退gzip
+    if _bgzip_available and output_vcf.endswith('.gz'):
+        try:
+            with open(tmp_path, 'rb') as fin:
+                proc = subprocess.Popen(
+                    ['bgzip', '-c'],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                compressed, _stderr = proc.communicate(input=fin.read())
+            if proc.returncode != 0 or not compressed:
+                raise Exception(f"bgzip -c failed (code={proc.returncode}): {_stderr.decode('utf-8','ignore')[:200]}")
+            with open(output_vcf, 'wb') as fout:
+                fout.write(compressed)
+            _compressor = 'bgzip'
+        except Exception as bgzip_err:
+            with gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6) as fout:
+                with open(tmp_path, 'rt', encoding='utf-8') as fin:
+                    fout.write(fin.read())
+            _compressor = 'gzip(fallback)'
+            print(f"[WARNING] bgzip压缩失败，回退gzip: {bgzip_err}")
+    else:
+        with gzip.open(output_vcf, 'wt', encoding='utf-8', compresslevel=6) as fout:
+            with open(tmp_path, 'rt', encoding='utf-8') as fin:
+                fout.write(fin.read())
+        _compressor = 'gzip'
+
+    os.unlink(tmp_path)
+
+    print(f"[INFO] 子集VCF创建完成({_source}+{_compressor}): {record_count} 个变异, {len(filtered_samples)} 个样本, 耗时 {time.time()-_t0:.1f}s")
 # ============================================================================
 # 内置单倍型提取器（当主模块不可用时使用）
 # ============================================================================
@@ -429,6 +518,7 @@ class ScanConfig:
     
     # 启动子区域参数
     PROMOTER_LENGTH = 2000  # 启动子初始长度（bp），在TSS上游扩展（2000bp内无变异时动态增加）
+    PROMOTER_EXTENDED_LENGTH = 5000  # 启动子扩展长度（bp），2000bp内无变异时扩展到5000bp
     
     # 变异类型过滤
     SNP_ONLY = False  # False=包含所有变异类型(SNP/indel/SV)
@@ -601,7 +691,9 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         database_dir: str, results_dir: str = None,
                         min_samples: int = 1, test_region_length: int = 0,
                         gff_file: str = None, all_genes_cds: list = None,
-                        cophe_files: list = None) -> dict:
+                        cophe_files: list = None,
+                        sv_vcf_file: str = None,
+                        fasta_file: str = None) -> dict:
     """
     处理单个基因，提取单倍型并保存到专属文件夹
     
@@ -621,16 +713,25 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
     gene_end = gene_info['end']      # GFF中的基因体终止
     strand = gene_info['strand']
     
-    # 扩展启动子区域
+    # 扩展启动子区域：先扫2000，没有再扩展到5000，如果还没有扩展到最近变异
     promoter_length = ScanConfig.PROMOTER_LENGTH
+    promoter_extended = ScanConfig.PROMOTER_EXTENDED_LENGTH
+    
+    # 计算初始启动子区域（2000bp）
     if strand == '+':  # +链：TSS在gene_start，启动子在上游(更小坐标)
-        start = max(1, gene_start - promoter_length)  # 向上游扩展
+        promoter_start_2k = max(1, gene_start - promoter_length)  # 2000bp启动子起始
+        start = promoter_start_2k
         end = gene_end
     else:  # -链：TSS在gene_end，启动子在下游(更大坐标)
         start = gene_start
-        end = gene_end + promoter_length  # 向下游扩展
+        promoter_end_2k = gene_end + promoter_length  # 2000bp启动子终止
+        end = promoter_end_2k
     
-    print(f"[INFO] {gene_id}: 基因体={gene_start}-{gene_end}({strand}), 启动子扩展后={start}-{end}")
+    print(f"[INFO] {gene_id}: 基因体={gene_start}-{gene_end}({strand}), 初始启动子={promoter_start_2k if strand=='+' else gene_start}-{promoter_end_2k if strand=='-' else gene_end}")
+    
+    # 记录扩展情况：'none'=2000内有变异, 'extended'=扩展到5000, 'nearest'=扩展到最近变异
+    promoter_expansion_status = 'none'
+    promoter_actual_length = promoter_length  # 默认2000
     
     # 测试模式：限制区间长度
     original_end = end
@@ -672,50 +773,183 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             chrom, start, end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
         )
         
-        # 关键新增：如果没有变异，动态扩展启动子区域到最近的变异
-        if hap_df is None or len(hap_df) == 0:
-            print(f"[INFO] {gene_id}: 当前区域 {start}-{end} 无变异，尝试扩展到最近变异")
-            
-            # 动态扩展策略：每次扩展 5000bp，直到找到变异或达到上限
-            max_extension = 50000  # 最大扩展 50kb
-            extension_step = 5000  # 每次扩展 5kb
-            current_start = start
-            current_end = end
-            
-            while True:
-                # 计算扩展后的区域
-                if strand == '+':
-                    current_start = max(1, gene_start - (current_end - gene_end) - extension_step)
-                else:
-                    current_end = gene_end + (gene_start - current_start) + extension_step
-                
-                # 检查是否超过最大扩展
-                if strand == '+' and (gene_start - current_start) > max_extension:
-                    print(f"[INFO] {gene_id}: 已达到最大扩展限制 {max_extension}bp，停止扩展")
-                    break
-                if strand == '-' and (current_end - gene_end) > max_extension:
-                    print(f"[INFO] {gene_id}: 已达到最大扩展限制 {max_extension}bp，停止扩展")
-                    break
-                
-                print(f"[INFO] {gene_id}: 扩展到 {current_start}-{current_end}，重新提取变异")
-                
-                # 重新提取
-                positions, hap_df, hap_sample_df = extractor.extract_region(
-                    chrom, current_start, current_end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
+
+        # ---- SV VCF 处理：同时从 SV VCF 提取结构变异并合并 ----
+        if sv_vcf_file and os.path.exists(sv_vcf_file):
+            try:
+                print(f"[INFO] {gene_id}: 同时从 SV VCF 提取结构变异: {sv_vcf_file}")
+                sv_extractor = HaplotypeExtractor(sv_vcf_file)
+                sv_positions, sv_hap_df, sv_hap_sample_df = sv_extractor.extract_region(
+                    chrom, start, end, min_samples=min_samples, snp_only=False
                 )
+
+                if sv_positions and len(sv_positions) > 0:
+                    print(f"[INFO] {gene_id}: 从 SV VCF 提取到 {len(sv_positions)} 个结构变异")
+
+                    # 合并 SV 位置到主位置列表（去重）
+                    pos_set = set(positions) if positions else set()
+                    has_snp_positions = bool(positions)  # 是否有SNP位点（用于判断是否需要合并序列）
+                    if positions:
+                        new_sv_pos = [p for p in sv_positions if p not in pos_set]
+                        positions = sorted(positions + new_sv_pos)
+                    else:
+                        positions = list(sv_positions)
+                        hap_df = sv_hap_df
+                        hap_sample_df = sv_hap_sample_df
+                    
+                    # 合并 SV 序列到主单倍型序列
+                    # 注意：SV序列格式也是 allele1|allele2|... 每个位点用|分隔
+                    # 必须保留|分隔符拼接，否则序列长度（allele数）与positions数不匹配
+                    # 对于在SV VCF中没有基因型的样本，用N填充（每个新SV位点一个N）
+                    # 只有在有SNP位点时才需要合并；如果原来就没有SNP，SV数据已经直接赋値，不需合并
+                    if has_snp_positions and sv_hap_sample_df is not None and len(sv_hap_sample_df) > 0:
+                        sv_seq_map = dict(zip(sv_hap_sample_df['SampleID'], sv_hap_sample_df['Haplotype_Seq']))
+                        # 计算SV新增了多少位点（用于缺失样本的N填充）
+                        n_new_sv_pos = len([p for p in sv_positions if p not in pos_set])
+                        sv_placeholder = '|'.join(['N'] * n_new_sv_pos) if n_new_sv_pos > 0 else ''
+                        new_seqs = []
+                        for _, row in hap_sample_df.iterrows():
+                            sid = row['SampleID']
+                            orig_seq = row['Haplotype_Seq']
+                            sv_seq = sv_seq_map.get(sid, '')
+                            if sv_seq:
+                                # 用|分隔拼接，确保每个位点对应一个allele
+                                new_seqs.append(orig_seq + '|' + sv_seq)
+                            elif sv_placeholder:
+                                # 样本在SV VCF中缺失，用N占位，保证序列长度=positions长度
+                                new_seqs.append(orig_seq + '|' + sv_placeholder)
+                            else:
+                                new_seqs.append(orig_seq)
+                        hap_sample_df = hap_sample_df.copy()
+                        hap_sample_df['Haplotype_Seq'] = new_seqs
+
+                        # 更新 hap_df 的 Haplotype_Seq（按 Hap_Name 关联）
+                        if hap_df is not None and len(hap_df) > 0:
+                            for idx in hap_df.index:
+                                hname = hap_df.at[idx, 'Hap_Name']
+                                first_sample = hap_sample_df[hap_sample_df['Hap_Name'] == hname]
+                                if len(first_sample) > 0:
+                                    hap_df.at[idx, 'Haplotype_Seq'] = first_sample.iloc[0]['Haplotype_Seq']
+
+                    # 关键修复：合并 SV variant_info 到主 extractor.variant_info
+                    if hasattr(sv_extractor, 'variant_info') and sv_extractor.variant_info:
+                        for sv_pos, sv_info in sv_extractor.variant_info.items():
+                            if sv_pos not in pos_set:
+                                # 标记为SV变异
+                                sv_info['is_sv'] = True
+                                if 'annotation' not in sv_info or sv_info['annotation'] in ('', 'other'):
+                                    sv_info['annotation'] = 'SV'
+                                extractor.variant_info[sv_pos] = sv_info
+                        print(f"[INFO] {gene_id}: 合并 {len(sv_extractor.variant_info)} 个SV变异信息到variant_info")
+
+                    # 保存 SV VCF 子集
+                    try:
+                        sv_subset_path = os.path.join(gene_data_dir, 'sv_variants.vcf.gz')
+                        vcf_sample_ids = (hap_sample_df['SampleID'].tolist()
+                                         if hap_sample_df is not None else [])
+                        create_subset_vcf(sv_vcf_file, chrom, start, end, sv_subset_path,
+                                        sample_ids=vcf_sample_ids)
+                        sv_size = os.path.getsize(sv_subset_path)
+                        if sv_size > 1024:
+                            print(f"[INFO] SV VCF子集已保存: {sv_subset_path} ({sv_size/1024:.1f} KB)")
+                        else:
+                            print(f"[WARNING] SV VCF子集文件过小 ({sv_size} bytes)")
+                    except Exception as sv_e:
+                        print(f"[WARNING] 保存SV VCF子集失败: {sv_e}")
+                else:
+                    print(f"[INFO] {gene_id}: SV VCF 在该区域无变异，但仍保存空VCF子集")
+                    # 即使没有SV变异，也保存空VCF子集（避免缓存检查失败）
+                    try:
+                        sv_subset_path = os.path.join(gene_data_dir, 'sv_variants.vcf.gz')
+                        vcf_sample_ids = (hap_sample_df['SampleID'].tolist()
+                                         if hap_sample_df is not None else [])
+                        create_subset_vcf(sv_vcf_file, chrom, start, end, sv_subset_path,
+                                        sample_ids=vcf_sample_ids)
+                        print(f"[INFO] SV VCF子集已保存（空）: {sv_subset_path}")
+                    except Exception as sv_e:
+                        print(f"[WARNING] 保存空SV VCF子集失败: {sv_e}")
+            except Exception as sv_ext_e:
+                print(f"[WARNING] SV VCF 提取失败: {sv_ext_e}")
+
+        # 关键新增：如果没有变异，动态扩展启动子区域
+        if hap_df is None or len(hap_df) == 0:
+            print(f"[INFO] {gene_id}: 当前区域 {start}-{end} 无变异，尝试扩展启动子")
+            
+            # 第一次扩展：从2000扩展到5000
+            if strand == '+':
+                extended_start_5k = max(1, gene_start - promoter_extended)
+                extended_end_5k = gene_end
+            else:
+                extended_start_5k = gene_start
+                extended_end_5k = gene_end + promoter_extended
+            
+            print(f"[INFO] {gene_id}: 扩展到5000bp: {extended_start_5k}-{extended_end_5k}")
+            positions, hap_df, hap_sample_df = extractor.extract_region(
+                chrom, extended_start_5k, extended_end_5k, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
+            )
+            
+            if hap_df is not None and len(hap_df) > 0:
+                print(f"[INFO] {gene_id}: 在5000bp区域找到 {len(hap_df)} 个单倍型")
+                start = extended_start_5k
+                end = extended_end_5k
+                promoter_expansion_status = 'extended'
+                promoter_actual_length = promoter_extended
+            else:
+                # 第二次扩展：扩展到最近的有变异的位置
+                print(f"[INFO] {gene_id}: 5000bp内仍无变异，扩展到最近变异")
                 
-                # 如果找到变异，退出循环
-                if hap_df is not None and len(hap_df) > 0:
-                    print(f"[INFO] {gene_id}: 在扩展区域 {current_start}-{current_end} 找到 {len(hap_df)} 个单倍型")
-                    start = current_start  # 更新起始位置
-                    end = current_end      # 更新终止位置
-                    break
+                max_extension = 50000  # 最大扩展 50kb
+                extension_step = 5000  # 每次扩展 5kb
+                current_start = extended_start_5k
+                current_end = extended_end_5k
                 
-                # 如果没有变异，继续扩展
-                if (strand == '+' and (gene_start - current_start) >= max_extension) or \
-                   (strand == '-' and (current_end - gene_end) >= max_extension):
-                    print(f"[INFO] {gene_id}: 扩展 {max_extension}bp 后仍无变异，使用原始区域")
-                    break
+                while True:
+                    # 计算扩展后的区域（每次向启动子方向多扩展 extension_step）
+                    if strand == '+':
+                        current_start = max(1, current_start - extension_step)
+                    else:
+                        current_end = current_end + extension_step
+                    
+                    # 检查是否超过最大扩展
+                    if strand == '+' and (gene_start - current_start) > max_extension:
+                        print(f"[INFO] {gene_id}: 已达到最大扩展限制 {max_extension}bp，停止扩展")
+                        break
+                    if strand == '-' and (current_end - gene_end) > max_extension:
+                        print(f"[INFO] {gene_id}: 已达到最大扩展限制 {max_extension}bp，停止扩展")
+                        break
+                    
+                    print(f"[INFO] {gene_id}: 扩展到 {current_start}-{current_end}，重新提取变异")
+                    
+                    # 重新提取
+                    positions, hap_df, hap_sample_df = extractor.extract_region(
+                        chrom, current_start, current_end, min_samples=min_samples, snp_only=ScanConfig.SNP_ONLY
+                    )
+                    
+                    # 如果找到变异，退出循环
+                    if hap_df is not None and len(hap_df) > 0:
+                        print(f"[INFO] {gene_id}: 在扩展区域 {current_start}-{current_end} 找到 {len(hap_df)} 个单倍型")
+                        start = current_start
+                        end = current_end
+                        promoter_expansion_status = 'nearest'
+                        # 计算实际扩展长度
+                        if strand == '+':
+                            promoter_actual_length = gene_start - current_start
+                        else:
+                            promoter_actual_length = current_end - gene_end
+                        break
+                    
+                    # 如果没有变异，继续扩展
+                    if (strand == '+' and (gene_start - current_start) >= max_extension) or \
+                       (strand == '-' and (current_end - gene_end) >= max_extension):
+                        print(f"[INFO] {gene_id}: 扩展 {max_extension}bp 后仍无变异，使用原始2000bp区域")
+                        promoter_expansion_status = 'none'  # 回退到2000
+                        promoter_actual_length = promoter_length
+                        # 恢复原始2000bp区域
+                        if strand == '+':
+                            start = promoter_start_2k
+                        else:
+                            end = promoter_end_2k
+                        break
         
         # 解析GTF获取基因结构信息
         gtf_data = parse_gtf_for_gene(gff_file, gene_id) if gff_file else {'exons': [], 'cds': [], 'strand': strand}
@@ -730,8 +964,14 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'gene_end': gene_end,      # 原始基因体终止
             'strand': strand,
             'length': end - start + 1,
-            'promoter_length': promoter_length,
+            'promoter_length': promoter_length,  # 初始启动子长度（2000）
+            'promoter_extended_length': promoter_extended,  # 扩展启动子长度（5000）
+            'promoter_expansion_status': promoter_expansion_status,  # 扩展状态：none/extended/nearest
+            'promoter_actual_length': promoter_actual_length,  # 实际使用的启动子长度
+            'promoter_start': (max(1, gene_start - promoter_actual_length) if strand == '+' else gene_end + 1),
+            'promoter_end': (gene_start - 1 if strand == '+' else gene_end + promoter_actual_length),
             'vcf_file': vcf_file,
+            'sv_vcf_file': sv_vcf_file if sv_vcf_file else None,
             'vcf_mtime': os.path.getmtime(vcf_file),  # 关键：保存VCF修改时间用于缓存判断
             'extraction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'exons': gtf_data.get('exons', []),
@@ -747,6 +987,28 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             if hap_sample_df is not None and len(hap_sample_df) > 0:
                 # 保存空的单倍型数据
                 hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
+                
+                # 保存空的 haplotype_data.csv（只有列名）
+                empty_hap_df = pd.DataFrame(columns=['Hap_Name', 'Haplotype_Seq', 'n_variants'])
+                empty_hap_df.to_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'), index=False)
+                
+                # 保存空的 variant_info.csv（只有列名）
+                empty_var_df = pd.DataFrame(columns=['position', 'ref', 'alt', 'len_diff', 'is_sv', 'maf', 'missing_rate', 'annotation'])
+                empty_var_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
+                
+                # 保存空的 variants.vcf.gz（只有header，无数据行）
+                subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
+                if not os.path.exists(subset_vcf_path):
+                    try:
+                        import gzip as _gzip
+                        # 创建最小化空VCF（只有必需header）
+                        with _gzip.open(subset_vcf_path, 'wt', encoding='utf-8') as f:
+                            f.write('##fileformat=VCFv4.2\n')
+                            f.write(f'##contig=<ID={chrom}>\n')
+                            f.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
+                        print(f"[INFO] {gene_id}: 已保存空VCF子集（无变异）")
+                    except Exception as _e:
+                        print(f"[WARNING] {gene_id}: 保存空VCF失败: {_e}")
                 
                 # 合并表型数据
                 merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
@@ -771,10 +1033,31 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             
             return result_summary
         
-        # 关键检查：如果 hap_sample_df 为空，直接返回
+        # 关键检查：如果 hap_sample_df 为空，直接返回（但保存基础文件）
         if hap_sample_df is None or len(hap_sample_df) == 0:
             print(f"[WARNING] hap_sample_df 为空，无法继续")
             result_summary['status'] = 'no_valid_haplotypes'
+            
+            # 保存基础文件以避免缓存检查失败
+            empty_hap_df = pd.DataFrame(columns=['Hap_Name', 'Haplotype_Seq', 'n_variants'])
+            empty_hap_df.to_csv(os.path.join(gene_data_dir, 'haplotype_data.csv'), index=False)
+            empty_hap_sample_df = pd.DataFrame(columns=['SampleID', 'Hap_Name', 'Haplotype_Seq'])
+            empty_hap_sample_df.to_csv(os.path.join(gene_data_dir, 'haplotype_samples.csv'), index=False)
+            empty_var_df = pd.DataFrame(columns=['position', 'ref', 'alt', 'len_diff', 'is_sv', 'maf', 'missing_rate', 'annotation'])
+            empty_var_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
+            
+            # 创建空VCF
+            subset_vcf_path = os.path.join(gene_data_dir, 'variants.vcf.gz')
+            if not os.path.exists(subset_vcf_path):
+                try:
+                    import gzip as _gzip
+                    with _gzip.open(subset_vcf_path, 'wt', encoding='utf-8') as f:
+                        f.write('##fileformat=VCFv4.2\n')
+                        f.write(f'##contig=<ID={chrom}>\n')
+                        f.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
+                except Exception as _e:
+                    print(f"[WARNING] {gene_id}: 保存空VCF失败: {_e}")
+            
             return result_summary
         
         n_variants = len(positions) if positions else 0
@@ -792,8 +1075,40 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
         print(hap_df.head(3).to_string(index=False))
         print()
         
-        # 保存变异注释信息（从extractor获取）
+        # 保存变异注释信息（从extractor获取），并调用 annotate_snp_effects_for_region 计算 annotation
         if hasattr(extractor, 'variant_info') and extractor.variant_info:
+            # 计算每个位点的功能注释（missense/synonymous/UTR/intron/promoter/INS/DEL/SV/other）
+            _positions_for_ann = list(extractor.variant_info.keys())
+            _cds_for_ann = gtf_data.get('cds', [])
+            _exons_for_ann = gtf_data.get('exons', [])
+            _strand_for_ann = strand
+            # 计算启动子区间（用于区分 promoter 和 intron）
+            if strand == '+':
+                _promoter_start_ann = max(1, gene_start - promoter_actual_length)
+                _promoter_end_ann = gene_start - 1
+            else:
+                _promoter_start_ann = gene_end + 1
+                _promoter_end_ann = gene_end + promoter_actual_length
+            try:
+                # 优先使用传入的fasta_file参数，其次用ScanConfig，否则为None
+                _fasta_path = fasta_file or getattr(ScanConfig, 'FASTA_FILE', None)
+                _ann_effects = annotate_snp_effects_for_region(
+                    vcf_file=vcf_file,
+                    fasta_path=_fasta_path,
+                    gene_chrom=chrom,
+                    cds_intervals=_cds_for_ann,
+                    exon_intervals=_exons_for_ann,
+                    gene_strand=_strand_for_ann,
+                    positions=_positions_for_ann,
+                    gene_start=gene_start,
+                    gene_end=gene_end,
+                    promoter_start=_promoter_start_ann,
+                    promoter_end=_promoter_end_ann
+                )
+                print(f"[INFO] 变异功能注释完成: { {k: sum(1 for v in _ann_effects.values() if v==k) for k in set(_ann_effects.values())} }")
+            except Exception as _ann_e:
+                print(f"[WARNING] 变异功能注释失败，使用空注释: {_ann_e}")
+                _ann_effects = {}
             variant_info_df = pd.DataFrame([
                 {
                     'position': pos,
@@ -802,21 +1117,23 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                     'len_diff': info.get('len_diff', 0),
                     'is_sv': info.get('is_sv', False),
                     'maf': info.get('maf', 0.5),
-                    'missing_rate': info.get('missing_rate', 0.0)
+                    'missing_rate': info.get('missing_rate', 0.0),
+                    # 优先使用info中已有的annotation（如SV），其次用_ann_effects计算结果
+                    'annotation': info.get('annotation', _ann_effects.get(pos, 'other'))
                 }
                 for pos, info in extractor.variant_info.items()
             ])
             variant_info_df.to_csv(os.path.join(gene_data_dir, 'variant_info.csv'), index=False)
-            print(f"[INFO] 变异注释信息已保存: {len(variant_info_df)} 个位点")
+            print(f"[INFO] 变异注释信息已保存: {len(variant_info_df)} 个位点（含annotation字段）")
         
         # **新增**: 分析并保存启动子区域变异信息
-        # 计算启动子区域（基因体外的上游区域）
+        # 计算启动子区域（使用扩展后的实际长度）
         if strand == '+':
-            promoter_start = max(1, gene_start - promoter_length)
+            promoter_start = max(1, gene_start - promoter_actual_length)
             promoter_end = gene_start - 1
         else:
             promoter_start = gene_end + 1
-            promoter_end = gene_end + promoter_length
+            promoter_end = gene_end + promoter_actual_length
         
         # **关键修复**：加载所有基因的CDS信息，用于检查启动子变异是否与其他基因重叠
         # 性能优化：如果外部传入 all_genes_cds，直接使用，避免重复扫描 GFF 文件
@@ -1175,7 +1492,8 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                             min_samples: int = 1, pvalue_threshold: float = 0.05,
                             gff_file: str = None, results_dir: str = None,
                             cluster_haplotypes: bool = False,
-                            cophe_files: list = None) -> dict:
+                            cophe_files: list = None,
+                        sv_vcf_file: str = None) -> dict:
     """
     对单个基因进行单倍型-表型关联分析，并生成综HTML图
     
@@ -1352,7 +1670,7 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                 
                 # 运行完整分析流程（会生成综合HTML）
                 # 获取所有表型列（包括协变量）
-                all_pheno_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
+                all_pheno_cols = [c for c in merged.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']]
                 analysis_result = analyzer.analyze_gene(
                     chrom=chrom,
                     start=start,
@@ -1393,7 +1711,9 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     generate_html: bool = True,
                     test_region_length: int = 0,
                     cluster_haplotypes: bool = False,
-                    cophe_files: list = None) -> pd.DataFrame:
+                    cophe_files: list = None,
+                    sv_vcf_file: str = None,
+                    fasta_file: str = None) -> pd.DataFrame:
     """
     运行指定基因的单倍型数据集构建
     
@@ -1698,8 +2018,11 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
             'variant_info.csv',
             'phenotype_data.csv',
             'haplotype_stats.csv',
-            'variants.vcf.gz'  # 关键：VCF子集文件
+            'variants.vcf.gz',  # 关键：VCF子集文件
         ]
+        # sv_variants.vcf.gz 只在提供了sv_vcf_file时才是必须的
+        if sv_vcf_file and os.path.exists(sv_vcf_file):
+            required_files.append('sv_variants.vcf.gz')
         
         if os.path.exists(gene_data_dir):
             # 检查缺失哪些文件
@@ -1796,7 +2119,9 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                                      test_region_length=test_region_length,
                                      gff_file=gff_file,
                                      all_genes_cds=all_genes_cds,
-                                     cophe_files=cophe_files)
+                                     cophe_files=cophe_files,
+                                     sv_vcf_file=sv_vcf_file,
+                                     fasta_file=fasta_file)
         all_results.append(result)
         processed += 1
         
@@ -1956,6 +2281,12 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 if cophe_files:
                     # 过滤掉 None 值
                     valid_cophe_files = [cf for cf in cophe_files if cf is not None]
+                    
+                    # 关键修复：删除旧的协变量列（避免merge时产生_x, _y后缀）
+                    old_covariate_cols = [c for c in pheno_data.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', pheno_col]]
+                    if old_covariate_cols:
+                        pheno_data = pheno_data.drop(columns=old_covariate_cols)
+                        print(f"  [INFO] {gene_id}: 删除旧协变量列 {old_covariate_cols}")
                     
                     for cophe_file, cophe_title in valid_cophe_files:
                         if cophe_file is None:
@@ -2125,7 +2456,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                                         'len_diff': info.get('len_diff', 0),
                                         'is_sv': info.get('is_sv', False),
                                         'maf': info.get('maf', 0.5),
-                                        'missing_rate': info.get('missing_rate', 0.0)
+                                        'missing_rate': info.get('missing_rate', 0.0),
+                                        'annotation': info.get('annotation', 'other')
                                     }
                                     for pos, info in variant_info.items()
                                 ])
@@ -2249,6 +2581,11 @@ def main():
     parser.add_argument("--cophe3-title", type=str, default="Expression3",
                         help="协变量表型3的标题")
     
+    parser.add_argument("--sv-vcf", type=str, default=None,
+                        help="结构变异VCF文件路径（如Bubble检测结果）")
+    parser.add_argument("--fasta", type=str, default=ScanConfig.FASTA_FILE,
+                        help="基因组FASTA文件路径（用于missense/synonymous注释）")
+
     args = parser.parse_args()
     
     # 运行扫描
@@ -2269,7 +2606,11 @@ def main():
             (args.cophe1, args.cophe1_title) if args.cophe1 else None,
             (args.cophe2, args.cophe2_title) if args.cophe2 else None,
             (args.cophe3, args.cophe3_title) if args.cophe3 else None,
-        ]
+        ],
+        # 新增：结构变异VCF
+        sv_vcf_file=args.sv_vcf,
+        # FASTA路径（用于missense/synonymous注释）
+        fasta_file=args.fasta
     )
 
 

@@ -27,8 +27,8 @@ from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer
 # 配置
 DATABASE_DIR = "d:/Desktop/project1/database_text"
 BASE_OUTPUT_DIR = "d:/Desktop/project1/result_test"
-VCF_FILE = "d:/Desktop/project1/chrALL.impute.vcf.gz"
-GFF_FILE = "d:/Desktop/project1/barley_morex_v3.chr.gff3"
+VCF_FILE = None  # 优先使用 database_text 中各基因目录下的 variants.vcf.gz
+GFF_FILE = None  # 基因结构信息从 gene_info.json 读取
 
 # 从 database_text 读取全部30个基因
 gene_dirs = [d for d in os.listdir(DATABASE_DIR) if os.path.isdir(os.path.join(DATABASE_DIR, d))]

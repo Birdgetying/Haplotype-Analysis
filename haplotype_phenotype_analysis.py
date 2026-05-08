@@ -31,6 +31,9 @@ from scipy import stats
 from scipy.stats import f_oneway, ttest_ind, pearsonr, spearmanr
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -2170,24 +2173,32 @@ class PhenotypeAssociation:
         exclude_cols = ['SampleID', 'Hap_Name', 'Haplotype_Seq']
         return [c for c in self.merged_df.columns if c not in exclude_cols]
     
-    def association_test(self, phenotype_col: str, method: str = 'auto', pc_covariates: pd.DataFrame = None) -> dict:
+    def association_test(self, phenotype_col: str, method: str = 'auto',
+                         pc_covariates: pd.DataFrame = None) -> dict:
         """
         单倍型-表型关联检验
-        
+
         Args:
             phenotype_col: 表型列名
             method: 检验方法 ('auto', 'ttest', 'anova', 'kruskal')
-            pc_covariates: PCA协变量DataFrame（包含SampleID + PC1, PC2, ...），用于群体结构矫正
-        
+            pc_covariates: 群体结构PCA协变量DataFrame (SampleID + PC1..PCn)，
+                           提供时自动执行ANCOVA矫正
+
         Returns:
             dict: 包含统计结果的字典
         """
+        # ANCOVA路径：提供PC协变量时，使用偏F检验
+        if pc_covariates is not None and 'SampleID' in pc_covariates.columns:
+            pc_cols = [c for c in pc_covariates.columns if c != 'SampleID']
+            if pc_cols:
+                return self._ancova_association_test(phenotype_col, pc_covariates)
+
         if phenotype_col not in self.merged_df.columns:
             raise ValueError(f"表型列 '{phenotype_col}' 不存在")
-        
+
         # 过滤有效数据
         df = self.merged_df[
-            (self.merged_df['Hap_Name'] != 'Other') & 
+            (self.merged_df['Hap_Name'] != 'Other') &
             (self.merged_df[phenotype_col].notna())
         ].copy()
         
@@ -2269,180 +2280,170 @@ class PhenotypeAssociation:
         # 显著性判断
         result['significant'] = result.get('p_value', 1) < 0.05
         result['highly_significant'] = result.get('p_value', 1) < 0.01
-        
-        # ===== 群体结构矫正：ANCOVA =====
-        if pc_covariates is not None and not pc_covariates.empty:
-            corrected_result = self._ancova_test(df, phenotype_col, pc_covariates)
-            if corrected_result and 'error' not in corrected_result:
-                result['corrected'] = corrected_result
-                # 用矫正后的P值覆盖显著性判断
-                result['corrected_significant'] = corrected_result.get('p_value', 1) < 0.05
-                result['corrected_highly_significant'] = corrected_result.get('p_value', 1) < 0.01
-        
+
         return result
-    
-    def _ancova_test(self, df: pd.DataFrame, phenotype_col: str, pc_covariates: pd.DataFrame) -> dict:
+
+    def _ancova_association_test(self, phenotype_col: str,
+                                  pc_covariates: pd.DataFrame) -> dict:
         """
-        ANCOVA（协方差分析）- 群体结构矫正后的关联检验
-        
-        使用OLS回归：表型 ~ 单倍型哑变量 + PC协变量
-        通过比较全模型（含单倍型+PC）与简化模型（仅PC）的F检验来判断单倍型效应
-        
-        Args:
-            df: 已过滤的merged_df
-            phenotype_col: 表型列名
-            pc_covariates: PCA协变量DataFrame（SampleID + PC1, PC2, ...）
-        
-        Returns:
-            dict: 矫正后的统计结果
+        带群体结构协变量的ANCOVA关联检验
+
+        通过比较嵌套模型检验单倍型效应（控制群体结构后）：
+          Full model:    phenotype ~ haplotype_dummies + PC1 + ... + PCn
+          Reduced model: phenotype ~ PC1 + ... + PCn
         """
+        from scipy.stats import f as f_dist
+
+        df = self.merged_df[
+            (self.merged_df['Hap_Name'] != 'Other') &
+            (self.merged_df[phenotype_col].notna())
+        ].copy()
+
+        if len(df) < 5:
+            return {'error': '样本量不足', 'n_samples': len(df)}
+
+        pc_cols = [c for c in pc_covariates.columns if c != 'SampleID']
+        if not pc_cols:
+            return self.association_test(phenotype_col)
+
+        # 避免重复合并：如果df中已存在PC列（可能由外部预先合并），先删除
+        existing_pc_cols = [c for c in pc_cols if c in df.columns]
+        if existing_pc_cols:
+            df = df.drop(columns=existing_pc_cols)
+
+        df = df.merge(pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
+
+        if len(df) < 5:
+            return {'error': '与PC协变量合并后样本量不足', 'n_samples': len(df)}
+
+        groups = df.groupby('Hap_Name')[phenotype_col].apply(list).to_dict()
+        n_groups = len(groups)
+        if n_groups < 2:
+            return {'error': '单倍型分组不足', 'n_groups': n_groups}
+
+        dummies = pd.get_dummies(df['Hap_Name'], prefix='Hap', drop_first=True)
+        hap_dummy_cols = list(dummies.columns)
+        X_hap = dummies.values
+
+        y = df[phenotype_col].values.astype(float)
+        X_pc = df[pc_cols].values.astype(float)
+
+        n = len(y)
+        k = X_hap.shape[1]
+        p = X_pc.shape[1]
+
+        X_full = np.column_stack([np.ones(n), X_hap, X_pc])
+        X_reduced = np.column_stack([np.ones(n), X_pc])
+
         try:
-            # 合并PC协变量
-            pc_cols = [c for c in pc_covariates.columns if c.startswith('PC')]
-            if not pc_cols:
-                return {'error': 'PC协变量列不存在'}
-            
-            df_merged = pd.merge(df, pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
-            
-            if len(df_merged) < 5:
-                return {'error': f'合并PC协变量后样本不足({len(df_merged)})'}
-            
-            # 检查PC列是否有有效值
-            pc_valid = df_merged[pc_cols].dropna()
-            if len(pc_valid) < 5:
-                return {'error': 'PC协变量有效值不足'}
-            
-            # 使用最大频率的单倍型作为参考
-            ref_hap = df_merged['Hap_Name'].value_counts().index[0]
-            
-            # 创建哑变量
-            dummies = pd.get_dummies(df_merged['Hap_Name'], prefix='Hap', drop_first=False)
-            hap_cols = [c for c in dummies.columns if c != f'Hap_{ref_hap}']
-            
-            if not hap_cols:
-                return {'error': '单倍型分组不足'}
-            
-            # 构建特征矩阵
-            X_hap = dummies[hap_cols].values
-            X_pc = df_merged[pc_cols].fillna(0).values
-            y = df_merged[phenotype_col].values
-            n = len(y)
-            
-            # ---- 全模型：单倍型 + PC + 截距 ----
-            X_full = np.column_stack([np.ones(n), X_hap, X_pc])
             model_full = LinearRegression(fit_intercept=False)
             model_full.fit(X_full, y)
             y_pred_full = model_full.predict(X_full)
             ss_res_full = np.sum((y - y_pred_full) ** 2)
-            
-            # ---- 简化模型：仅PC + 截距 ----
-            X_reduced = np.column_stack([np.ones(n), X_pc])
+
             model_reduced = LinearRegression(fit_intercept=False)
             model_reduced.fit(X_reduced, y)
             y_pred_reduced = model_reduced.predict(X_reduced)
             ss_res_reduced = np.sum((y - y_pred_reduced) ** 2)
-            
-            # F检验：全模型 vs 简化模型
-            p_hap = len(hap_cols)  # 单倍型参数数
-            p_full = X_full.shape[1]  # 全模型参数数
-            df_num = p_hap  # 分子自由度
-            df_den = n - p_full  # 分母自由度
-            
-            if df_den <= 0:
-                return {'error': '自由度不足'}
-            
-            ss_diff = ss_res_reduced - ss_res_full
-            ms_diff = ss_diff / df_num if df_num > 0 else 0
-            ms_res = ss_res_full / df_den
-            
-            f_stat = ms_diff / ms_res if ms_res > 0 else 0
-            
-            from scipy.stats import f as f_dist
-            p_value = 1 - f_dist.cdf(f_stat, df_num, df_den) if f_stat > 0 else 1.0
-            
-            # 全模型R²
+
             ss_tot = np.sum((y - np.mean(y)) ** 2)
-            r_squared_full = 1 - ss_res_full / ss_tot if ss_tot > 0 else 0
-            
-            # 简化模型R²（仅PC）
-            r_squared_reduced = 1 - ss_res_reduced / ss_tot if ss_tot > 0 else 0
-            
-            # 偏R²（单倍型在控制PC后的额外解释率）
-            partial_r_squared = (ss_res_reduced - ss_res_full) / ss_res_reduced if ss_res_reduced > 0 else 0
-            
-            # 各单倍型系数
-            coef_dict = {}
-            for i, col in enumerate(hap_cols):
-                hap_name = col.replace('Hap_', '')
-                coef_dict[hap_name] = float(model_full.coef_[i + 1])  # +1跳过截距
-            
+
+            df_full = n - (1 + k + p)
+            df_reduced = n - (1 + p)
+            df_extra = df_reduced - df_full
+
+            if df_full <= 0:
+                return {'error': '自由度不足，模型参数过多',
+                        'n_samples': n, 'n_params': 1 + k + p}
+
+            ss_extra = ss_res_reduced - ss_res_full
+            ms_extra = ss_extra / df_extra if df_extra > 0 else 0
+            ms_res_full = ss_res_full / df_full
+
+            f_stat = ms_extra / ms_res_full if ms_res_full > 0 else 0
+            p_value_corrected = 1 - f_dist.cdf(f_stat, df_extra, df_full) \
+                if f_stat > 0 else 1.0
+
+            r2_full = 1 - ss_res_full / ss_tot if ss_tot > 0 else 0
+            r2_reduced = 1 - ss_res_reduced / ss_tot if ss_tot > 0 else 0
+            partial_r2 = r2_full - r2_reduced
+
             result = {
-                'test_type': 'ANCOVA (PCA corrected)',
-                'f_statistic': float(f_stat),
-                'p_value': float(p_value),
-                'df_num': int(df_num),
-                'df_den': int(df_den),
-                'r_squared_full': float(r_squared_full),
-                'r_squared_reduced': float(r_squared_reduced),
-                'partial_r_squared': float(partial_r_squared),
-                'n_pc_components': len(pc_cols),
-                'reference_haplotype': ref_hap,
-                'coefficients': coef_dict,
+                'phenotype': phenotype_col,
+                'method': 'ANCOVA',
+                'n_groups': n_groups,
                 'n_samples': n,
+                'n_covariates': p,
+                'group_sizes': {k: len(v) for k, v in groups.items()},
+                'group_means': {k: np.mean(v) for k, v in groups.items()},
+                'group_stds': {k: np.std(v) for k, v in groups.items()},
+                'statistic': float(f_stat),
+                'p_value': p_value_corrected,
+                'p_value_corrected': p_value_corrected,
+                'partial_r_squared': float(partial_r2),
+                'r2_full_model': float(r2_full),
+                'r2_reduced_model': float(r2_reduced),
+                'covariates_used': pc_cols,
+                'test_type': "Partial F-test (ANCOVA)",
+                'significant': p_value_corrected < 0.05,
+                'highly_significant': p_value_corrected < 0.01,
             }
-            
+
             return result
-            
+
         except Exception as e:
-            return {'error': f'ANCOVA计算失败: {e}'}
-    
-    def regression_analysis(self, phenotype_col: str, pc_covariates: pd.DataFrame = None) -> dict:
+            return {'error': f'ANCOVA分析异常: {str(e)}'}
+
+    def regression_analysis(self, phenotype_col: str,
+                            pc_covariates: pd.DataFrame = None) -> dict:
         """
         线性回归分析 - 单倍型作为分类变量
-        
+
         Args:
             phenotype_col: 表型列名
-            pc_covariates: PCA协变量DataFrame（包含SampleID + PC1, PC2, ...），用于群体结构矫正
-        
+            pc_covariates: 群体结构PCA协变量DataFrame (SampleID + PC1..PCn)
+
         Returns:
             dict: 回归分析结果
         """
         df = self.merged_df[
-            (self.merged_df['Hap_Name'] != 'Other') & 
+            (self.merged_df['Hap_Name'] != 'Other') &
             (self.merged_df[phenotype_col].notna())
         ].copy()
-        
+
         if len(df) < 10:
             return {'error': '样本量不足进行回归分析'}
-        
-        # 合并PC协变量（如果有）
+
+        # Merge PC covariates if provided
         pc_cols = []
-        if pc_covariates is not None and not pc_covariates.empty:
-            pc_cols = [c for c in pc_covariates.columns if c.startswith('PC')]
+        if pc_covariates is not None and 'SampleID' in pc_covariates.columns:
+            pc_cols = [c for c in pc_covariates.columns if c != 'SampleID']
             if pc_cols:
-                df = pd.merge(df, pc_covariates[['SampleID'] + pc_cols], on='SampleID', how='inner')
-                df = df[df[pc_cols].notna().all(axis=1)]  # 去除PC缺失的样本
-        
-        if len(df) < 10:
-            return {'error': '合并PC协变量后样本量不足进行回归分析'}
-        
+                # 避免重复合并：如果df中已存在PC列，先删除
+                existing_pc_cols = [c for c in pc_cols if c in df.columns]
+                if existing_pc_cols:
+                    df = df.drop(columns=existing_pc_cols)
+                df = df.merge(pc_covariates[['SampleID'] + pc_cols],
+                             on='SampleID', how='inner')
+                if len(df) < 10:
+                    return {'error': '与PC协变量合并后样本量不足进行回归分析'}
+
         # 使用最大频率的单倍型作为参考
         ref_hap = df['Hap_Name'].value_counts().index[0]
-        
+
         # 创建哑变量
         dummies = pd.get_dummies(df['Hap_Name'], prefix='Hap', drop_first=False)
         df = pd.concat([df, dummies], axis=1)
-        
+
         # OLS 回归（使用sklearn实现，无需statsmodels）
         hap_cols = [c for c in dummies.columns if c != f'Hap_{ref_hap}']
         if not hap_cols:
             return {'error': '单倍型分组不足'}
-        
+
         try:
-            # 准备特征矩阵和目标变量
-            X_hap = df[hap_cols].values
-            X_pc = df[pc_cols].fillna(0).values if pc_cols else np.empty((len(df), 0))
-            X = np.column_stack([X_hap, X_pc]) if pc_cols else X_hap
+            # 准备特征矩阵和目标变量（含PC协变量）
+            all_feature_cols = hap_cols + pc_cols
+            X = df[all_feature_cols].values
             y = df[phenotype_col].values
             
             # 添加截距项
@@ -2460,31 +2461,29 @@ class PhenotypeAssociation:
             
             # 计算调整后R²
             n = len(y)
-            p = X.shape[1]  # 总特征数（单倍型+PC）
-            adj_r_squared = 1 - (1 - r_squared) * (n - 1) / (n - p - 1) if n > p + 1 else 0
-            
-            # 计算F统计量
-            ms_reg = (ss_tot - ss_res) / p if p > 0 else 0
-            ms_res = ss_res / (n - p - 1) if n > p + 1 else 1
+            p_total = len(all_feature_cols)  # 含PC的总特征数
+            adj_r_squared = 1 - (1 - r_squared) * (n - 1) / (n - p_total - 1) if n > p_total + 1 else 0
+
+            # 计算F统计量（仅针对单倍型特征）
+            ms_reg = (ss_tot - ss_res) / p_total if p_total > 0 else 0
+            ms_res = ss_res / (n - p_total - 1) if n > p_total + 1 else 1
             f_statistic = ms_reg / ms_res if ms_res > 0 else 0
-            
+
             # 计算F检验p值
             from scipy.stats import f as f_dist
-            f_pvalue = 1 - f_dist.cdf(f_statistic, p, n - p - 1) if f_statistic > 0 else 1
-            
+            f_pvalue = 1 - f_dist.cdf(f_statistic, p_total, n - p_total - 1) if f_statistic > 0 else 1
+
             # 计算系数的t检验p值（简化版）
             coef_pvalues = []
             for i in range(1, len(model.coef_)):
-                # 使用标准误简化估计
                 se = np.sqrt(ms_res / np.sum(X[:, i-1])) if np.sum(X[:, i-1]) > 0 else 1
                 t_stat = model.coef_[i] / se if se > 0 else 0
-                # 近似p值
-                p_val = 2 * (1 - stats.t.cdf(abs(t_stat), n - p - 1)) if n > p + 1 else 1
+                p_val = 2 * (1 - stats.t.cdf(abs(t_stat), n - p_total - 1)) if n > p_total + 1 else 1
                 coef_pvalues.append(p_val)
-            
+
             result = {
                 'phenotype': phenotype_col,
-                'method': 'OLS Regression (PCA corrected)' if pc_cols else 'OLS Regression',
+                'method': 'OLS Regression',
                 'reference_haplotype': ref_hap,
                 'r_squared': r_squared,
                 'adj_r_squared': adj_r_squared,
@@ -2493,25 +2492,25 @@ class PhenotypeAssociation:
                 'n_samples': len(df),
                 'coefficients': {},
                 'p_values': {},
-                'n_pc_components': len(pc_cols),
+                'pc_covariates_used': pc_cols if pc_cols else None,
+                'pc_coefficients': {}
             }
-            
+
             for i, col in enumerate(hap_cols):
                 if i < len(model.coef_) - 1:
                     result['coefficients'][col] = model.coef_[i + 1]
                     result['p_values'][col] = coef_pvalues[i] if i < len(coef_pvalues) else 1.0
-            
-            # 如果有PC协变量，也输出PC系数
-            if pc_cols:
-                pc_coef = {}
-                for i, col in enumerate(pc_cols):
-                    idx = len(hap_cols) + i
-                    if idx < len(model.coef_) - 1:
-                        pc_coef[col] = model.coef_[idx + 1]
-                result['pc_coefficients'] = pc_coef
-            
+
+            # 提取PC系数
+            pc_start_idx = 1 + len(hap_cols)
+            for j, pc_col in enumerate(pc_cols):
+                idx = pc_start_idx + j
+                if idx < len(model.coef_):
+                    result['pc_coefficients'][pc_col] = model.coef_[idx]
+                    result['coefficients'][pc_col] = model.coef_[idx]
+
             return result
-            
+
         except Exception as e:
             return {'error': str(e)}
 
@@ -2932,127 +2931,6 @@ class AMOVAAnalyzer:
 
 
 # ============================================================================
-# 模块3.5: 群体结构矫正
-# ============================================================================
-
-class PopulationStructureCorrector:
-    """
-    群体结构矫正模块
-    基于基因型PCA计算群体结构协变量，用于关联分析中的群体结构矫正
-    
-    原理：
-    1. 从变异位点构建基因型矩阵（样本 × 位点）
-    2. 对基因型矩阵进行PCA降维
-    3. 取前K个主成分作为群体结构协变量
-    4. 在关联分析中（ANCOVA / 线性回归）加入PC协变量
-    """
-    
-    def __init__(self, hap_sample_df: pd.DataFrame, n_components: int = 3):
-        """
-        Args:
-            hap_sample_df: 包含 SampleID, Hap_Name, Haplotype_Seq 的数据框
-            n_components: 保留的PCA主成分数（默认3）
-        """
-        self.hap_sample_df = hap_sample_df
-        self.n_components = n_components
-        self.pc_df = None  # 样本ID -> PC坐标
-        self.var_explained = []
-    
-    def compute_pca_covariates(self) -> pd.DataFrame:
-        """
-        从单倍型序列计算PCA协变量
-        
-        Returns:
-            pd.DataFrame: 包含 SampleID, PC1, PC2, ... 的数据框
-        """
-        logger = get_logger()
-        
-        if 'Haplotype_Seq' not in self.hap_sample_df.columns:
-            logger.warning("[群体结构] 缺少 Haplotype_Seq 列，无法计算PCA")
-            return pd.DataFrame()
-        
-        df = self.hap_sample_df[
-            (self.hap_sample_df['Hap_Name'] != 'Other') &
-            (self.hap_sample_df['Haplotype_Seq'].notna())
-        ].copy()
-        
-        if len(df) < 5:
-            logger.warning(f"[群体结构] 样本数不足({len(df)})，无法计算PCA")
-            return pd.DataFrame()
-        
-        try:
-            from sklearn.decomposition import PCA
-            from sklearn.impute import SimpleImputer
-            
-            # 构建基因型数值矩阵
-            base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': np.nan}
-            samples = []
-            sample_ids = []
-            for _, row in df.iterrows():
-                seq = row['Haplotype_Seq'].replace('|', '')
-                numeric_seq = [base_map.get(b.upper(), np.nan) for b in seq]
-                samples.append(numeric_seq)
-                sample_ids.append(row['SampleID'])
-            
-            if len(samples) < 5:
-                logger.warning(f"[群体结构] 有效样本不足({len(samples)})")
-                return pd.DataFrame()
-            
-            # 统一序列长度
-            max_len = max(len(s) for s in samples)
-            samples = [s + [np.nan] * (max_len - len(s)) for s in samples]
-            X = np.array(samples)
-            
-            # 用均值填充NaN
-            imputer = SimpleImputer(strategy='mean')
-            X_imputed = imputer.fit_transform(X)
-            
-            # 标准化
-            X_std = (X_imputed - X_imputed.mean(axis=0)) / (X_imputed.std(axis=0) + 1e-10)
-            
-            # PCA
-            n_pc = min(self.n_components, len(samples) - 1, X_std.shape[1])
-            pca = PCA(n_components=n_pc)
-            pca_result = pca.fit_transform(X_std)
-            self.var_explained = [float(v * 100) for v in pca.explained_variance_ratio_]
-            
-            # 构建结果DataFrame
-            pc_data = {'SampleID': sample_ids}
-            for i in range(n_pc):
-                pc_data[f'PC{i+1}'] = pca_result[:, i]
-            
-            self.pc_df = pd.DataFrame(pc_data)
-            
-            logger.info(f"[群体结构] PCA计算完成: {n_pc} 个主成分")
-            for i, v in enumerate(self.var_explained):
-                logger.info(f"  PC{i+1}: {v:.1f}% 方差解释率")
-            
-            return self.pc_df
-            
-        except Exception as e:
-            logger.warning(f"[群体结构] PCA计算失败: {e}")
-            return pd.DataFrame()
-    
-    def get_pc_covariates_for_samples(self, sample_ids: list) -> pd.DataFrame:
-        """
-        获取指定样本的PC协变量
-        
-        Args:
-            sample_ids: 样本ID列表
-            
-        Returns:
-            pd.DataFrame: 指定样本的PC协变量
-        """
-        if self.pc_df is None:
-            self.compute_pca_covariates()
-        
-        if self.pc_df is None or self.pc_df.empty:
-            return pd.DataFrame()
-        
-        return self.pc_df[self.pc_df['SampleID'].isin(sample_ids)]
-
-
-# ============================================================================
 # 模块4: 单倍型效应分析
 # ============================================================================
 
@@ -3416,6 +3294,136 @@ class HaplotypeEffectAnalyzer:
         else:
             plt.show()
             return None
+
+
+# ============================================================================
+# 模块4.5: 群体结构校正 (Population Structure Correction via PCA)
+# ============================================================================
+
+class PopulationStructureCorrector:
+    """
+    基于PCA的群体结构校正模块
+
+    从单倍型序列构建基因型数值矩阵，通过PCA提取群体结构主成分，
+    用于在关联检验中校正群体分层效应。
+    """
+
+    BASE_MAP = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': 6}
+    N_MISSING = 6
+
+    def __init__(self, n_components: int = 5, random_state: int = 42):
+        self.n_components = n_components
+        self.random_state = random_state
+        self.pca = None
+        self.scaler = None
+        self.imputer = None
+        self.explained_variance_ratio_ = None
+        self.pc_scores_ = None
+        self.n_samples_ = 0
+        self.n_features_ = 0
+        self._effective_n_components_ = 0
+
+    def _encode_sequences(self, hap_sample_df: pd.DataFrame) -> tuple:
+        """
+        将 Haplotype_Seq 列编码为数值矩阵
+
+        Returns:
+            tuple: (sample_ids: list, genotype_matrix: np.ndarray)
+        """
+        samples = []
+        sample_ids = []
+
+        for _, row in hap_sample_df.iterrows():
+            seq = str(row['Haplotype_Seq']).replace('|', '')
+            numeric_seq = [self.BASE_MAP.get(b.upper(), self.N_MISSING) for b in seq]
+            samples.append(numeric_seq)
+            sample_ids.append(row['SampleID'])
+
+        max_len = max(len(s) for s in samples) if samples else 0
+        samples = [s + [self.N_MISSING] * (max_len - len(s)) for s in samples]
+
+        return sample_ids, np.array(samples, dtype=float)
+
+    def fit(self, hap_sample_df: pd.DataFrame) -> 'PopulationStructureCorrector':
+        """从单倍型样本数据拟合PCA模型"""
+        logger = get_logger()
+
+        if 'Haplotype_Seq' not in hap_sample_df.columns:
+            logger.warning("[PopStruct] Haplotype_Seq 列不存在，跳过群体结构校正")
+            self._effective_n_components_ = 0
+            return self
+
+        n_samples = len(hap_sample_df)
+        if n_samples < 3:
+            logger.warning(f"[PopStruct] 样本数不足 ({n_samples})，跳过PCA")
+            self._effective_n_components_ = 0
+            return self
+
+        sample_ids, X_raw = self._encode_sequences(hap_sample_df)
+        self.n_samples_ = X_raw.shape[0]
+        self.n_features_ = X_raw.shape[1]
+
+        logger.info(f"[PopStruct] 编码矩阵: {self.n_samples_} samples x {self.n_features_} features")
+
+        if self.n_features_ == 0:
+            logger.warning("[PopStruct] 特征数为0，跳过")
+            self._effective_n_components_ = 0
+            return self
+
+        self.imputer = SimpleImputer(strategy='mean')
+        X_imputed = self.imputer.fit_transform(X_raw)
+
+        self.scaler = StandardScaler()
+        X_scaled = self.scaler.fit_transform(X_imputed)
+
+        max_components = min(self.n_components, self.n_samples_ - 1, self.n_features_)
+        if max_components < 1:
+            logger.warning(f"[PopStruct] 无法提取有效PC (max={max_components})")
+            self._effective_n_components_ = 0
+            return self
+
+        self._effective_n_components_ = max_components
+
+        self.pca = PCA(n_components=max_components, random_state=self.random_state)
+        pc_scores = self.pca.fit_transform(X_scaled)
+
+        self.explained_variance_ratio_ = self.pca.explained_variance_ratio_
+
+        pc_columns = [f'PC{i+1}' for i in range(max_components)]
+        self.pc_scores_ = pd.DataFrame(pc_scores, columns=pc_columns)
+        self.pc_scores_.insert(0, 'SampleID', sample_ids)
+
+        logger.info(f"[PopStruct] PCA完成: {max_components} PCs, "
+                    f"累计方差: {sum(self.explained_variance_ratio_):.3f}")
+
+        return self
+
+    def fit_transform(self, hap_sample_df: pd.DataFrame) -> pd.DataFrame:
+        """拟合并返回PC scores DataFrame"""
+        self.fit(hap_sample_df)
+        if self.pc_scores_ is not None:
+            return self.pc_scores_.copy()
+        return pd.DataFrame({'SampleID': hap_sample_df['SampleID'].tolist()})
+
+    def get_pc_scores(self) -> pd.DataFrame:
+        """返回PC scores DataFrame"""
+        if self.pc_scores_ is None:
+            return pd.DataFrame()
+        return self.pc_scores_.copy()
+
+    def get_explained_variance(self) -> dict:
+        """返回解释方差信息"""
+        if self.explained_variance_ratio_ is None:
+            return {'n_components': 0, 'explained_variance_ratio': [], 'cumulative_variance': 0.0}
+        return {
+            'n_components': self._effective_n_components_,
+            'explained_variance_ratio': [float(v) for v in self.explained_variance_ratio_],
+            'cumulative_variance': float(sum(self.explained_variance_ratio_))
+        }
+
+    def is_valid(self) -> bool:
+        """检查校正器是否成功拟合"""
+        return self._effective_n_components_ > 0 and self.pc_scores_ is not None
 
 
 # ============================================================================
@@ -4329,6 +4337,624 @@ class PromoterAnnotator:
 
 
 # ============================================================================
+# 模块5.5: 单倍型打分模型 (Haplotype Scoring Model)
+# ============================================================================
+
+class HaplotypeScorer:
+    """
+    多组分单倍型打分模型
+
+    综合五个维度计算每个单倍型的得分（0-1归一化）：
+    1. VariantEffectScore  — 变异功能严重度加权
+    2. BurdenScore         — 稀有变异(MAF<0.05)负荷
+    3. GWASScore           — 外部GWAS信号整合
+    4. MultiOmicsScore     — 表达协变量关联
+    5. FineMappingScore    — 近似可信集后验概率
+
+    引用文献思路:
+    - Gene-based haplotype GWAS: Lo et al. 2023, Hamazaki & Iwata 2020
+    - Combined multi-omics burden + GWAS fine-mapping framework
+    """
+
+    FUNCTIONAL_WEIGHTS = {
+        'missense_non_conservative': 5, 'frameshift': 5,
+        'missense_semi_conservative': 4, 'missense_conservative': 3,
+        'stop_gain': 3, 'SV': 3,
+        'UTR': 2, 'splice_region': 2,
+        'promoter_core': 2.5,       # -50bp to TSS, 核心启动子
+        'promoter_proximal': 2.0,   # -200 to -50bp
+        'promoter_distal': 1.5,     # -1000 to -200bp
+        'promoter': 1,              # 远端启动子 (>-1000bp)
+        'intron': 0.5, 'synonymous': 0.5,
+        'intergenic': 0.1, 'other': 0.1,
+    }
+
+    DEFAULT_COMPONENT_WEIGHTS = {
+        'variant_effect': 1.0,
+        'burden': 1.0,
+        'gwas': 0.8,
+        'multi_omics': 0.8,
+        'fine_mapping': 0.6,
+        'effect_size': 0.9,
+        'genetic_distinct': 0.5,
+    }
+
+    def __init__(self, hap_sample_df, variant_positions, variant_info=None,
+                 snp_effects=None, gwas_data=None, exons=None, cds=None,
+                 gene_start=None, gene_end=None, phenotype_col='phenotype',
+                 component_weights=None, maf_threshold=0.05,
+                 ld_r2_matrix=None,
+                 effect_results=None, promoter_start=None, promoter_end=None,
+                 strand='+', pve=None):
+        self.hap_sample_df = hap_sample_df
+        self.variant_positions = list(variant_positions) if variant_positions else []
+        self.variant_info = variant_info or {}
+        self.snp_effects = snp_effects or {}
+        self.gwas_data = gwas_data or []
+        self.exons = exons or []
+        self.cds = cds or []
+        self.gene_start = gene_start
+        self.gene_end = gene_end
+        self.promoter_start = promoter_start
+        self.promoter_end = promoter_end
+        self.strand = strand
+        self.phenotype_col = phenotype_col
+        self.maf_threshold = maf_threshold
+        self.component_weights = component_weights or self.DEFAULT_COMPONENT_WEIGHTS
+        self.ld_r2_matrix = ld_r2_matrix  # n×n LD r² matrix, 与 variant_positions 顺序一致
+        self.effect_results = effect_results or {}
+        self.pve = pve  # Phenotypic Variance Explained (0-1), 用于置信度校准
+
+        # Pre-compute lookup maps
+        self.pos_annotation = self._build_annotation_map()
+        self.pos_maf = self._build_maf_map()
+        self.pos_gwas_logp = self._build_gwas_map()
+
+        # Haplotype data
+        self.hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
+        self.unique_haps = sorted(hap_sample_df[self.hap_col].unique())
+        self.grand_pheno_mean = hap_sample_df[self.phenotype_col].mean()
+        self.grand_pheno_std = hap_sample_df[self.phenotype_col].std()
+
+    def _classify_position(self, pos):
+        """对位置进行功能分类，返回 FUNCTIONAL_WEIGHTS 中的 key
+
+        启动子变异按相对TSS距离分级:
+        - promoter_core:     ≤50bp  (核心启动子，权重2.5)
+        - promoter_proximal: ≤200bp (近端启动子，权重2.0)
+        - promoter_distal:   ≤1000bp(远端启动子，权重1.5)
+        - promoter:          >1000bp(远端上游，权重1.0)
+        """
+        # 1. snp_effects 优先（含精细注释如 missense_conservative）
+        if pos in self.snp_effects:
+            ann = self.snp_effects[pos]
+            # 修正：通过 variant_info 检查 indel/SV
+            if ann in ('UTR', 'other', 'promoter') and pos in self.variant_info:
+                vinfo = self.variant_info[pos]
+                if vinfo.get('is_sv', False):
+                    return 'SV'
+                ref, alt = str(vinfo.get('ref', '')), str(vinfo.get('alt', ''))
+                if len(ref) != len(alt):
+                    return 'SV' if abs(len(ref) - len(alt)) >= 50 else 'other'
+            # 启动子分级：检查是否在启动子区域内
+            if ann == 'promoter' and self.gene_start is not None:
+                return self._grade_promoter(pos)
+            return ann if ann in self.FUNCTIONAL_WEIGHTS else 'other'
+
+        # 2. variant_info 回退（len_diff / is_sv）
+        if pos in self.variant_info:
+            vinfo = self.variant_info[pos]
+            if vinfo.get('is_sv', False):
+                return 'SV'
+            ref, alt = str(vinfo.get('ref', '')), str(vinfo.get('alt', ''))
+            if alt.startswith('<') and alt.endswith('>'):
+                return 'SV'
+            if abs(len(ref) - len(alt)) >= 50:
+                return 'SV'
+            if len(alt) > len(ref):
+                return 'other'
+            if len(ref) > len(alt):
+                return 'other'
+
+        # 3. 位置推断：CDS > UTR > intron > promoter > intergenic
+        in_exon = any(es <= pos <= ee for es, ee in self.exons)
+        in_cds = any(cs <= pos <= ce for cs, ce in self.cds)
+        if in_cds:
+            return 'synonymous'  # CDS内无注释变异至少等同于同义突变(0.5)，而非基因间区(0.1)
+        if in_exon:
+            return 'UTR'
+        if self.gene_start and self.gene_end and self.gene_start <= pos <= self.gene_end:
+            return 'intron'
+
+        # 启动子区域：基因上游 (正链: < gene_start; 负链: > gene_end)
+        if self.gene_start is not None and self.gene_end is not None:
+            if self.strand == '+' and pos < self.gene_start:
+                return self._grade_promoter(pos)
+            if self.strand == '-' and pos > self.gene_end:
+                return self._grade_promoter(pos)
+
+        return 'intergenic'
+
+    def _grade_promoter(self, pos):
+        """按距TSS距离对启动子变异进行分级"""
+        if self.gene_start is None:
+            return 'promoter'
+        tss = self.gene_start if self.strand == '+' else self.gene_end
+        dist = abs(pos - tss)
+        if dist <= 50:
+            return 'promoter_core'
+        elif dist <= 200:
+            return 'promoter_proximal'
+        elif dist <= 1000:
+            return 'promoter_distal'
+        else:
+            return 'promoter'
+
+    def _build_annotation_map(self):
+        return {pos: self._classify_position(pos) for pos in self.variant_positions}
+
+    def _build_maf_map(self):
+        maf_map = {}
+        for pos in self.variant_positions:
+            if pos in self.variant_info:
+                maf_map[pos] = float(self.variant_info[pos].get('maf', 0.5))
+            else:
+                maf_map[pos] = 0.5
+        return maf_map
+
+    def _build_gwas_map(self):
+        gwas_map = {}
+        for d in self.gwas_data:
+            pos = d.get('pos')
+            pval = d.get('pvalue', 1.0)
+            if pos is not None and pval is not None and pval > 0:
+                gwas_map[pos] = -np.log10(pval)
+            else:
+                gwas_map[pos] = 0.0
+        # Fill missing positions
+        for pos in self.variant_positions:
+            if pos not in gwas_map:
+                gwas_map[pos] = 0.0
+        return gwas_map
+
+    def _get_hap_seq_map(self):
+        """构建 {hap_name: haplotype_sequence_string} 映射"""
+        seq_map = {}
+        for hap in self.unique_haps:
+            rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
+            if len(rows) > 0 and 'Haplotype_Seq' in rows.columns:
+                seq_map[hap] = rows['Haplotype_Seq'].iloc[0].replace('|', '')
+        return seq_map
+
+    def _is_alt_allele(self, pos, allele):
+        """判断等位基因是否为ALT（非参考）等位基因
+
+        - N/空 → 缺失数据，返回False
+        - + / - → indel，始终为变异等位基因
+        - A/T/C/G → SNP，与 variant_info 中的 ref 比对
+        - 无ref信息 → 保守处理，非N即视为变异
+        """
+        if not allele or allele == 'N':
+            return False
+        if allele in ('+', '-'):
+            return True
+        vinfo = self.variant_info.get(pos, {}) if self.variant_info else {}
+        ref = str(vinfo.get('ref', '')).upper()
+        if ref:
+            return allele.upper() != ref
+        return True  # 无参考信息时，非N即视为变异（保守）
+
+    def compute_variant_effect_score(self):
+        """变异效应得分：单倍型中实际携带的ALT等位基因的功能严重度总和"""
+        seq_map = self._get_hap_seq_map()
+        scores = {}
+        for hap, seq in seq_map.items():
+            total = 0.0
+            for i, pos in enumerate(self.variant_positions):
+                if i < len(seq) and pos in self.pos_annotation:
+                    allele = seq[i]
+                    if not self._is_alt_allele(pos, allele):
+                        continue
+                    ann = self.pos_annotation[pos]
+                    weight = self.FUNCTIONAL_WEIGHTS.get(ann, 0.1)
+                    total += weight
+            scores[hap] = total
+        return scores
+
+    def compute_burden_score(self):
+        """稀有变异负荷得分：仅统计实际携带的、MAF<阈值的ALT等位基因
+
+        权重 = 功能严重度 × (-log10(MAF))，越稀有权重越高
+        """
+        seq_map = self._get_hap_seq_map()
+        scores = {}
+        for hap, seq in seq_map.items():
+            total = 0.0
+            for i, pos in enumerate(self.variant_positions):
+                if i >= len(seq) or pos not in self.pos_annotation:
+                    continue
+                allele = seq[i]
+                if not self._is_alt_allele(pos, allele):
+                    continue
+                maf = self.pos_maf.get(pos, 0.5)
+                if maf < self.maf_threshold:
+                    ann = self.pos_annotation[pos]
+                    func_w = self.FUNCTIONAL_WEIGHTS.get(ann, 0.1)
+                    # -log10(MAF): MAF=0.001→3, MAF=0.01→2, MAF=0.05→1.3
+                    rarity_w = -np.log10(max(maf, 1e-4))
+                    total += func_w * rarity_w
+            scores[hap] = total
+        return scores
+
+    def compute_gwas_score(self):
+        """GWAS信号得分：单倍型实际携带的ALT等位基因的-log10(p)连续加权求和"""
+        seq_map = self._get_hap_seq_map()
+        scores = {}
+        for hap, seq in seq_map.items():
+            total = 0.0
+            for i, pos in enumerate(self.variant_positions):
+                if i >= len(seq):
+                    continue
+                allele = seq[i]
+                if not self._is_alt_allele(pos, allele):
+                    continue
+                logp = self.pos_gwas_logp.get(pos, 0.0)
+                total += logp  # 连续加权，无硬阈值
+            scores[hap] = total
+        return scores
+
+    def compute_multi_omics_score(self):
+        """多组学得分：数值型协变量的标准化偏差均值（dropna处理）"""
+        covariate_cols = [c for c in self.hap_sample_df.columns
+                         if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', self.phenotype_col]
+                         and pd.api.types.is_numeric_dtype(self.hap_sample_df[c])]
+        if not covariate_cols:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        scores = {}
+        for hap in self.unique_haps:
+            hap_rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
+            comp_sum = 0.0
+            n_cov = 0
+            for cov in covariate_cols:
+                if cov in hap_rows.columns:
+                    hap_vals = hap_rows[cov].dropna()
+                    all_vals = self.hap_sample_df[cov].dropna()
+                    if len(hap_vals) == 0 or len(all_vals) == 0:
+                        continue
+                    cov_mean = hap_vals.mean()
+                    cov_std = all_vals.std()
+                    if pd.notna(cov_std) and cov_std > 0:
+                        comp_sum += abs(cov_mean - all_vals.mean()) / cov_std
+                        n_cov += 1
+            scores[hap] = comp_sum / max(n_cov, 1)
+        return scores
+
+    def compute_effect_size_score(self):
+        """效应量得分：基于HaplotypeEffectAnalyzer的标准化效应量
+
+        score[hap] = |Cohen's d| × sample_factor
+
+        - |d|: 0.2=小, 0.5=中, 0.8=大 (Cohen's convention)
+        - 小样本量降权防止不稳定估计
+        """
+        hap_effects = self.effect_results.get('haplotype_effects', [])
+        if not hap_effects:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        max_n = max((h.get('n_samples', 1) for h in hap_effects), default=1)
+        scores = {}
+        for h in hap_effects:
+            hap_name = h.get('haplotype', '')
+            if hap_name in self.unique_haps:
+                d = abs(h.get('cohens_d', 0))
+                n = h.get('n_samples', 1)
+                # 极小样本量(<30% of max_n 或 <5)降权
+                sample_factor = min(1.0, n / max(max_n * 0.3, 5))
+                scores[hap_name] = d * sample_factor
+
+        # Fill any missing haplotypes
+        for hap in self.unique_haps:
+            if hap not in scores:
+                scores[hap] = 0.0
+        return scores
+
+    def compute_genetic_distinctiveness_score(self):
+        """遗传分化得分：样本量加权的平均Hamming距离
+
+        对每个单倍型，计算其与其他所有单倍型之间的Hamming距离
+        （逐位比较等位基因不同的位点数），以目标单倍型的样本量加权。
+        距离越大 → 该单倍型在群体中越独特。
+
+        公式: score[hap] = Σⱼ (nⱼ × Hamming(seq_hap, seqⱼ)) / Σⱼ nⱼ
+        """
+        if len(self.unique_haps) < 2:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        seq_map = self._get_hap_seq_map()
+        if not seq_map:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # 样本量统计
+        hap_counts = {}
+        for hap in self.unique_haps:
+            rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
+            hap_counts[hap] = len(rows)
+
+        # 计算每个单倍型的加权平均Hamming距离
+        distances = {}
+        for hap_i in self.unique_haps:
+            seq_i = seq_map.get(hap_i, '')
+            if not seq_i:
+                distances[hap_i] = 0.0
+                continue
+
+            weighted_sum = 0.0
+            total_other = 0
+            for hap_j in self.unique_haps:
+                if hap_i == hap_j:
+                    continue
+                seq_j = seq_map.get(hap_j, '')
+                n_j = hap_counts.get(hap_j, 0)
+                if n_j == 0:
+                    continue
+                # Hamming距离：逐位比较
+                ham = sum(1 for a, b in zip(seq_i, seq_j) if a != b)
+                # 处理长度不一致的边界情况
+                len_diff = abs(len(seq_i) - len(seq_j))
+                ham += len_diff
+                weighted_sum += ham * n_j
+                total_other += n_j
+
+            distances[hap_i] = weighted_sum / total_other if total_other > 0 else 0.0
+
+        # 归一化
+        max_dist = max(distances.values()) if distances else 1.0
+        if max_dist > 0:
+            return {hap: d / max_dist for hap, d in distances.items()}
+        return {hap: 0.0 for hap in self.unique_haps}
+
+    def _get_ld_r2(self, pos_i, pos_j):
+        """查询两个位点之间的LD r²值"""
+        if self.ld_r2_matrix is None:
+            return 0.0
+        try:
+            idx_i = self.variant_positions.index(pos_i)
+            idx_j = self.variant_positions.index(pos_j)
+            if idx_i < len(self.ld_r2_matrix) and idx_j < len(self.ld_r2_matrix[idx_i]):
+                return self.ld_r2_matrix[idx_i][idx_j]
+        except (ValueError, IndexError, TypeError):
+            pass
+        return 0.0
+
+    def compute_fine_mapping_score(self):
+        """Fine-mapping得分：基于Z统计量的近似贝叶斯因子 + LD剪枝
+
+        1. p → Z = Φ⁻¹(1-p/2) → logBF = Z²/2
+        2. Log-sum-exp归一化为后验包含概率 PIP
+        3. LD剪枝 (r²≥0.5)：选中高PIP位点后，LD关联位点被降权
+        4. 按单倍型实际携带的ALT等位基因汇总剪枝后的PIP
+
+        参考方法: Wakefield (2009) ABF; GCTA-COJO 条件分析思想
+        """
+        from scipy import stats as _scipy_stats
+
+        seq_map = self._get_hap_seq_map()
+        n_pos = len(self.variant_positions)
+        if n_pos == 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # Step 1: per-position log-BF via Z-statistic approximation
+        # ABF ≈ exp(Z²/2) where Z = Φ⁻¹(1-p/2), 在log空间计算避免溢出
+        pos_log_bf = {}
+        for pos in self.variant_positions:
+            logp = self.pos_gwas_logp.get(pos, 0.0)
+            if logp > 0:
+                pval = np.power(10, -logp)
+                pval = max(pval, 1e-300)
+                z_sq = _scipy_stats.chi2.ppf(1.0 - pval, 1)  # χ² = Z², 直接用卡方分位数
+                pos_log_bf[pos] = z_sq / 2.0
+            else:
+                pos_log_bf[pos] = -np.inf
+
+        # Log-sum-exp归一化 → PIP
+        max_log_bf = max(pos_log_bf.values())
+        if max_log_bf <= -np.inf:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        pos_bf = {}
+        for pos, lb in pos_log_bf.items():
+            if lb > -np.inf:
+                pos_bf[pos] = np.exp(lb - max_log_bf)  # 防止溢出
+            else:
+                pos_bf[pos] = 0.0
+
+        total_bf = sum(pos_bf.values())
+        if total_bf <= 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        pos_pip = {pos: bf / total_bf for pos, bf in pos_bf.items()}
+
+        # Step 2: LD-pruning (按PIP降序贪心剪枝)
+        sorted_positions = sorted(self.variant_positions,
+                                  key=lambda p: pos_pip.get(p, 0), reverse=True)
+        LD_THRESHOLD = 0.5  # r² ≥ 0.5 视为冗余
+
+        selected = {}  # pos → adjusted_pip
+        for pos in sorted_positions:
+            pip = pos_pip.get(pos, 0)
+            if pip < 1e-6:
+                continue
+
+            # 检查与已选中位点的最大LD
+            max_r2 = 0.0
+            for sel_pos in selected:
+                r2 = self._get_ld_r2(pos, sel_pos)
+                if r2 > max_r2:
+                    max_r2 = r2
+
+            if max_r2 < LD_THRESHOLD:
+                # 独立信号 → 保留完整PIP
+                selected[pos] = pip
+            else:
+                # LD冗余 → 软降权 (r²越高降权越多)
+                adjusted = pip * (1.0 - max_r2)
+                if adjusted > 1e-4:
+                    selected[pos] = adjusted
+
+        # Step 3: 按单倍型实际携带的ALT等位基因汇总
+        scores = {}
+        for hap, seq in seq_map.items():
+            total = 0.0
+            for i, pos in enumerate(self.variant_positions):
+                if pos not in selected:
+                    continue
+                if i >= len(seq):
+                    continue
+                allele = seq[i]
+                if not self._is_alt_allele(pos, allele):
+                    continue
+                total += selected[pos]
+            scores[hap] = total
+
+        return scores
+
+    def _minmax_normalize(self, scores_dict):
+        """Min-Max归一化到 [0, 1]，自动剔除NaN值"""
+        if not scores_dict:
+            return {}
+        vals = [v for v in scores_dict.values() if isinstance(v, (int, float)) and v == v]  # v==v 过滤NaN
+        if not vals:
+            return {k: 0.0 for k in scores_dict}
+        vmin, vmax = min(vals), max(vals)
+        if vmax == vmin:
+            return {k: 0.0 for k in scores_dict}  # 无区分力 → 不贡献总分
+        result = {}
+        for k, v in scores_dict.items():
+            if isinstance(v, float) and v != v:  # NaN
+                result[k] = 0.0
+            else:
+                result[k] = (v - vmin) / (vmax - vmin)
+        return result
+
+    def score_all(self):
+        """
+        主入口：计算所有单倍型的综合得分 + 每个样本的得分 + 回归统计
+
+        七个评分组件：
+        1. variant_effect      — 变异功能严重度
+        2. burden              — 稀有变异负荷
+        3. gwas                — GWAS信号整合
+        4. multi_omics         — 多组学协变量偏差
+        5. fine_mapping        — LD-pruned 近似贝叶斯因子
+        6. effect_size         — 单倍型效应量 (Cohen's d)
+        7. genetic_distinct    — 遗传分化距离 (AMOVA近似)
+
+        PVE校准：若PVE < 5%，标记 low_confidence=True
+
+        Returns:
+            dict with per_sample, per_haplotype, r_squared, regression_pvalue,
+                 slope, intercept, component_weights, confidence_level, low_confidence
+        """
+        # 计算七个组件的原始得分
+        raw_components = {
+            'variant_effect': self.compute_variant_effect_score(),
+            'burden': self.compute_burden_score(),
+            'gwas': self.compute_gwas_score(),
+            'multi_omics': self.compute_multi_omics_score(),
+            'fine_mapping': self.compute_fine_mapping_score(),
+            'effect_size': self.compute_effect_size_score(),
+            'genetic_distinct': self.compute_genetic_distinctiveness_score(),
+        }
+
+        # 归一化各组件
+        norm_components = {k: self._minmax_normalize(v) for k, v in raw_components.items()}
+
+        # 加权求和得到每个单倍型的总分
+        hap_total = {}
+        for hap in self.unique_haps:
+            total = 0.0
+            for comp_name in norm_components:
+                w = self.component_weights.get(comp_name, 1.0)
+                total += w * norm_components[comp_name].get(hap, 0.0)
+            hap_total[hap] = total
+
+        # MinMax 归一化总分
+        hap_total_norm = self._minmax_normalize(hap_total)
+
+        # PVE 置信度校准
+        if self.pve is not None:
+            if self.pve >= 0.20:
+                confidence_level = 'high'
+                low_confidence = False
+            elif self.pve >= 0.05:
+                confidence_level = 'moderate'
+                low_confidence = False
+            else:
+                confidence_level = 'low'
+                low_confidence = True
+        else:
+            confidence_level = 'unknown'
+            low_confidence = False
+
+        # 构建 per_haplotype 输出
+        per_haplotype = {}
+        for hap in self.unique_haps:
+            entry = {}
+            for comp_name in sorted(norm_components.keys()):
+                entry[comp_name] = round(norm_components[comp_name].get(hap, 0), 4)
+            entry['total'] = round(hap_total_norm.get(hap, 0), 4)
+            per_haplotype[hap] = entry
+
+        # 构建 per_sample 输出 + 线性回归
+        per_sample = []
+        scores_for_reg = []
+        phenos_for_reg = []
+        for _, row in self.hap_sample_df.iterrows():
+            hap = row[self.hap_col]
+            score = hap_total_norm.get(hap, 0.0)
+            pheno = row[self.phenotype_col]
+            sample_id = row.get('SampleID', '')
+            if pd.notna(pheno):
+                per_sample.append({
+                    'sample_id': str(sample_id),
+                    'haplotype': str(hap),
+                    'score': round(score, 4),
+                    'phenotype': round(float(pheno), 4),
+                })
+                scores_for_reg.append(score)
+                phenos_for_reg.append(float(pheno))
+
+        # 线性回归
+        r_squared = None
+        regression_pvalue = None
+        slope = 0.0
+        intercept = 0.0
+        if len(scores_for_reg) > 2:
+            try:
+                from scipy import stats as scipy_stats
+                slope, intercept, r_value, p_value, _ = scipy_stats.linregress(
+                    scores_for_reg, phenos_for_reg)
+                r_squared = round(r_value ** 2, 4)
+                regression_pvalue = float(p_value)
+            except Exception:
+                pass
+
+        return {
+            'per_sample': per_sample,
+            'per_haplotype': per_haplotype,
+            'r_squared': r_squared,
+            'regression_pvalue': regression_pvalue,
+            'slope': round(slope, 6),
+            'intercept': round(intercept, 6),
+            'component_weights': self.component_weights,
+            'confidence_level': confidence_level,
+            'low_confidence': low_confidence,
+            'pve': self.pve,
+        }
+
+
+# ============================================================================
 # 模块6: 结果整合与报告输出
 # ============================================================================
 
@@ -4527,12 +5153,12 @@ class ReportGenerator:
                 'Test_Method': assoc.get('test_type', 'NA'),
                 'Statistic': assoc.get('statistic', np.nan),
                 'P_Value': assoc.get('p_value', np.nan),
-                'P_Value_PCA_Corrected': assoc.get('corrected', {}).get('p_value', np.nan) if 'corrected' in assoc else np.nan,
-                'Partial_R2_Hap|PC': assoc.get('corrected', {}).get('partial_r_squared', np.nan) if 'corrected' in assoc else np.nan,
+                'P_Value_PCA_Corrected': assoc.get('p_value_corrected', np.nan),
+                'Partial_R2_Hap|PC': assoc.get('partial_r_squared', np.nan),
                 'PVE(%)': pve.get('pve_percent', np.nan),
                 'Effect_Size': pve.get('effect_size', 'NA'),
-                'Significant': '***' if assoc.get('highly_significant') else ('*' if assoc.get('significant') else ''),
-                'Significant_PCA': '***' if assoc.get('corrected_highly_significant') else ('*' if assoc.get('corrected_significant') else '') if 'corrected' in assoc else ''
+                'Covariates_Used': ', '.join(assoc.get('covariates_used', [])) if assoc.get('covariates_used') else 'None',
+                'Significant': '***' if assoc.get('highly_significant') else ('*' if assoc.get('significant') else '')
             }
             rows.append(row)
         
@@ -4607,24 +5233,6 @@ class ReportGenerator:
         <tr class="{sig_class}"><td>P-value</td><td>{fmt(assoc.get('p_value'), '.2e')}</td></tr>
     </table>
 """
-            # 群体结构矫正结果
-            if 'corrected' in assoc:
-                corr = assoc['corrected']
-                corr_sig_class = 'significant' if assoc.get('corrected_significant') else ''
-                html_content += f"""
-    <h2>Population Structure Correction (ANCOVA)</h2>
-    <table>
-        <tr><th>Parameter</th><th>Value</th></tr>
-        <tr><td>Corrected Test</td><td>{corr.get('test_type', 'NA')}</td></tr>
-        <tr><td>PCA Components</td><td>{corr.get('n_pc_components', 'NA')}</td></tr>
-        <tr><td>F-statistic (corrected)</td><td>{fmt(corr.get('f_statistic'), '.4f')}</td></tr>
-        <tr class="{corr_sig_class}"><td>P-value (PCA corrected)</td><td>{fmt(corr.get('p_value'), '.2e')}</td></tr>
-        <tr><td>R² (full model)</td><td>{fmt(corr.get('r_squared_full'), '.4f')}</td></tr>
-        <tr><td>R² (PC only)</td><td>{fmt(corr.get('r_squared_reduced'), '.4f')}</td></tr>
-        <tr><td>Partial R² (Haplotype|PC)</td><td>{fmt(corr.get('partial_r_squared'), '.4f')}</td></tr>
-        <tr><td>Reference Haplotype</td><td>{corr.get('reference_haplotype', 'NA')}</td></tr>
-    </table>
-"""
         
         # PVE 结果
         if 'pve' in self.results:
@@ -4639,7 +5247,21 @@ class ReportGenerator:
         <tr><td>Effect Size</td><td>{pve.get('effect_size', 'NA')}</td></tr>
     </table>
 """
-        
+
+        # Population Structure Correction
+        if 'population_structure' in self.results:
+            ps = self.results['population_structure']
+            html_content += f"""
+    <h2>Population Structure Correction</h2>
+    <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Method</td><td>PCA-based population structure correction (ANCOVA)</td></tr>
+        <tr><td>Number of PCs</td><td>{ps.get('n_components', 0)}</td></tr>
+        <tr><td>Cumulative Variance Explained</td><td>{ps.get('cumulative_variance', 0):.3f}</td></tr>
+        <tr><td>Per-PC Variance</td><td>{', '.join(f'{v:.3f}' for v in ps.get('explained_variance_ratio', []))}</td></tr>
+    </table>
+"""
+
         html_content += """
     <hr>
     <p><em>Generated by Haplotype-Phenotype Association Analysis Platform</em></p>
@@ -4672,8 +5294,7 @@ class ReportGenerator:
                                   variant_pvalues: dict = None,
                                   network_data: dict = None,
                                   has_promoter_variants: bool = False,
-                                  promoter_actual_length: int = 2000,
-                                  pca_correction: dict = None) -> str:
+                                  promoter_actual_length: int = 2000) -> str:
         """生成综合HTML大图（整合基因结构、GWAS P值、网络图、效应图、箱线图、单倍型序列）
         
         布局设计：
@@ -4687,6 +5308,12 @@ class ReportGenerator:
             variant_pvalues: 变异P值字典 {pos: pvalue}
             network_data: 网络图数据 {'nodes': [], 'edges': []}
         """
+        import sys
+        if sys.stdout.encoding != 'utf-8':
+            sys.stdout.reconfigure(encoding='utf-8')
+        if sys.stderr.encoding != 'utf-8':
+            sys.stderr.reconfigure(encoding='utf-8')
+
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
         hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
         
@@ -5105,7 +5732,79 @@ class ReportGenerator:
             if lead_pos is not None and ip == lead_pos:
                 row["r2"] = 1.0
             row["vtype"] = variant_plot_class(info, row["annotation"])
-        
+
+        # ==================== 单倍型评分模型计算 ====================
+        # FDR校正：过滤GWAS输入，仅保留显著位点 (BH-FDR < 0.05)
+        try:
+            if gwas_data and len(gwas_data) > 1:
+                from scipy import stats as _scipy_stats
+                # 收集p值并调用已有FDR方法
+                pvals = np.array([d['pvalue'] for d in gwas_data], dtype=float)
+                pvals = np.clip(pvals, 1e-300, 1.0)
+                sorted_idx = np.argsort(pvals)
+                n = len(pvals)
+                # Benjamini-Hochberg FDR
+                bh_fdr = np.ones(n)
+                for rank, idx in enumerate(sorted_idx):
+                    bh_fdr[idx] = min(1.0, pvals[idx] * n / (rank + 1))
+                # 确保单调性
+                for i in range(n - 2, -1, -1):
+                    bh_fdr[sorted_idx[i]] = min(bh_fdr[sorted_idx[i]], bh_fdr[sorted_idx[i + 1]])
+                fdr_sig_positions = set()
+                for i, d in enumerate(gwas_data):
+                    if bh_fdr[i] < 0.05:
+                        fdr_sig_positions.add(d['pos'])
+                n_sig = len(fdr_sig_positions)
+                print(f"[INFO] FDR校正: {len(gwas_data)}个位点 → {n_sig}个FDR显著 (BH-FDR<0.05)")
+                if n_sig == 0 and len(gwas_data) > 0:
+                    # 至少保留最显著的1个位点
+                    top_pos = min(gwas_data, key=lambda x: x['pvalue'])['pos']
+                    fdr_sig_positions.add(top_pos)
+                    print(f"[INFO] 无FDR显著位点，保留最显著位点: {top_pos}")
+            else:
+                fdr_sig_positions = set()
+        except Exception as e_fdr:
+            print(f"[WARNING] FDR校正失败: {e_fdr}, 回退到全部位点")
+            fdr_sig_positions = set(d['pos'] for d in gwas_data) if gwas_data else set()
+
+        # 为评分构建FDR过滤后的GWAS数据
+        gwas_data_fdr = [d for d in gwas_data if d['pos'] in fdr_sig_positions]
+
+        try:
+            scorer = HaplotypeScorer(
+                hap_sample_df=hap_sample_df,
+                variant_positions=display_positions,
+                variant_info=variant_info,
+                snp_effects=snp_effects,
+                gwas_data=gwas_data_fdr,
+                exons=exons if exons else [],
+                cds=cds if cds else [],
+                gene_start=g_start, gene_end=g_end,
+                phenotype_col=phenotype_col,
+                maf_threshold=0.05,
+                ld_r2_matrix=ld_r2_matrix,
+                effect_results=effect_results,
+                promoter_start=promoter_start, promoter_end=promoter_end,
+                strand=strand,
+                pve=None
+            )
+            score_results = scorer.score_all()
+            haplotype_score_json = json.dumps(score_results, cls=NumpyEncoder)
+            print(f"[INFO] Haplotype scoring done: R^2={score_results.get('r_squared','N/A')}, "
+                  f"p={score_results.get('regression_pvalue','N/A')}")
+        except Exception as e:
+            print(f"[WARNING] Haplotype scoring failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            haplotype_score_json = json.dumps({
+                'per_sample': [], 'per_haplotype': {},
+                'r_squared': None, 'regression_pvalue': None,
+                'slope': 0, 'intercept': 0,
+                'confidence_level': 'unknown', 'low_confidence': False,
+                'pve': None
+            })
+        # ==================== 评分模型计算结束 ====================
+
         # 准备网络图数据
         # 先计算lead_haplotype（在两种情况下都需要）
         hap_names_list = list(top_haps)
@@ -5170,17 +5869,13 @@ class ReportGenerator:
                 else:
                     color = '#9b59b6'  # 默认紫色
                 
-                # 获取该单倍型的样本列表
-                samples_for_hap = hap_samples_map.get(hap, [])
-                
                 network_nodes.append({
                     'id': hap,
                     'count': count,
                     'size': size,
                     'color': color,
                     'phenoMean': round(hap_pheno_means.get(hap, 0), 3),
-                    'isLead': is_lead_hap,
-                    'samples': samples_for_hap  # 样本列表，用于点击复制
+                    'isLead': is_lead_hap
                 })
                 
                 # 计算边（Hamming距离）
@@ -5204,27 +5899,26 @@ class ReportGenerator:
             # 从提供的网络数据中提取表型均值
             hap_pheno_means = {node['id']: node.get('pheno_mean', 0) for node in network_nodes}
         
-        # 计算SVG宽度（与基因结构图对齐）
+        # 计算SVG宽度（与基因结构图对齐，使用相同的变量体系）
         n_vars = len(display_positions)
-        gene_area_start = 85  # 与基因结构图相同的基因区域起始位置
-        gene_area_width = n_vars * 20  # 基因区域宽度（变异列总宽度）
-        svg_total_width = gene_area_start + gene_area_width + 100  # 与基因结构图相同的总宽度
-        
-        # 计算 main-data-section 所需的最小宽度（后续会用到）
         hap_col_w_for_min = 90
         eff_col_w_for_min = 180
         box_col_w_for_min = 180
-        gene_area_start_for_table = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min  # 450px
-        gene_area_width_for_table = n_vars * 20
+        gene_area_start = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min  # 450px，与基因结构图对齐
+        gene_area_width = n_vars * 20  # 基因区域宽度（变异列总宽度）
         legend_w_for_min = 220
-        svg_width_for_min = gene_area_start_for_table + gene_area_width_for_table + legend_w_for_min
+        svg_total_width = gene_area_start + gene_area_width + legend_w_for_min  # 与基因结构图完全相同的总宽度
+
+        # 计算 main-data-section 所需的最小宽度
+        gene_area_width_for_table = n_vars * 20
+        svg_width_for_min = gene_area_start + gene_area_width_for_table + legend_w_for_min
         n_col_w_for_min = 60
-        table_width_for_min = gene_area_start_for_table + gene_area_width_for_table + n_col_w_for_min
+        table_width_for_min = gene_area_start + gene_area_width_for_table + n_col_w_for_min
         main_min_width = max(svg_width_for_min, table_width_for_min)
         # GWAS图绘图区域宽度（只包含基因区域，不包含左侧固定列）
-        gwas_plot_width = gene_area_width + 100  # 基因区域 + 图例区域
+        gwas_plot_width = gene_area_width + legend_w_for_min  # 基因区域 + 图例区域
         # GWAS图左边距（与基因结构图的基因区域起始位置对齐）
-        gwas_left_margin = gene_area_start + 1
+        gwas_left_margin = gene_area_start  # 与基因结构图基因区域起始x坐标完全一致
         
         # JSON序列化数据
         gwas_data_json = json.dumps(gwas_data, cls=NumpyEncoder)
@@ -5232,15 +5926,6 @@ class ReportGenerator:
         network_edges_json = json.dumps(network_edges, cls=NumpyEncoder)
         has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
         promoter_actual_length_json = str(promoter_actual_length)
-        
-        # 计算协变量列数（用于布局对齐）
-        covariate_cols_early = [c for c in hap_sample_df.columns
-                                if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
-        n_cov_cols = len(covariate_cols_early)
-        # 网络图宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图精确对齐
-        # 对齐公式：network_w + 14(gap) + 86(gwas_left_margin) = gene_area_start(450 + n_cov*180)
-        # → network_w = 350 + n_cov*180
-        network_w = 350 + n_cov_cols * 180
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -5251,8 +5936,8 @@ class ReportGenerator:
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 15px; }}
-        .container {{ margin: 0 auto; background: white; border-radius: 10px; 
-                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
+        .container {{ margin: 0 auto; background: white; border-radius: 10px;
+                     box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: fit-content; }}
         .header {{ background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color: white; 
                   padding: 18px 25px; border-radius: 10px 10px 0 0; }}
         .header h1 {{ font-size: 18px; margin-bottom: 5px; }}
@@ -5291,30 +5976,31 @@ class ReportGenerator:
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        /* top-section 使用 flex row 布局（非 absolute），确保 GWAS X 轴与基因结构图精确对齐 */
-        .top-section {{ display: flex; flex-direction: row; align-items: flex-start; gap: 0; position: relative; height: 280px; }}
-        .main-data-section {{ }} /* 移除 fit-content，使用滚动容器 */
-        /* 网络图：flex item，宽度随协变量列数扩展以保持 GWAS 对齐 */
-        .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: 280px; 
-                         border: 1px solid #e0e0e0; border-radius: 6px; 
-                         background: #fafafa; flex-shrink: 0; overflow: hidden; position: relative; }}
-        .network-panel-title {{ position: absolute; top: 8px; left: 10px; 
-                               font-size: 12px; font-weight: 600; color: #2c3e50; 
-                               background: rgba(255,255,255,0.9); padding: 2px 6px; 
+        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        .main-data-section {{ }}
+        .network-panel {{ width: 350px; min-width: 350px; height: 280px;
+                         border: 1px solid #e0e0e0; border-radius: 6px;
+                         background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; z-index: 10; }}
+        .network-panel-title {{ position: absolute; top: 8px; left: 10px;
+                               font-size: 12px; font-weight: 600; color: #2c3e50;
+                               background: rgba(255,255,255,0.9); padding: 2px 6px;
                                border-radius: 3px; z-index: 10; }}
-        .network-mode-btn {{ position: absolute; top: 8px; right: 60px; 
-                            font-size: 11px; padding: 3px 8px; border: 1px solid #3498db; 
-                            background: white; color: #3498db; border-radius: 3px; 
-                            cursor: pointer; z-index: 10; }}
-        .network-mode-btn:hover {{ background: #3498db; color: white; }}
-        .network-mode-btn.active {{ background: #3498db; color: white; }}
-        /* GWAS 面板：14px 间距，left edge = network_w + 14，内部 gwas_left_margin=86 → x=regionStart 位于 network_w+100 = gene_area_start */
-        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 14px; border: 1px solid #e0e0e0; 
+        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 0; border: 1px solid #e0e0e0;
                            border-radius: 6px; background: #fafafa; position: relative; }}
-        .gene-gwas-title {{ position: absolute; top: 8px; left: 10px; 
-                           font-size: 12px; font-weight: 600; color: #2c3e50; 
-                           background: rgba(255,255,255,0.9); padding: 2px 6px; 
-                           border-radius: 3px; z-index: 10; }}
+        .gene-gwas-title {{ position: absolute; top: 8px; left: 10px;
+                           font-size: 12px; font-weight: 600; color: #2c3e50;
+                           background: rgba(255,255,255,0.9); padding: 2px 6px;
+                           border-radius: 3px; z-index: 1; }}
+        .score-section {{ display: flex; gap: 15px; margin-top: 12px; }}
+        .score-panel {{ flex: 0 0 470px; min-width: 470px; border: 1px solid #e0e0e0;
+            border-radius: 6px; background: #fafafa; padding-bottom: 6px; }}
+        .score-title {{ font-size: 12px; font-weight: 600; color: #2c3e50;
+            padding: 8px 12px; border-bottom: 1px solid #e8e8e8; }}
+        .score-legend {{ display: flex; gap: 10px; padding: 4px 12px; font-size: 10px; flex-wrap: wrap; }}
+        .score-legend-item {{ display: flex; align-items: center; gap: 4px; }}
+        .score-legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
+        .score-stats {{ font-size: 10px; color: #555; padding: 2px 12px; }}
+        .ld-right-panel {{ flex: 1; min-width: 0; }}
         .footer {{ background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
                   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
                   border-radius: 0 0 10px 10px; }}
@@ -5423,8 +6109,7 @@ class ReportGenerator:
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
             <div class="top-section">
                 <div class="network-panel">
-                    <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| 点击节点复制样本</span></div>
-                    <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">复制模式</button>
+                    <div class="network-panel-title">Haplotype Network</div>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
                 <div class="gene-gwas-panel">
@@ -5442,16 +6127,13 @@ class ReportGenerator:
         hap_col_w = 90
         eff_col_w = 180
         box_col_w = 180
-        # gene_area_start：基因区域在SVG中的起始X坐标
-        # 必须与表格序列列的起始像素对齐：hap(90) + eff(180) + box(180) + n_cov×box(180)
-        # 这样连线从基因结构位置出发，几乎垂直到达对应的序列列（斜率适中）
-        gene_area_start = hap_col_w + eff_col_w + box_col_w + n_cov_cols * box_col_w
+        gene_area_start = hap_col_w + eff_col_w + box_col_w  # = 450px
         seq_col_w = 20  # 每个变异列宽度（调小以适应更多变异）
         gene_area_width = n_vars * seq_col_w
         legend_w = 220  # 图例宽度（增加以容纳双列图例）
         svg_width = gene_area_start + gene_area_width + legend_w
         svg_height = 200  # 足够容纳长斜线
-                
+
         # 坐标系设计（参照老师的图）
         axis_y = 28       # 坐标轴线 y
         gene_y = 48       # 基因结构图上框 y
@@ -5459,7 +6141,7 @@ class ReportGenerator:
         var_top_y = axis_y - 8   # 变异小竖线顶部 y
         line_end_y = svg_height - 2  # 斜线终点 y（再往下一点，与表格更好地对齐）
                 
-        html += f'<svg id="gene-structure-svg" width="{svg_width}" height="{svg_height}" style="display:block;margin-bottom:0;overflow:visible;">\n'
+        html += f'<svg id="gene-structure-svg" data-gene-start="{gene_area_start}" data-gene-width="{gene_area_width}" width="{svg_width}" height="{svg_height}" style="display:block;margin:0;overflow:visible;">\n'
         
         # ==== SVG 定义（UTR 旜线填充图案）====
         html += '''<defs>
@@ -5991,20 +6673,30 @@ class ReportGenerator:
         html += '</tr>\n'
         
         html += r'''</tbody></table>
+	</div><!-- table-scroll-container -->
 
-<!-- LD 倒三角图容器：在 table-scroll-container 内部，与表格共享同一滚动上下文 -->
-<div id="ld-triangle-wrapper" style="margin-top:0px;overflow:visible;width:auto;display:block;">
-    <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
-    <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
-        <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
-        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
-        <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
-        <span style="font-size:9px;color:#555;margin-left:2px;">½</span>
-        <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
-        <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
-    </div>
-</div>
-</div><!-- table-scroll-container -->
+	<!-- 底部区域：单倍型评分图(左) + LD倒三角图(右) -->
+	<div class="score-section">
+	    <div class="score-panel" id="haplotype-score-panel">
+	        <div class="score-title">Haplotype Score vs Phenotype</div>
+	        <div id="score-scatter-viz" style="width:100%;height:330px;"></div>
+	        <div class="score-stats" id="score-stats"></div>
+	        <div class="score-legend" id="score-legend"></div>
+	    </div>
+	    <div class="ld-right-panel">
+	        <div id="ld-triangle-wrapper" style="margin-top:0px;overflow:visible;width:auto;display:block;">
+	            <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
+	            <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
+	                <span style="font-size:9px;color:#555;margin-right:4px;">r²:</span>
+	                <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:80px;height:10px;border-radius:2px;"></div>
+	                <span style="font-size:9px;color:#555;margin-left:4px;">0</span>
+	                <span style="font-size:9px;color:#555;margin-left:2px;">½</span>
+	                <span style="font-size:9px;color:#555;margin-left:2px;">1</span>
+	                <span id="ld-tooltip-info" style="font-size:9px;color:#333;margin-left:12px;"></span>
+	            </div>
+	        </div>
+	    </div>
+	</div>
             </div><!-- main-data-section -->
         </div><!-- integrated-view -->
     </div>
@@ -6121,52 +6813,18 @@ function copyAllHaplotypes() {
     });
 }
 
-// 网络图模式切换：复制模式 vs 拖拽模式
-var networkMode = 'drag'; // 'drag' 或 'copy'
-
-function toggleNetworkMode() {
-    var btn = document.getElementById('networkModeBtn');
-    if (networkMode === 'drag') {
-        networkMode = 'copy';
-        btn.textContent = '拖拽模式';
-        btn.classList.add('active');
-    } else {
-        networkMode = 'drag';
-        btn.textContent = '复制模式';
-        btn.classList.remove('active');
-    }
-}
-
-function copyNodeSamples(nodeId) {
-    var node = networkNodes.find(n => n.id === nodeId);
-    var samples = node ? (node.samples || []) : [];
-    if (!samples || samples.length === 0) {
-        alert('No samples for ' + nodeId);
-        return;
-    }
-    var text = samples.join(',');
-    navigator.clipboard.writeText(text).then(function() {
-        console.log('Copied samples for ' + nodeId);
-    }).catch(function(err) {
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-    });
-}
-
 // ==================== D3 数据 ====================
 var gwasData     = {gwas_data_json};
 var networkNodes = {network_nodes_json};
 var networkEdges = {network_edges_json};
 var regionStart  = {region_start};
 var regionEnd    = {region_end};
+var haplotypeScoreData = {haplotype_score_json};
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
 var hasPromoter  = {has_promoter_variants_json};  // 是否有启动子变异
 var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
+var geneAreaWidth = {gene_area_width_js};  // 基因区域宽度（与基因结构图完全一致）
 var gwasPlotWidth = {gwas_plot_width};  // GWAS图绘图区域宽度（基因区域+图例）
 var gwasLeftMargin = {gwas_left_margin};  // GWAS图左边距（与基因结构图基因区域起始对齐）
 var leadVariantPos = __LEAD_POS__;
@@ -6331,13 +6989,13 @@ function updateConnectorLines() {
     console.log('[DEBUG] Total th count:', allThsList.length);
     
     var visibleThs = allThsList.filter(function(th, idx) {
-        // 使用 seq-col-th class 识别序列列（而非 idx<3 硬编码）
-        // 这样无论有多少协变量列，都能正确跳过
-        if (!th.classList.contains('seq-col-th')) return false;
+        // 跳过前3列和最后一列，只保留变异列
+        if (idx < 3) return false;
+        if (idx >= allThsList.length - 1) return false;
         // 只保留可见的列
         var isVisible = th.style.display !== 'none';
         if (isVisible) {
-            console.log('[DEBUG] Visible seq th idx:', idx, 'pos:', th.getAttribute('data-pos'));
+            console.log('[DEBUG] Visible th idx:', idx, 'text:', th.textContent.trim().substring(0, 20));
         }
         return isVisible;
     });
@@ -6408,12 +7066,15 @@ function updateConnectorLines() {
         // 计算缩放比例（基于SVG的实际宽度与逻辑宽度的比值）
         var svgElement = document.querySelector('#gene-structure-svg');
         var svgLogicalWidth = svgElement.width.baseVal.value;
-        var svgLogicalHeight = svgElement.height.baseVal.value;
         var scaleFactor = svgRect.width / svgLogicalWidth;
-        
+
         // 计算表格列中心相对于SVG的位置（考虑缩放）
         var tableX = (thRect.left + thRect.width / 2 - svgRect.left) / scaleFactor;
-        var tableY = svgLogicalHeight - 2;  // SVG底部附近
+        // 使用表格列头的实际垂直位置，确保连线能到达表格
+        // 同时限制最小Y值，防止连线过短
+        var rawTableY = (thRect.top - svgRect.top) / scaleFactor;
+        var minTableY = parseFloat(line.getAttribute('data-gene-y')) + 40;
+        var tableY = Math.max(rawTableY, minTableY);
         
         console.log('[DEBUG] Connecting pos:', posStr, 'geneX:', geneX, 'tableX:', tableX, 'scaleFactor:', scaleFactor);
         
@@ -6492,18 +7153,18 @@ function drawLDTriangle() {
         return;
     }
     
-    // 计算每列的坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
-    var colInfos = [];  // {svgX, matIdx}
+    // 计算每列的屏幕坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
+    var colInfos = [];  // {screenX, matIdx}
     var canvasEl = canvas;
-    
-    // wrapper 现在在 table-scroll-container 内部，直接用 th.offsetLeft 计算
-    var tableEl = document.querySelector('.data-table');
-    if (!tableEl) { console.log('[LD] table not found'); return; }
+    var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
         
     visibleVarThs.forEach(function(th) {
-        // 直接用 th.offsetLeft（相对于 table 的偏移）
-        var thOffsetLeft = th.offsetLeft;
-        var svgX = thOffsetLeft + th.offsetWidth / 2;  // 列中心
+        // 使用offsetLeft获取列相对于table的偏移，再加table相对于wrapper的偏移
+        var tableEl = th.closest('table');
+        var tableRect = tableEl.getBoundingClientRect();
+        var thOffsetInTable = th.offsetLeft + th.offsetWidth / 2;
+        var tableOffsetInWrap = tableRect.left - wrapRect.left;
+        var centerX = tableOffsetInWrap + thOffsetInTable;
         // 找该列在displayPositions中的索引
         var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posVal = parseInt(posText);
@@ -6512,7 +7173,7 @@ function drawLDTriangle() {
             if (displayPositions[pi] === posVal) { matIdx = pi; break; }
         }
         if (matIdx >= 0) {
-            colInfos.push({ svgX: svgX, matIdx: matIdx });
+            colInfos.push({ screenX: centerX, matIdx: matIdx });
         }
     });
     
@@ -6521,9 +7182,9 @@ function drawLDTriangle() {
         return;
     }
     
-    // 计算canvas尺寸（基于SVG逻辑坐标）
+    // 计算canvas尺寸
     var cellW = colInfos.length > 1 ? 
-        (colInfos[colInfos.length-1].svgX - colInfos[0].svgX) / (colInfos.length - 1) : 20;
+        (colInfos[colInfos.length-1].screenX - colInfos[0].screenX) / (colInfos.length - 1) : 20;
     cellW = Math.max(cellW, 10);
     var halfCell = cellW / 2;
     
@@ -6533,33 +7194,30 @@ function drawLDTriangle() {
     // 倒三角高度：深度从1到nc-1，所以总高度 = (nc-1) * halfCell
     var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
     
-    // canvas宽度只覆盖序列列区域，不包括固定列（Haplotype/Effect/Phenotype等）
-    // 第一列的svgX即为wrapper.paddingLeft（与SVG对齐）
-    var firstColX = colInfos[0].svgX;
-    var lastColX = colInfos[colInfos.length-1].svgX;
+    // canvas宽度只覆盖序列列区域，不包吨固定列（Haplotype/Effect/Phenotype等）
+    // 使用序列列的实际总宽度：最后一列的canvasX + 半个cell宽度 - 第一列的canvasX + 半个cell宽度
+    var firstColX = colInfos[0].screenX;
+    var lastColX = colInfos[colInfos.length-1].screenX;
     var canvasW = Math.ceil(lastColX - firstColX + cellW);
     canvasW = Math.max(canvasW, 100); // 最小宽度100px
     
-    // wrapper 在 table-scroll-container 内部，不需要 paddingLeft
-    // canvas 左边缘对齐表格左边缘（table 处理滚动）
+    // wrapper需要添加padding-left使其与序列列对齐（即第一列的screenX）
     var wrapper = document.getElementById('ld-triangle-wrapper');
-    wrapper.style.paddingLeft = '0px';
+    wrapper.style.paddingLeft = firstColX + 'px';
     
     canvas.width = canvasW;
     canvas.height = canvasH;
     canvas.style.width = canvasW + 'px';
     canvas.style.height = canvasH + 'px';
-    canvas.style.marginLeft = firstColX + 'px';  // canvas 向右偏移，对齐第一个序列列
     
     // 计算canvas显示尺寸与内部坐标的比例
     var canvasDisplayRect = canvas.getBoundingClientRect();
     // canvasScaleX: canvas内部像素坐标 / canvas显示CSS像素坐标的比率
     var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
     
-    // 将所有colInfos的svgX转换为canvas内部坐标（相对canvas左上角）
-    // firstColX 是第一个序列列的左边缘（offsetLeft），canvasX=0 对应第一个列的左边缘
+    // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
-        colInfos[ci2].canvasX = (colInfos[ci2].svgX - firstColX) * canvasScaleX;
+        colInfos[ci2].canvasX = (colInfos[ci2].screenX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
     }
     
     // 用canvas内部坐标重新计算细胞宽度
@@ -6915,29 +7573,15 @@ function drawNetworkPlot() {
 
     var nodeG = zoomG.append('g').selectAll('g').data(nodes).join('g')
         .style('cursor','pointer')
-        .on('click', function(event, d) {
-            if (networkMode === 'copy') {
-                copyNodeSamples(d.id);
-                event.stopPropagation();
-            }
-        })
         .call(d3.drag()
-            .filter(function(event) { return networkMode === 'drag'; })
             .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
             .on('drag',  function(e,d) {
-                // 随缩放比例动态计算可拖动边界（zoomG内部坐标系）
-                // zoomG transform: translate(W/2,H/2) scale(s) translate(-W/2,-H/2)
-                // 视觉边界[0,W]在内部坐标中为[W/2*(1-1/s), W/2*(1+1/s)]
+                // 限制拖拽范围在容器内
                 var r = d.size * 0.5 + 5;
-                var s = currentScale;
-                var xMin = W/2 * (1 - 1/s) + r;
-                var xMax = W/2 * (1 + 1/s) - r;
-                var yMin = H/2 * (1 - 1/s) + r;
-                var yMax = H/2 * (1 + 1/s) - r;
-                d.fx = Math.max(xMin, Math.min(xMax, e.x));
-                d.fy = Math.max(yMin, Math.min(yMax, e.y));
+                d.fx = Math.max(r, Math.min(W - r, e.x));
+                d.fy = Math.max(r, Math.min(H - r, e.y));
             })
-            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); sim.stop(); /* 完全停止simulation，节点保持在拖动后的位置 */ })
+            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
         );
 
     nodeG.append('circle')
@@ -6992,7 +7636,7 @@ function drawNetworkPlot() {
     var tip = document.getElementById('d3-tooltip');
     nodeG.on('mouseover', function(e,d) {
         d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
-        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean+'<br><span style="color:#e74c3c">📋 点击复制样本</span>';
+        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean;
         tip.style.display = 'block';
     }).on('mousemove', function(e) {
         tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY-10)+'px';
@@ -7016,15 +7660,13 @@ function drawNetworkPlot() {
 function drawGWASPlot(data) {
     var container = document.getElementById('gwas-gene-viz');
     if (!container) return;
-    // GWAS图SVG宽度与基因结构图总宽度相同
-    // 基因结构图: svg_width = 450 + gene_area_width + 100
-    // GWAS图使用相同的总宽度，但绘图区域从gene_area_start(450)开始
+    // GWAS图SVG宽度与基因结构图总宽度相同，绘图区域宽度与基因区域宽度一致
     var W = svgTotalWidth || (container.clientWidth || 680);
-    var H = 180;  // 减小高度，只显示P值图
-    // 左边距 = gene_area_start = 450，与基因结构图的基因区域起始对齐
-    var ml = gwasLeftMargin || 54;
+    var H = 180;
+    var ml = gwasLeftMargin || 54;  // 左边距 = gene_area_start，与基因结构图基因区域起始对齐
     var mr = 98, mt = 26, mb = 34;
-    var iW = W - ml - mr, iH = H - mt - mb;
+    var iW = geneAreaWidth || (W - ml - mr);  // 内区宽度 = 基因区域宽度，确保与基因结构图比例一致
+    var iH = H - mt - mb;
 
     // 动态计算当前数据中的lead variant（P值最小）
     var currentLeadPos = null;
@@ -7039,7 +7681,7 @@ function drawGWASPlot(data) {
     d3.select('#gwas-gene-viz').selectAll('*').remove();
 
     var svg = d3.select('#gwas-gene-viz').append('svg')
-        .attr('width', W).attr('height', H).style('display','block').style('overflow','visible');
+        .attr('width', W).attr('height', H).style('display','block').style('margin','0').style('overflow','visible');
     var g = svg.append('g').attr('transform','translate('+ml+','+mt+')');
 
     var xSc = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, iW]);
@@ -7185,6 +7827,215 @@ function drawGWASPlot(data) {
     });
 }
 
+
+
+// ==================== 单倍型评分散点回归图 ====================
+function drawHaplotypeScorePlot(scoreData) {
+    if (!scoreData || !scoreData.per_sample || scoreData.per_sample.length === 0) {
+        console.log('[ScorePlot] No score data available, skipping');
+        return;
+    }
+
+    var container = d3.select('#score-scatter-viz');
+    if (container.empty()) return;
+
+    container.selectAll('*').remove();
+
+    var samples = (scoreData.per_sample || []).filter(function(d) {
+        return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
+    });
+    if (samples.length < 2) {{ return; }}
+    var margin = {{top: 18, right: 24, bottom: 38, left: 48}};
+    var box = container.node().getBoundingClientRect();
+    var width = box.width - margin.left - margin.right;
+    var height = box.height - margin.top - margin.bottom;
+
+    if (width < 100 || height < 100) return;
+
+    // 单倍型颜色映射
+    var haplotypeColors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd',
+                           '#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+    var haps = Array.from(new Set(samples.map(function(d) { return d.haplotype; })));
+    var hapColor = {};
+    haps.forEach(function(h, i) {
+        hapColor[h] = haplotypeColors[i % haplotypeColors.length];
+    });
+
+    var xExtent = d3.extent(samples, function(d) { return d.score; });
+    var xPad = (xExtent[1] - xExtent[0]) * 0.08 || 0.05;
+    var x = d3.scaleLinear()
+        .domain([xExtent[0] - xPad, xExtent[1] + xPad])
+        .range([0, width]);
+
+    var yExtent = d3.extent(samples, function(d) { return d.phenotype; });
+    var yPad = (yExtent[1] - yExtent[0]) * 0.08 || 0.05;
+    var y = d3.scaleLinear()
+        .domain([yExtent[0] - yPad, yExtent[1] + yPad])
+        .range([height, 0]);
+
+    var svg = container.append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    // 网格线
+    svg.append('g')
+        .attr('class', 'grid')
+        .attr('transform', 'translate(0,' + height + ')')
+        .call(d3.axisBottom(x).ticks(5).tickSize(-height).tickFormat(''))
+        .attr('color', '#e0e0e0');
+    svg.append('g')
+        .attr('class', 'grid')
+        .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''))
+        .attr('color', '#e0e0e0');
+
+    // 回归线
+    if (scoreData.slope != null && scoreData.intercept != null) {
+        var x1 = x.domain()[0], x2 = x.domain()[1];
+        var y1 = scoreData.slope * x1 + scoreData.intercept;
+        var y2 = scoreData.slope * x2 + scoreData.intercept;
+        svg.append('line')
+            .attr('x1', x(x1)).attr('y1', y(y1))
+            .attr('x2', x(x2)).attr('y2', y(y2))
+            .attr('stroke', '#c0392b').attr('stroke-width', 1.8)
+            .attr('stroke-dasharray', '6,3')
+            .attr('opacity', 0.8);
+    }
+
+    // Tooltip div
+    var tooltip = d3.select('#d3-tooltip');
+
+    // 散点
+    svg.selectAll('.score-dot')
+        .data(samples)
+        .enter()
+        .append('circle')
+        .attr('class', 'score-dot')
+        .attr('cx', function(d) { return x(d.score); })
+        .attr('cy', function(d) { return y(d.phenotype); })
+        .attr('r', 4.5)
+        .attr('fill', function(d) { return hapColor[d.haplotype] || '#999'; })
+        .attr('stroke', 'white').attr('stroke-width', 0.5)
+        .attr('opacity', 0.85)
+        .on('mouseover', function(d) {
+            tooltip.style('display', 'block')
+                .html('<b>' + d.sample_id + '</b><br>'
+                    + 'Haplotype: ' + d.haplotype + '<br>'
+                    + 'Score: ' + d.score.toFixed(3) + '<br>'
+                    + 'Phenotype: ' + d.phenotype.toFixed(3));
+        })
+        .on('mousemove', function(event) {
+            tooltip.style('left', (event.pageX + 12) + 'px')
+                .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', function() {
+            tooltip.style('display', 'none');
+        });
+
+    // 坐标轴
+    svg.append('g')
+        .attr('transform', 'translate(0,' + height + ')')
+        .call(d3.axisBottom(x).ticks(5))
+        .selectAll('text').attr('fill', '#555').attr('font-size', '10px');
+    svg.append('g')
+        .call(d3.axisLeft(y).ticks(5))
+        .selectAll('text').attr('fill', '#555').attr('font-size', '10px');
+
+    // 轴标签
+    svg.append('text')
+        .attr('x', width / 2).attr('y', height + 32)
+        .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
+        .text('Haplotype Score');
+    svg.append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('x', -height / 2).attr('y', -38)
+        .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
+        .text('Phenotype');
+
+    // R² + p-value 标注
+    if (scoreData.r_squared != null) {
+        var statsText = 'R² = ' + scoreData.r_squared.toFixed(3);
+        if (scoreData.regression_pvalue != null) {
+            statsText += '  p = ' + scoreData.regression_pvalue.toFixed(4);
+        }
+        svg.append('text')
+            .attr('x', width - 6).attr('y', 14)
+            .attr('text-anchor', 'end').attr('font-size', '10px')
+            .attr('fill', '#2c3e50').attr('font-weight', '600')
+            .text(statsText);
+    }
+
+    // 底部 legend + stats
+    updateScoreLegend(scoreData, hapColor);
+    updateScoreStats(scoreData);
+    updateScoreTitle(scoreData);
+}
+
+function updateScoreLegend(scoreData, hapColor) {
+    var legendEl = document.getElementById('score-legend');
+    if (!legendEl) return;
+    var html = '';
+    for (var hap in hapColor) {
+        html += '<div class="score-legend-item">'
+            + '<span class="score-legend-dot" style="background:' + hapColor[hap] + ';"></span>'
+            + hap
+            + '</div>';
+    }
+    legendEl.innerHTML = html;
+}
+
+function updateScoreStats(scoreData) {
+    var statsEl = document.getElementById('score-stats');
+    if (!statsEl) return;
+    var weights = scoreData.component_weights || {};
+    var compNames = {
+        'variant_effect': 'Variant Effect',
+        'burden': 'Burden',
+        'gwas': 'GWAS',
+        'multi_omics': 'Multi-Omics',
+        'fine_mapping': 'Fine-Map',
+        'effect_size': 'Effect Size',
+        'genetic_distinct': 'Gen. Distinct'
+    };
+    var parts = [];
+    for (var key in compNames) {
+        if (weights[key] !== undefined) {
+            parts.push(compNames[key] + ': w=' + weights[key].toFixed(1));
+        }
+    }
+    var statsText = 'Components: ' + parts.join(' | ');
+
+    // PVE 置信度标注
+    var level = scoreData.confidence_level;
+    if (level === 'low') {
+        statsText += ' ⚠ PVE=' + (scoreData.pve != null ? (scoreData.pve * 100).toFixed(1) + '% (low confidence)' : 'N/A');
+        statsEl.style.color = '#c0392b';
+    } else if (level === 'moderate') {
+        statsText += ' • PVE=' + (scoreData.pve != null ? (scoreData.pve * 100).toFixed(1) + '%' : 'N/A');
+        statsEl.style.color = '#e67e22';
+    } else if (level === 'high') {
+        statsText += ' ✓ PVE=' + (scoreData.pve != null ? (scoreData.pve * 100).toFixed(1) + '% (high confidence)' : 'N/A');
+        statsEl.style.color = '#27ae60';
+    } else {
+        statsEl.style.color = '#555';
+    }
+    statsEl.textContent = statsText;
+}
+
+function updateScoreTitle(scoreData) {
+    var titleEl = document.querySelector('.score-title');
+    if (!titleEl) return;
+    var level = scoreData.confidence_level;
+    var badge = '';
+    if (level === 'low') {
+        badge = ' <span style=\'font-size:10px;color:#c0392b;\'>[Low Confidence]</span>';
+    } else if (level === 'high') {
+        badge = ' <span style=\'font-size:10px;color:#27ae60;\'>[High Confidence]</span>';
+    }
+    titleEl.innerHTML = 'Haplotype Score vs Phenotype' + badge;
+}
+
 function exportSVG() {{
     var content = document.getElementById('zoomContent');
     var svgElements = content.querySelectorAll('svg');
@@ -7234,10 +8085,29 @@ function exportSVG() {{
 document.addEventListener('DOMContentLoaded', function() {
     drawNetworkPlot();
     drawGWASPlot(gwasData);
+    drawHaplotypeScorePlot(haplotypeScoreData);
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
     // 初始化LD倒三角图
     setTimeout(function() { drawLDTriangle(); }, 300);
+
+    // 自动水平居中到基因结构区域
+    setTimeout(function() {
+        var svg = document.getElementById('gene-structure-svg');
+        if (!svg) return;
+        var gs = parseFloat(svg.getAttribute('data-gene-start')) || 450;
+        var gw = parseFloat(svg.getAttribute('data-gene-width')) || 1000;
+        var geneCenterSvg = gs + gw / 2;
+        var svgRect = svg.getBoundingClientRect();
+        var svgLogicalW = svg.width.baseVal.value;
+        if (!svgLogicalW || svgLogicalW <= 0) return;
+        var scale = svgRect.width / svgLogicalW;
+        var geneCenterScreen = svgRect.left + geneCenterSvg * scale;
+        var scrollX = geneCenterScreen - window.innerWidth / 2;
+        if (scrollX > 0) {
+            window.scrollTo({ left: scrollX, behavior: 'auto' });
+        }
+    }, 150);
 });
 </script>
 </body>
@@ -7257,6 +8127,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{hap_order_count}',   hap_order_count_json)
         html = html.replace('{hap_order_cluster}', hap_order_cluster_json)
         html = html.replace('{gwas_data_json}',     gwas_data_json)
+        html = html.replace('{haplotype_score_json}', haplotype_score_json)
         html = html.replace('{network_nodes_json}', network_nodes_json)
         html = html.replace('{network_edges_json}', network_edges_json)
         html = html.replace('{has_promoter_variants_json}', has_promoter_variants_json)
@@ -7266,6 +8137,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{gene_start}',         str(g_start))
         html = html.replace('{gene_end}',           str(g_end))
         html = html.replace('{svg_total_width}',    str(svg_total_width))
+        html = html.replace('{gene_area_width_js}', str(gene_area_width))
         html = html.replace('{gwas_plot_width}',    str(gwas_plot_width))
         html = html.replace('{gwas_left_margin}',   str(gwas_left_margin))
         _lead_js = str(lead_pos) if lead_pos is not None else "null"
@@ -7624,9 +8496,10 @@ const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
             d.fx = Math.max(r, Math.min(width - r, e.x));
             d.fy = Math.max(r, Math.min(height - r, e.y));
         }})
-        .on('end', function(e, d) {{
-            if (!e.active) sim.alphaTarget(0);
-            sim.stop();
+        .on('end', function(e, d) {{ 
+            if (!e.active) sim.alphaTarget(0); 
+            d.fx = null; 
+            d.fy = null; 
         }})
     );
 
@@ -8012,10 +8885,8 @@ svg.selectAll('circle')
         # 确保所有序列长度一致
         max_len = max(len(s) for s in samples)
         samples = [s + [6] * (max_len - len(s)) for s in samples]  # 用N填充
-        
+
         # PCA分析
-        from sklearn.decomposition import PCA
-        
         X = np.array(samples)
         pca = PCA(n_components=min(3, len(samples) - 1))
         pca_result = pca.fit_transform(X)
@@ -8551,7 +9422,8 @@ if (promoterStart < promoterEnd) {{
                                    variant_pvalues: dict = None,
                                    gwas_results: pd.DataFrame = None,
                                    variant_info: dict = None,
-                                   snp_effects: dict = None) -> str:
+                                   snp_effects: dict = None,
+                                   pop_struct_info: dict = None) -> str:
         """
         生成多图整合面板（Association Analysis为主面板，整合网络图、曼哈顿图、PCA）
         
@@ -8677,7 +9549,6 @@ if (promoterStart < promoterEnd) {{
         var_explained = [30, 20, 10]
         if 'Haplotype_Seq' in hap_sample_df.columns and len(hap_sample_df) >= 3:
             try:
-                from sklearn.decomposition import PCA
                 base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 5, 'N': 6}
                 samples = []
                 sample_haps = []
@@ -8719,7 +9590,6 @@ if (promoterStart < promoterEnd) {{
         manhattan_json = json.dumps(manhattan_points, cls=NumpyEncoder)
         pca_json = json.dumps(pca_points, cls=NumpyEncoder)
         var_explained_json = json.dumps(var_explained, cls=NumpyEncoder)
-        pca_correction_json = json.dumps(pca_correction or {}, cls=NumpyEncoder)
         
         html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -8812,7 +9682,6 @@ if (promoterStart < promoterEnd) {{
             <span>Variants: {len(variant_positions or [])}</span>
             <span>Haplotypes: {n_haps}</span>
             <span>Total Samples: {sum(hap_counts.values())}</span>
-            {f'<span style="color:#f1c40f">PCA Correction: {pca_correction["n_components"]} PCs ({', '.join(f'PC{i+1}: {v:.1f}%' for i, v in enumerate(pca_correction['var_explained']))})</span>' if pca_correction and pca_correction.get('var_explained') else ''}
         </div>
     </div>
     
@@ -8821,7 +9690,7 @@ if (promoterStart < promoterEnd) {{
             <button class="tab-btn active" onclick="showTab('integrated')">Association Analysis</button>
             <button class="tab-btn" onclick="showTab('network')">Haplotype Network</button>
             <button class="tab-btn" onclick="showTab('manhattan')">Manhattan Plot</button>
-            <button class="tab-btn" onclick="showTab('pca')">PCA Analysis</button>
+            <button class="tab-btn" onclick="showTab('pca')">Population Structure Correction</button>
         </div>
         
         <!-- Association Analysis 面板 - 整合布局 -->
@@ -8898,8 +9767,13 @@ if (promoterStart < promoterEnd) {{
         
         <!-- PCA面板 -->
         <div id="pca" class="tab-content">
-            <div class="panel-header"><h3>Principal Component Analysis (PCA) - Population Structure Correction</h3></div>
-            <div id="pca-correction-info" style="padding: 8px 15px; background: #eaf6ff; border-radius: 4px; margin: 5px 15px; font-size: 12px; color: #2c3e50;"></div>
+            <div class="panel-header"><h3>Population Structure Correction (PCA)</h3>''' + (
+            f'''<div class="header-info" style="margin-top:6px;font-size:11px;color:#7f8c8d;">
+                PCs: {pop_struct_info['n_components']} &nbsp;|&nbsp;
+                Cumulative Variance: {pop_struct_info['cumulative_variance']:.1%} &nbsp;|&nbsp;
+                Per-PC: {', '.join(f'{v:.1%}' for v in pop_struct_info['explained_variance_ratio'])}
+            </div>''' if pop_struct_info and pop_struct_info.get('n_components', 0) > 0 else ''
+        ) + '''</div>
             <div class="panel-controls">
                 <label>X-axis:</label>
                 <select id="pcaXAxis" onchange="updatePCA()">
@@ -8921,7 +9795,7 @@ if (promoterStart < promoterEnd) {{
     <a href="#" onclick="showTab('integrated'); return false;" id="nav-integrated" class="active">Association</a>
     <a href="#" onclick="showTab('network'); return false;" id="nav-network">Network</a>
     <a href="#" onclick="showTab('manhattan'); return false;" id="nav-manhattan">Manhattan</a>
-    <a href="#" onclick="showTab('pca'); return false;" id="nav-pca">PCA</a>
+    <a href="#" onclick="showTab('pca'); return false;" id="nav-pca">Pop Struct</a>
 </div>
 
 <div class="tooltip" id="tooltip" style="display:none;"></div>
@@ -8933,7 +9807,6 @@ const networkEdges = {network_edges_json};
 const manhattanData = {manhattan_json};
 const pcaData = {pca_json};
 const varExplained = {var_explained_json};
-const pcaCorrectionInfo = {pca_correction_json};
 const regionStart = {region_start};
 const regionEnd = {region_end};
 const geneStart = {gene_start};
@@ -9099,17 +9972,10 @@ function initNetwork() {{
     const node = networkG.append('g').selectAll('circle').data(networkNodes).enter().append('circle')
         .attr('r', d => d.size).attr('fill', d => d.color).attr('stroke', '#fff').attr('stroke-width', 2)
         .style('cursor', 'pointer')
-        .on('click', function(event, d) {{
-            if (networkMode === 'copy') {{
-                copyNodeSamples(d.id);
-                event.stopPropagation();
-            }}
-        }})
         .call(d3.drag()
-            .filter(function(event) {{ return networkMode === 'drag'; }})
             .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
             .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
+            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }})
         );
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
@@ -9119,22 +9985,12 @@ function initNetwork() {{
     node.on('mouseover', function(event, d) {{
         d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
         tooltip.style('display', 'block').html(
-            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p><p style='color:#e74c3c;cursor:pointer;' onclick='copyNodeSamples("${{d.id}}")'>📋 点击复制样本</p>`);
+            `<h4>${{d.id}}</h4><p><b>Sample Count:</b> ${{d.count}}</p><p><b>Node Size:</b> ${{d.size.toFixed(1)}}</p><p><b>Mean Phenotype:</b> ${{d.phenoMean}}</p>`);
     }}).on('mousemove', function(event) {{
         tooltip.style('left', (event.clientX + 15) + 'px').style('top', (event.clientY - 10) + 'px');
     }}).on('mouseout', function() {{
         d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
         tooltip.style('display', 'none');
-    }}).on('click', function(event, d) {{
-        if (networkMode === 'copy') {{
-            copyNodeSamples(d.id);
-        }}
-        event.stopPropagation();
-    }});
-    
-    // 阻止 tooltip 点击触发节点点击
-    tooltip.on('click', function(event) {{
-        event.stopPropagation();
     }});
     
     networkSimulation.on('tick', () => {{
@@ -9442,23 +10298,6 @@ document.addEventListener('DOMContentLoaded', () => {{
         initMiniNetwork();
         initMiniManhattan();
     }}, 200);
-    
-    // 显示PCA群体结构矫正信息
-    if (pcaCorrectionInfo && pcaCorrectionInfo.var_explained) {{
-        const infoDiv = document.getElementById('pca-correction-info');
-        if (infoDiv) {{
-            let html = '<strong>群体结构矫正 (Population Structure Correction)</strong> | ';
-            html += pcaCorrectionInfo.n_components + ' 个主成分 | ';
-            html += pcaCorrectionInfo.n_samples + ' 个样本 | ';
-            html += '方差解释率: ';
-            pcaCorrectionInfo.var_explained.forEach((v, i) => {{
-                html += 'PC' + (i+1) + ': ' + v.toFixed(1) + '%';
-                if (i < pcaCorrectionInfo.var_explained.length - 1) html += ', ';
-            }});
-            html += ' | <em style="color:#7f8c8d">ANCOVA模型已矫正群体结构对关联分析的影响</em>';
-            infoDiv.innerHTML = html;
-        }}
-    }}
 }});
 
 // 键盘快捷键
@@ -9675,7 +10514,7 @@ class HaplotypePhenotypeAnalyzer:
         try:
             vcf = open_vcf(self.vcf_file)
             samples = vcf.samples if hasattr(vcf, 'samples') else []
-            
+
             # 获取区间内的变异
             variants = []
             positions = []
@@ -9686,32 +10525,37 @@ class HaplotypePhenotypeAnalyzer:
                     positions.append(rec['pos'])
                 else:
                     positions.append(rec.pos)
-                
-                if len(variants) == 0:
-                    return None
-                
-                # 构建基因型矩阵
-                gt_data = []
-                for rec in variants:
-                    row = {'POS': rec.pos}
-                    for sample in samples:
-                        gt = rec.samples[sample]['GT']
-                        # 编码基因型: 0/0->0, 0/1->1, 1/1->2, missing->-1
-                        if gt is None or None in gt:
-                            row[sample] = -1
-                        else:
-                            row[sample] = sum(gt)
-                    gt_data.append(row)
-                
-                gt_df = pd.DataFrame(gt_data)
-                # 转置为 样本 x 位点 格式
-                gt_df = gt_df.set_index('POS').T.reset_index()
-                gt_df.columns = ['SampleID'] + [f'POS_{p}' for p in positions]
-                
-                return gt_df
-            else:
-                logger.warning("pysam不可用，无法提取基因型数据")
+
+            if len(variants) == 0:
                 return None
+
+            # 构建基因型矩阵
+            gt_data = []
+            for rec in variants:
+                # 兼容 pysam 对象和字典格式
+                if isinstance(rec, dict):
+                    pos = rec['pos']
+                else:
+                    pos = rec.pos
+                row = {'POS': pos}
+                for sample in samples:
+                    if isinstance(rec, dict):
+                        gt = rec.get('samples', {}).get(sample, {}).get('GT') if sample in rec.get('samples', {}) else None
+                    else:
+                        gt = rec.samples[sample]['GT']
+                    # 编码基因型: 0/0->0, 0/1->1, 1/1->2, missing->-1
+                    if gt is None or None in gt:
+                        row[sample] = -1
+                    else:
+                        row[sample] = sum(gt)
+                gt_data.append(row)
+
+            gt_df = pd.DataFrame(gt_data)
+            # 转置为 样本 x 位点 格式
+            gt_df = gt_df.set_index('POS').T.reset_index()
+            gt_df.columns = ['SampleID'] + [f'POS_{p}' for p in positions]
+
+            return gt_df
         except Exception as e:
             logger.warning(f"提取基因型数据失败: {e}")
             return None
@@ -10254,21 +11098,33 @@ class HaplotypePhenotypeAnalyzer:
                     logger.info(f"[数据库] VCF是标记文件 ({vcf_size} bytes)，直接使用CSV数据")
             
             if not is_marker_file:
+                # **数据完整性检查**: 保存CSV variant_info的位点数用于后续比较
+                csv_positions = set()
+                if 'variant_info' in preloaded_data and isinstance(preloaded_data['variant_info'], dict):
+                    csv_positions = set(preloaded_data['variant_info'].keys())
+
                 logger.info(f"[数据库] 优先使用VCF文件: {vcf_path}")
-                # 备份原始variant_info（可能包含SNP+SV合并后的数据）
-                # 防止VCF提取失败时variant_info被覆盖为仅SNP的数据
-                _orig_variant_info = preloaded_data.get('variant_info', {}).copy()
                 try:
                     # 使用数据库VCF创建临时extractor
                     temp_extractor = HaplotypeExtractor(vcf_path)
                     self.positions, self.hap_df, self.hap_sample_df = temp_extractor.extract_region(
                         chrom, extended_start, extended_end, min_samples=min_samples, snp_only=False
                     )
-                    # 复制variant_info（VCF提取的variant_info通常包含更完整信息）
-                    if hasattr(temp_extractor, 'variant_info') and temp_extractor.variant_info:
+                    # 复制variant_info
+                    if hasattr(temp_extractor, 'variant_info'):
                         preloaded_data['variant_info'] = temp_extractor.variant_info
                         self.variant_info = temp_extractor.variant_info
                     logger.info(f"[数据库] 从VCF提取: {len(self.positions)} 个位点, {len(self.hap_df)} 个单倍型")
+
+                    # **数据完整性检查**: 如果CSV数据比VCF更完整，回退到CSV
+                    if len(csv_positions) > len(self.positions) * 3:
+                        logger.warning(f"[数据库] VCF位点数({len(self.positions)})远少于CSV位点数({len(csv_positions)})，回退到CSV数据")
+                        if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
+                            self.hap_df = preloaded_data['hap_df']
+                            self.hap_sample_df = preloaded_data['hap_sample_df']
+                            self.positions = sorted(csv_positions)
+                            # 恢复CSV的variant_info
+                            logger.info(f"[数据库] 已回退到CSV: {len(self.hap_df)} 个单倍型, {len(self.positions)} 个位点")
                     
                     # **关键修复**: 从VCF提取后，hap_sample_df只有3列(SampleID,Hap_Name,Haplotype_Seq)
                     # 需要把之前加载的协变量列合并回来
@@ -10287,8 +11143,6 @@ class HaplotypePhenotypeAnalyzer:
                     
                 except Exception as e:
                     logger.warning(f"[数据库] 从VCF提取失败: {e}，回退到CSV数据")
-                    # 恢复原始variant_info（不含被覆盖的仅SNP数据）
-                    preloaded_data['variant_info'] = _orig_variant_info
                     # 回退到CSV数据
                     if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
                         self.hap_df = preloaded_data['hap_df']
@@ -10423,40 +11277,39 @@ class HaplotypePhenotypeAnalyzer:
                     logger.warning(f"  AMOVA分析失败: {amova_result.get('error')}")
         except Exception as e:
             logger.warning(f"  AMOVA分析异常: {e}")
-        
-        # 2.2 群体结构矫正（PCA协变量计算）
-        pc_covariates = None
-        pca_result_info = None
-        logger.info("[Step 2.2] 群体结构矫正 - PCA协变量计算...")
-        try:
-            pop_corrector = PopulationStructureCorrector(self.hap_sample_df, n_components=3)
-            pc_covariates = pop_corrector.compute_pca_covariates()
-            if pc_covariates is not None and not pc_covariates.empty:
-                n_pc = len([c for c in pc_covariates.columns if c.startswith('PC')])
-                var_explained = pop_corrector.var_explained
-                pca_result_info = {
-                    'n_components': n_pc,
-                    'var_explained': var_explained,
-                    'n_samples': len(pc_covariates),
-                }
-                logger.info(f"  PCA计算完成: {n_pc} 个主成分, {len(pc_covariates)} 个样本")
-                for i, v in enumerate(var_explained):
-                    logger.info(f"    PC{i+1}: {v:.1f}% 方差解释率")
-                # 保存PCA协变量
-                pc_csv = os.path.join(self.output_dir, "pca_covariates.csv")
-                pc_covariates.to_csv(pc_csv, index=False)
-                logger.info(f"  PCA协变量已保存: {pc_csv}")
-            else:
-                logger.info("  PCA协变量计算失败或样本不足，将使用未矫正的关联分析")
-        except Exception as e:
-            logger.warning(f"  群体结构矫正异常: {e}")
+
+        # 2.2 群体结构校正 (PCA-based population structure correction)
+        logger.info("[Step 2.2] 群体结构校正 (PCA)...")
+        perf_monitor.step_start("Step_2_2_Population_Structure_Correction")
+
+        pca_corrector = PopulationStructureCorrector(n_components=5, random_state=42)
+        pc_covariates = pca_corrector.fit_transform(assoc_module.merged_df)
+
+        if pca_corrector.is_valid():
+            pc_cols = [c for c in pc_covariates.columns if c != 'SampleID']
+            assoc_module.merged_df = assoc_module.merged_df.merge(
+                pc_covariates, on='SampleID', how='left'
+            )
+            logger.info(f"  - 提取了 {len(pc_cols)} 个PC: {', '.join(pc_cols)}")
+
+            pca_csv = os.path.join(self.output_dir, "pca_covariates.csv")
+            pc_covariates.to_csv(pca_csv, index=False)
+            logger.info(f"  - PCA协变量已保存: {pca_csv}")
+
+            var_info = pca_corrector.get_explained_variance()
+            logger.info(f"  - 累计解释方差: {var_info['cumulative_variance']:.3f}")
+        else:
             pc_covariates = None
-            
+            logger.info("  - PCA未成功，将不进行群体结构校正")
+
+        step2_2_time = perf_monitor.step_end("Step_2_2_Population_Structure_Correction")
+        logger.info(f"  - Step 2.2 耗时：{step2_2_time:.2f}s")
+
         if phenotype_cols is None:
             phenotype_cols = assoc_module.get_phenotype_columns()
-            
+
         logger.info(f"  - 分析 {len(phenotype_cols)} 个表型")
-            
+
         all_results = {
             'gene_info': {
                 'gene_id': gene_id,
@@ -10467,28 +11320,36 @@ class HaplotypePhenotypeAnalyzer:
             'n_variants': len(self.positions),
             'n_haplotypes': len(self.hap_df),
             'phenotype_results': {},
-            'pca_correction': pca_result_info  # 群体结构矫正结果
+            'population_structure': pca_corrector.get_explained_variance()
         }
-            
+
         # 3. PVE 计算
         logger.info("[Step 3] 计算变异解释率 (PVE)...")
         perf_monitor.step_start("Step_3_PVE_Calculation")
         pve_module = PVECalculator(assoc_module.merged_df)
-            
+
         for pheno in phenotype_cols:
             logger.info(f"  分析表型: {pheno}")
-                
-            # 关联检验（含群体结构矫正）
-            assoc_result = assoc_module.association_test(pheno, pc_covariates=pc_covariates)
-                
+
+            # 关联检验（含PC协变量）
+            assoc_result = assoc_module.association_test(
+                pheno, pc_covariates=pc_covariates
+            )
+
             # PVE 计算
             pve_result = pve_module.calculate_pve(pheno)
-                
+
+            # 回归分析（含PC协变量）
+            reg_result = assoc_module.regression_analysis(
+                pheno, pc_covariates=pc_covariates
+            )
+
             all_results['phenotype_results'][pheno] = {
                 'association': assoc_result,
                 'pve': pve_result,
+                'regression': reg_result,
             }
-                
+
             # 记录关键结果
             if 'error' not in assoc_result:
                 sig = "***" if assoc_result.get('highly_significant') else ("*" if assoc_result.get('significant') else "")
@@ -10496,15 +11357,12 @@ class HaplotypePhenotypeAnalyzer:
                 pve_val = pve_result.get('pve_percent', 0)
                 p_val_str = f"{p_val:.2e}" if isinstance(p_val, (int, float)) else 'NA'
                 pve_str = f"{pve_val:.2f}" if isinstance(pve_val, (int, float)) else 'NA'
-                logger.info(f"    P-value (未矫正): {p_val_str} {sig}")
+                logger.info(f"    P-value (corrected): {p_val_str} {sig}")
                 logger.info(f"    PVE: {pve_str}%")
-                # 矫正后结果
-                if 'corrected' in assoc_result:
-                    corr = assoc_result['corrected']
-                    corr_p = corr.get('p_value', 1)
-                    corr_sig = "***" if corr_p < 0.01 else ("*" if corr_p < 0.05 else "")
-                    logger.info(f"    P-value (PCA矫正): {corr_p:.2e} {corr_sig}")
-                    logger.info(f"    偏R²(单倍型|PC): {corr.get('partial_r_squared', 0):.4f}")
+                if 'p_value_corrected' in assoc_result:
+                    part_r2 = assoc_result.get('partial_r_squared', 'NA')
+                    if isinstance(part_r2, float):
+                        logger.info(f"    Partial R^2 (Hap|PC): {part_r2:.4f}")
             else:
                 logger.warning(f"    关联分析失败: {assoc_result.get('error')}")
                 
@@ -10756,7 +11614,6 @@ class HaplotypePhenotypeAnalyzer:
                 variant_pvalues=variant_pvalues,
                 has_promoter_variants=has_promoter_variants,
                 promoter_actual_length=promoter_actual_length,
-                pca_correction=pca_result_info,  # 群体结构矫正结果
             )
             
             # 5.2 生成新可视化功能
@@ -10828,7 +11685,8 @@ class HaplotypePhenotypeAnalyzer:
                     gene_end=end,
                     chrom=chrom,
                     variant_pvalues=variant_pvalues,
-                    snp_effects=snp_effects
+                    snp_effects=snp_effects,
+                    pop_struct_info=all_results.get('population_structure')
                 )
                 logger.info("  - 多图整合面板生成成功")
             except Exception as e:

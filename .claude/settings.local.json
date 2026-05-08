@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0,'.'\\); from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer; print\\('Import OK'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d[k] for k in ['gene_id','chrom','start','end','strand','promoter_start','promoter_end','promoter_actual_length'] if k in d}, indent=2\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('Keys:', list\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(python d:/Desktop/project1/_temp_replace_partd.py)",
+      "Bash(python d:/Desktop/project1/_temp_insert_parte.py)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('d:/Desktop/project1/haplotype_phenotype_analysis.py', doraise=True\\); print\\('Syntax OK'\\)\")"
+    ]
+  }
+}
