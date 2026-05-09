@@ -4604,31 +4604,221 @@ class HaplotypeScorer:
             scores[hap] = total
         return scores
 
-    def compute_multi_omics_score(self):
-        """多组学得分：数值型协变量的标准化偏差均值（dropna处理）"""
-        covariate_cols = [c for c in self.hap_sample_df.columns
-                         if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', self.phenotype_col]
-                         and pd.api.types.is_numeric_dtype(self.hap_sample_df[c])]
-        if not covariate_cols:
-            return {hap: 0.0 for hap in self.unique_haps}
+    def _classify_covariate(self, col):
+        """将协变量列分类为 'numeric', 'binary', 'categorical'"""
+        series = self.hap_sample_df[col].dropna()
+        if len(series) == 0:
+            return None
+        if pd.api.types.is_bool_dtype(series):
+            return 'binary'
+        if pd.api.types.is_numeric_dtype(series):
+            unique_vals = series.unique()
+            if len(unique_vals) <= 2:
+                return 'binary'
+            return 'numeric'
+        # 字符串/object → categorical
+        unique_vals = series.unique()
+        if len(unique_vals) <= 2:
+            return 'binary'  # 两分类当binary处理
+        return 'categorical'
 
+    def _compute_pca_mahalanobis(self, numeric_cols):
+        """PCA去相关 + 马氏距离计算数值型协变量偏差
+
+        步骤: PCA降维(保留95%方差) → 各PC标准化偏差平方和 → 开方
+        PCA后各主成分正交，自然消除协变量间相关性
+        """
+        numeric_data = self.hap_sample_df[numeric_cols].dropna()
+        n_samples, n_features = numeric_data.shape
+        if n_samples < 3 or n_features == 0:
+            return None
+
+        try:
+            from sklearn.decomposition import PCA
+            from sklearn.preprocessing import StandardScaler
+        except ImportError:
+            return self._compute_per_covariate_fallback(numeric_cols)
+
+        try:
+            # 标准化后PCA
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(numeric_data)
+            pca = PCA(n_components=min(n_features, n_samples - 1))
+            X_pca = pca.fit_transform(X_scaled)
+
+            # 保留解释95%方差的PC数（至少1个）
+            cumsum_var = np.cumsum(pca.explained_variance_ratio_)
+            n_components = max(1, int(np.searchsorted(cumsum_var, 0.95)) + 1)
+
+            pca_df = pd.DataFrame(
+                X_pca[:, :n_components],
+                columns=[f'PC{i+1}' for i in range(n_components)],
+                index=numeric_data.index
+            )
+        except Exception:
+            return self._compute_per_covariate_fallback(numeric_cols)
+
+        # 按单倍型计算各PC的标准化偏差
+        scores = {}
+        for hap in self.unique_haps:
+            hap_mask = self.hap_sample_df.loc[pca_df.index, self.hap_col] == hap
+            hap_pca = pca_df.loc[hap_mask]
+            if len(hap_pca) == 0:
+                scores[hap] = 0.0
+                continue
+
+            sum_sq_dev = 0.0
+            n_valid = 0
+            for pc in pca_df.columns:
+                global_std = pca_df[pc].std()
+                if pd.isna(global_std) or global_std == 0:
+                    continue
+                dev = (hap_pca[pc].mean() - pca_df[pc].mean()) / global_std
+                sum_sq_dev += dev ** 2
+                n_valid += 1
+
+            scores[hap] = np.sqrt(sum_sq_dev) / max(n_valid, 1) if n_valid > 0 else 0.0
+        return scores
+
+    def _compute_per_covariate_fallback(self, numeric_cols):
+        """回退方案：逐协变量独立标准化偏差（不处理相关性）"""
         scores = {}
         for hap in self.unique_haps:
             hap_rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
             comp_sum = 0.0
             n_cov = 0
-            for cov in covariate_cols:
-                if cov in hap_rows.columns:
-                    hap_vals = hap_rows[cov].dropna()
-                    all_vals = self.hap_sample_df[cov].dropna()
-                    if len(hap_vals) == 0 or len(all_vals) == 0:
-                        continue
-                    cov_mean = hap_vals.mean()
-                    cov_std = all_vals.std()
-                    if pd.notna(cov_std) and cov_std > 0:
-                        comp_sum += abs(cov_mean - all_vals.mean()) / cov_std
-                        n_cov += 1
+            for cov in numeric_cols:
+                hap_vals = hap_rows[cov].dropna()
+                all_vals = self.hap_sample_df[cov].dropna()
+                if len(hap_vals) == 0 or len(all_vals) == 0:
+                    continue
+                cov_mean = hap_vals.mean()
+                cov_std = all_vals.std()
+                if pd.notna(cov_std) and cov_std > 0:
+                    comp_sum += abs(cov_mean - all_vals.mean()) / cov_std
+                    n_cov += 1
             scores[hap] = comp_sum / max(n_cov, 1)
+        return scores
+
+    def _compute_binary_deviation(self, col):
+        """二分类协变量：比例标准化偏差 |p_hap - p_all| / sqrt(p_all*(1-p_all))"""
+        all_vals = self.hap_sample_df[col].dropna()
+        if len(all_vals) == 0:
+            return None
+        # 转换为0/1
+        unique_vals = all_vals.unique()
+        if len(unique_vals) > 2:
+            return None
+        mapping = {val: i for i, val in enumerate(sorted(unique_vals))}
+        numeric = all_vals.map(mapping)
+        global_prop = numeric.mean()
+        global_se = np.sqrt(global_prop * (1 - global_prop))
+        if global_se == 0:
+            return None
+
+        scores = {}
+        for hap in self.unique_haps:
+            hap_mask = self.hap_sample_df.loc[all_vals.index, self.hap_col] == hap
+            hap_vals = numeric.loc[hap_mask]
+            if len(hap_vals) == 0:
+                scores[hap] = 0.0
+            else:
+                scores[hap] = abs(hap_vals.mean() - global_prop) / global_se
+        return scores
+
+    def _compute_categorical_deviation(self, col):
+        """多分类协变量：one-hot编码后各哑变量的标准化偏差均值
+
+        对每个类别k: |prop_hap(k) - prop_all(k)| / sqrt(prop_all(k)*(1-prop_all(k)))
+        """
+        all_vals = self.hap_sample_df[col].dropna()
+        if len(all_vals) < 2:
+            return None
+        dummies = pd.get_dummies(all_vals, prefix=col)
+        # 跳过只有一个样本的类别
+        cat_sums = dummies.sum()
+        valid_cats = cat_sums[cat_sums >= 2].index
+        if len(valid_cats) == 0:
+            return None
+        dummies = dummies[valid_cats]
+
+        scores = {}
+        for hap in self.unique_haps:
+            hap_mask = self.hap_sample_df.loc[all_vals.index, self.hap_col] == hap
+            hap_dummies = dummies.loc[hap_mask]
+            if len(hap_dummies) == 0:
+                scores[hap] = 0.0
+                continue
+
+            sum_dev = 0.0
+            n_cat = 0
+            for cat in dummies.columns:
+                global_prop = dummies[cat].mean()
+                global_se = np.sqrt(global_prop * (1 - global_prop))
+                if global_se == 0:
+                    continue
+                hap_prop = hap_dummies[cat].mean()
+                sum_dev += abs(hap_prop - global_prop) / global_se
+                n_cat += 1
+            scores[hap] = sum_dev / max(n_cat, 1)
+        return scores
+
+    def compute_multi_omics_score(self):
+        """多组学得分：综合数值/二分类/多分类协变量的标准化偏差
+
+        数值型：PCA去相关后各主成分标准化偏差的RMSE
+        二分类：比例标准化偏差
+        多分类：one-hot哑变量标准化偏差均值
+
+        最终得分为所有有效协变量组件的均值
+        """
+        exclude = {'SampleID', 'Hap_Name', 'Haplotype_Seq',
+                   'Unnamed: 0', 'index', self.phenotype_col}
+        covariate_cols = [c for c in self.hap_sample_df.columns if c not in exclude]
+
+        if not covariate_cols:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # 分类协变量
+        numeric_cols, binary_cols, categorical_cols = [], [], []
+        for col in covariate_cols:
+            cov_type = self._classify_covariate(col)
+            if cov_type == 'numeric':
+                numeric_cols.append(col)
+            elif cov_type == 'binary':
+                binary_cols.append(col)
+            elif cov_type == 'categorical':
+                categorical_cols.append(col)
+
+        # 收集各组件的单倍型得分
+        all_components = []
+
+        # 1. 数值型：PCA + Mahalanobis
+        if numeric_cols:
+            pca_scores = self._compute_pca_mahalanobis(numeric_cols)
+            if pca_scores is not None:
+                all_components.append(pca_scores)
+
+        # 2. 二分类：比例标准化偏差
+        for col in binary_cols:
+            bin_scores = self._compute_binary_deviation(col)
+            if bin_scores is not None:
+                all_components.append(bin_scores)
+
+        # 3. 多分类：one-hot哑变量标准化偏差
+        for col in categorical_cols:
+            cat_scores = self._compute_categorical_deviation(col)
+            if cat_scores is not None:
+                all_components.append(cat_scores)
+
+        # 所有组件等权平均
+        if not all_components:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        scores = {}
+        for hap in self.unique_haps:
+            total = sum(comp.get(hap, 0.0) for comp in all_components)
+            scores[hap] = total / len(all_components)
         return scores
 
     def compute_effect_size_score(self):
@@ -4749,7 +4939,7 @@ class HaplotypeScorer:
             if logp > 0:
                 pval = np.power(10, -logp)
                 pval = max(pval, 1e-300)
-                z_sq = _scipy_stats.chi2.ppf(1.0 - pval, 1)  # χ² = Z², 直接用卡方分位数
+                z_sq = _scipy_stats.chi2.isf(pval, 1)  # χ² = Z², isf避免1-pval精度丢失
                 pos_log_bf[pos] = z_sq / 2.0
             else:
                 pos_log_bf[pos] = -np.inf
@@ -5875,19 +6065,20 @@ class ReportGenerator:
                     'isLead': is_lead_hap
                 })
                 
-                # 计算边（Hamming距离）
+                # 计算边（Hamming距离，所有单倍型之间均连边确保连通）
                 for i in range(len(hap_names_list)):
                     for j in range(i + 1, len(hap_names_list)):
                         seq1 = hap_seqs.get(hap_names_list[i], '')
                         seq2 = hap_seqs.get(hap_names_list[j], '')
-                        if seq1 and seq2 and len(seq1) == len(seq2):
-                            diff_count = sum(1 for a, b in zip(seq1, seq2) if a != b)
-                            if diff_count > 0:
-                                network_edges.append({
-                                    'source': hap_names_list[i],
-                                    'target': hap_names_list[j],
-                                    'distance': diff_count
-                                })
+                        if seq1 and seq2:
+                            min_len = min(len(seq1), len(seq2))
+                            diff_count = sum(1 for k in range(min_len) if seq1[k] != seq2[k])
+                            diff_count += abs(len(seq1) - len(seq2))
+                            network_edges.append({
+                                'source': hap_names_list[i],
+                                'target': hap_names_list[j],
+                                'distance': diff_count
+                            })
                 
             network_data = {'nodes': network_nodes, 'edges': network_edges}
         else:
@@ -7915,7 +8106,7 @@ function drawHaplotypeScorePlot(scoreData) {
         .attr('fill', function(d) { return hapColor[d.haplotype] || '#999'; })
         .attr('stroke', 'white').attr('stroke-width', 0.5)
         .attr('opacity', 0.85)
-        .on('mouseover', function(d) {
+        .on('mouseover', function(event, d) {
             tooltip.style('display', 'block')
                 .html('<b>' + d.sample_id + '</b><br>'
                     + 'Haplotype: ' + d.haplotype + '<br>'
@@ -7926,7 +8117,7 @@ function drawHaplotypeScorePlot(scoreData) {
             tooltip.style('left', (event.pageX + 12) + 'px')
                 .style('top', (event.pageY - 28) + 'px');
         })
-        .on('mouseout', function() {
+        .on('mouseout', function(event, d) {
             tooltip.style('display', 'none');
         });
 
@@ -8275,33 +8466,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 'snp_count': snp_count if variant_positions else len(hap_seqs.get(hap, ''))
             })
         
-        # 构建边数据（基于Hamming距离）并记录差异位点
+        # 构建边数据（基于Hamming距离，所有单倍型之间均连边确保连通）
         edges = []
         for i in range(n_haps):
             for j in range(i + 1, n_haps):
                 seq1, seq2 = hap_seqs.get(hap_names[i], ''), hap_seqs.get(hap_names[j], '')
-                if seq1 and seq2 and len(seq1) == len(seq2):
-                    # 计算差异位点
-                    diff_positions = []
-                    for idx, (c1, c2) in enumerate(zip(seq1, seq2)):
-                        if c1 != c2:
-                            diff_positions.append(idx)
-                    dist = len(diff_positions)
-                    # 连接所有有差异的单倍型（确保所有节点相连）
-                    if dist > 0:
-                        edges.append({
-                            'source': hap_names[i],
-                            'target': hap_names[j],
-                            'distance': dist,
-                            'diff_positions': diff_positions  # 记录差异位点索引
-                        })
-        
+                if not seq1 or not seq2:
+                    continue
+                # 计算差异位点（重叠部分）
+                min_len = min(len(seq1), len(seq2))
+                diff_positions = [idx for idx in range(min_len) if seq1[idx] != seq2[idx]]
+                dist = len(diff_positions) + abs(len(seq1) - len(seq2))
+                edges.append({
+                    'source': hap_names[i],
+                    'target': hap_names[j],
+                    'distance': dist,
+                    'diff_positions': diff_positions
+                })
+
         # 确保所有节点都相连：如果有孤立节点，连接到最近的节点
         connected_nodes = set()
         for e in edges:
             connected_nodes.add(e['source'])
             connected_nodes.add(e['target'])
-        
+
         for hap in hap_names:
             if hap not in connected_nodes:
                 # 找到距离最近的已连接节点
@@ -8309,14 +8497,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 nearest = None
                 for other in connected_nodes:
                     seq1, seq2 = hap_seqs.get(hap, ''), hap_seqs.get(other, '')
-                    if seq1 and seq2 and len(seq1) == len(seq2):
-                        dist = sum(c1 != c2 for c1, c2 in zip(seq1, seq2))
-                        if dist < min_dist and dist > 0:
-                            min_dist = dist
-                            nearest = other
+                    if not seq1 or not seq2:
+                        continue
+                    min_len = min(len(seq1), len(seq2))
+                    dist = sum(1 for k in range(min_len) if seq1[k] != seq2[k])
+                    dist += abs(len(seq1) - len(seq2))
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest = other
                 if nearest:
                     seq1, seq2 = hap_seqs.get(hap, ''), hap_seqs.get(nearest, '')
-                    diff_positions = [idx for idx, (c1, c2) in enumerate(zip(seq1, seq2)) if c1 != c2]
+                    min_len2 = min(len(seq1), len(seq2))
+                    diff_positions = [idx for idx in range(min_len2) if seq1[idx] != seq2[idx]]
                     edges.append({
                         'source': hap,
                         'target': nearest,
@@ -9495,24 +9687,22 @@ if (promoterStart < promoterEnd) {{
                 'phenoMean': round(hap_pheno_means.get(hap, 0), 3)
             })
         
-        # 构建边数据（Hamming距离）
+        # 构建边数据（Hamming距离，所有单倍型之间均连边确保连通）
         network_edges = []
         for i in range(len(hap_names)):
             for j in range(i + 1, len(hap_names)):
                 seq1, seq2 = hap_seqs.get(hap_names[i], ''), hap_seqs.get(hap_names[j], '')
-                if seq1 and seq2 and len(seq1) == len(seq2):
-                    diff_positions = []
-                    for idx, (c1, c2) in enumerate(zip(seq1, seq2)):
-                        if c1 != c2:
-                            diff_positions.append(idx)
-                    dist = len(diff_positions)
-                    if dist > 0:
-                        network_edges.append({
-                            'source': hap_names[i],
-                            'target': hap_names[j],
-                            'distance': dist,
-                            'diff_positions': diff_positions
-                        })
+                if not seq1 or not seq2:
+                    continue
+                min_len = min(len(seq1), len(seq2))
+                diff_positions = [idx for idx in range(min_len) if seq1[idx] != seq2[idx]]
+                dist = len(diff_positions) + abs(len(seq1) - len(seq2))
+                network_edges.append({
+                    'source': hap_names[i],
+                    'target': hap_names[j],
+                    'distance': dist,
+                    'diff_positions': diff_positions
+                })
         
         # ========== 2. 曼哈顿图数据 ==========
         manhattan_points = []
