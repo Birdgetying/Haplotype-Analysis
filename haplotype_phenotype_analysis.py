@@ -62,6 +62,13 @@ class NumpyEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+def _safe_str(val, default=''):
+    """Convert a potentially NaN (float) value from CSV loading to string."""
+    if not isinstance(val, str):
+        return str(val) if pd.notna(val) else default
+    return val
+
+
 # ============================================================================
 # BED文件解析器（用户自定义关注区域）
 # ============================================================================
@@ -5511,11 +5518,6 @@ class ReportGenerator:
                 samples = hap_sample_df[hap_sample_df[hap_col] == hap_name]['SampleID'].tolist()
                 hap_samples_map[hap_name] = samples
         
-        # DEBUG: 检查 snp_effects
-        print(f"[DEBUG] generate_integrated_html: snp_effects type={type(snp_effects)}, len={len(snp_effects) if snp_effects else 0}")
-        if snp_effects:
-            print(f"[DEBUG] snp_effects sample: {list(snp_effects.items())[:3]}")
-        
         # 获取所有单倍型及其序列（用于聚类）
         hap_seqs = {}
         if 'Haplotype_Seq' in hap_sample_df.columns:
@@ -5534,17 +5536,22 @@ class ReportGenerator:
             try:
                 from scipy.cluster.hierarchy import linkage, leaves_list
                 from scipy.spatial.distance import pdist
-                
+
                 all_seqs = [hap_seqs[hap] for hap in hap_counts.index if hap in hap_seqs]
                 hap_names = [hap for hap in hap_counts.index if hap in hap_seqs]
-                
+
+                # 确保所有序列长度一致（取最小长度截断）
+                min_len = min(len(seq) for seq in all_seqs) if all_seqs else 0
+                if min_len > 0:
+                    all_seqs = [seq[:min_len] for seq in all_seqs]
+
                 base_map = {'A': 0, 'T': 1, 'C': 2, 'G': 3, '+': 4, '-': 4, 'N': 4}
                 seq_matrix = [[base_map.get(base.upper(), 4) for base in seq] for seq in all_seqs]
-                
+
                 distances = pdist(seq_matrix, metric='hamming')
                 linkage_matrix = linkage(distances, method='average')
                 leaf_order = leaves_list(linkage_matrix)
-                
+
                 sorted_haps = [hap_names[i] for i in leaf_order]
                 top_haps_cluster = sorted_haps[:8]
             except Exception as e:
@@ -5612,53 +5619,48 @@ class ReportGenerator:
                     # 对于UTR/other类型，额外检查variant_info看是否是indel
                     if ann in ('UTR', 'other', 'promoter') and variant_info and pos in variant_info:
                         vinfo = variant_info[pos]
-                        ref = vinfo.get('ref', '')
-                        alt = vinfo.get('alt', '')
+                        ref = _safe_str(vinfo.get('ref', ''))
+                        alt = _safe_str(vinfo.get('alt', ''))
                         # 检查符号等位基因
                         is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
                         if is_symbolic or vinfo.get('is_sv', False):
-                            print(f"[DEBUG] get_var_color: pos={pos}, snp_effects={ann}, but variant_info shows SV (symbolic={is_symbolic})")
+                            pass  # snp_effects annotation overrides variant_info SV (symbolic)
                             return var_type_colors['SV'], 'SV'
                         len_diff = abs(len(ref) - len(alt))
                         if len_diff > 0 and len_diff < 50:  # indel
                             if len(alt) > len(ref):
-                                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects={ann}, but variant_info shows INS")
+                                pass  # snp_effects annotation overrides variant_info INS
                                 return var_type_colors['INS'], 'INS'
                             else:
-                                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects={ann}, but variant_info shows DEL")
+                                pass  # snp_effects annotation overrides variant_info DEL
                                 return var_type_colors['DEL'], 'DEL'
                         elif len_diff >= 50:  # SV
-                            print(f"[DEBUG] get_var_color: pos={pos}, snp_effects={ann}, but variant_info shows SV")
+                            pass  # snp_effects annotation overrides variant_info SV
                             return var_type_colors['SV'], 'SV'
                     color = var_type_colors.get(ann, '#95a5a6')
-                    print(f"[DEBUG] get_var_color: pos={pos}, found in snp_effects, ann={ann}, color={color}")
+                    pass  # found in snp_effects, ann and color determined
                     return color, ann
             
             # 回退到variant_info（VCF解析的数据）
             if variant_info and pos in variant_info:
                 vinfo = variant_info[pos]
-                ref = vinfo.get('ref', '')
-                alt = vinfo.get('alt', '')
-                print(f"[DEBUG] variant_info fallback: pos={pos}, ref={ref}, alt={alt}, ref_len={len(ref)}, alt_len={len(alt)}")
+                ref = _safe_str(vinfo.get('ref', ''))
+                alt = _safe_str(vinfo.get('alt', ''))
                 # 检查符号等位基因或is_sv标记
                 is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
                 if is_symbolic or vinfo.get('is_sv', False):
-                    print(f"[DEBUG] -> SV color (symbolic={is_symbolic}, is_sv={vinfo.get('is_sv')})")
                     return var_type_colors['SV'], 'SV'
                 if len(alt) > len(ref):
-                    print(f"[DEBUG] -> INS color")
                     return var_type_colors['INS'], 'INS'
                 elif len(ref) > len(alt):
-                    print(f"[DEBUG] -> DEL color")
                     return var_type_colors['DEL'], 'DEL'
                 elif abs(len(ref) - len(alt)) >= 50:
-                    print(f"[DEBUG] -> SV color")
                     return var_type_colors['SV'], 'SV'
             
             if snp_effects:
-                print(f"[DEBUG] get_var_color: pos={pos}, NOT in snp_effects, keys sample={list(snp_effects.keys())[:3]}")
+                pass  # pos not in snp_effects
             else:
-                print(f"[DEBUG] get_var_color: pos={pos}, snp_effects is None or empty")
+                pass  # snp_effects is None or empty
             
             # 位置回退：分为 UTR / intron / other
             in_exon = any(es <= pos <= ee for es, ee in exons)
@@ -5717,13 +5719,13 @@ class ReportGenerator:
                     region_positions.append(pos)
                     region_indices.append(idx)
                 else:
-                    print(f"[DEBUG] 过滤掉区域外变异: pos={pos}, region={region_start}-{region_end}")
+                    pass  # outside region, filtered
             display_positions = region_positions
             display_orig_indices = region_indices
             
             filtered_count = len(all_positions) - len(display_positions)
-            print(f"[DEBUG] 变异位点过滤: 原始{len(all_positions)}个 -> 过滤掉无变异{filtered_count}个 -> 保留{len(display_positions)}个")
-            print(f"[DEBUG] 显示位置范围: {min(display_positions) if display_positions else 'N/A'} - {max(display_positions) if display_positions else 'N/A'}")
+            pass  # variant position filtering complete
+            pass  # display positions range determined
         else:
             display_positions = variant_positions if variant_positions else []
             display_orig_indices = list(range(len(display_positions)))  # 顺序索引
@@ -5814,7 +5816,7 @@ class ReportGenerator:
         box_data = {}
         pheno_cols = [c for c in hap_sample_df.columns if 'pheno' in c.lower() or c == phenotype_col]
         actual_pheno_col = pheno_cols[0] if pheno_cols else phenotype_col
-        print(f"[DEBUG] 表型列: {actual_pheno_col}, 可用列: {list(hap_sample_df.columns)[:10]}")
+        pass  # phenotype column selected
         
         for hap in top_haps:
             hap_df = hap_sample_df[hap_sample_df[hap_col] == hap]
@@ -5827,7 +5829,7 @@ class ReportGenerator:
                         'min': min(values), 'max': max(values), 'n': len(values),
                         'values': values  # 保存原始值用于数据点绘制
                     }
-        print(f"[DEBUG] 箱线图数据: {len(box_data)} 个单倍型有表型数据")
+        pass  # boxplot data prepared
         
         # 效应图数据
         effect_data = {}
@@ -6009,9 +6011,7 @@ class ReportGenerator:
                     if p_val < min_p_value:
                         min_p_value = p_val
                         lead_haplotype = hap_name
-            print(f"[DEBUG] Lead haplotype: {lead_haplotype}, min p-value: {min_p_value}")
-            print(f"[DEBUG] hap_effects count: {len(hap_effects)}")
-            print(f"[DEBUG] hap_names_list: {hap_names_list}")
+            pass  # lead haplotype determined
         
         if network_data is None:
             # 如果没有提供网络数据，则计算
@@ -6056,15 +6056,17 @@ class ReportGenerator:
                 else:
                     color = '#9b59b6'  # 默认紫色
                 
+                hap_samples = hap_sample_df[hap_sample_df[hap_col] == hap]['SampleID'].tolist()
                 network_nodes.append({
                     'id': hap,
                     'count': count,
                     'size': size,
                     'color': color,
                     'phenoMean': round(hap_pheno_means.get(hap, 0), 3),
-                    'isLead': is_lead_hap
+                    'isLead': is_lead_hap,
+                    'samples': hap_samples
                 })
-                
+
                 # 计算边（Hamming距离，所有单倍型之间均连边确保连通）
                 for i in range(len(hap_names_list)):
                     for j in range(i + 1, len(hap_names_list)):
@@ -6164,16 +6166,23 @@ class ReportGenerator:
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; position: relative; height: 180px; }}
+        .top-section {{ display: flex; gap: 15px; align-items: stretch; }}
         .main-data-section {{ }}
         .network-panel {{ width: 350px; min-width: 350px; height: 280px;
                          border: 1px solid #e0e0e0; border-radius: 6px;
-                         background: #fafafa; position: absolute; left: 0; top: 0; overflow: hidden; z-index: 10; }}
+                         background: #fafafa; position: relative; overflow: hidden; flex-shrink: 0; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px;
                                font-size: 12px; font-weight: 600; color: #2c3e50;
                                background: rgba(255,255,255,0.9); padding: 2px 6px;
                                border-radius: 3px; z-index: 10; }}
-        .gene-gwas-panel {{ flex: 1; height: 180px; margin-left: 0; border: 1px solid #e0e0e0;
+        .network-mode-btn {{ position: absolute; top: 8px; right: 10px;
+                            font-size: 11px; padding: 3px 10px; cursor: pointer;
+                            border: 1px solid #3498db; border-radius: 4px;
+                            background: white; color: #3498db; z-index: 10;
+                            transition: all 0.2s; }}
+        .network-mode-btn:hover {{ background: #3498db; color: white; }}
+        .network-mode-btn.active {{ background: #3498db; color: white; }}
+        .gene-gwas-panel {{ flex: 1; height: 280px; margin-left: 0; border: 1px solid #e0e0e0;
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px;
                            font-size: 12px; font-weight: 600; color: #2c3e50;
@@ -6297,7 +6306,8 @@ class ReportGenerator:
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
             <div class="top-section">
                 <div class="network-panel">
-                    <div class="network-panel-title">Haplotype Network</div>
+                    <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| Click node to copy samples</span></div>
+                    <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">Copy Mode</button>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
                 <div class="gene-gwas-panel">
@@ -6998,6 +7008,42 @@ function copyAllHaplotypes() {
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
+    });
+}
+
+// ==================== 网络图模式切换：复制模式 vs 拖拽模式 ====================
+var networkMode = 'drag'; // 'drag' or 'copy'
+
+function toggleNetworkMode() {
+    var btn = document.getElementById('networkModeBtn');
+    if (networkMode === 'drag') {
+        networkMode = 'copy';
+        btn.textContent = 'Drag Mode';
+        btn.classList.add('active');
+    } else {
+        networkMode = 'drag';
+        btn.textContent = 'Copy Mode';
+        btn.classList.remove('active');
+    }
+}
+
+function copyNodeSamples(nodeId) {
+    var node = networkNodes.find(function(n) { return n.id === nodeId; });
+    var samples = node ? (node.samples || []) : [];
+    if (!samples || samples.length === 0) {
+        alert('No samples for ' + nodeId);
+        return;
+    }
+    var text = samples.join(',');
+    navigator.clipboard.writeText(text).then(function() {
+        console.log('Copied samples for ' + nodeId);
+    }).catch(function(err) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
     });
 }
 
@@ -7761,15 +7807,29 @@ function drawNetworkPlot() {
 
     var nodeG = zoomG.append('g').selectAll('g').data(nodes).join('g')
         .style('cursor','pointer')
+        .on('click', function(event, d) {
+            if (networkMode === 'copy') {
+                copyNodeSamples(d.id);
+                event.stopPropagation();
+            }
+        })
         .call(d3.drag()
+            .filter(function(event) { return networkMode === 'drag'; })
             .on('start', function(e,d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
             .on('drag',  function(e,d) {
-                // 限制拖拽范围在容器内
+                // 随缩放比例动态计算可拖动边界（zoomG内部坐标系）
+                // zoomG transform: translate(W/2,H/2) scale(s) translate(-W/2,-H/2)
+                // 视觉边界[0,W]在内部坐标中为[W/2*(1-1/s), W/2*(1+1/s)]
                 var r = d.size * 0.5 + 5;
-                d.fx = Math.max(r, Math.min(W - r, e.x));
-                d.fy = Math.max(r, Math.min(H - r, e.y));
+                var s = currentScale;
+                var xMin = W/2 * (1 - 1/s) + r;
+                var xMax = W/2 * (1 + 1/s) - r;
+                var yMin = H/2 * (1 - 1/s) + r;
+                var yMax = H/2 * (1 + 1/s) - r;
+                d.fx = Math.max(xMin, Math.min(xMax, e.x));
+                d.fy = Math.max(yMin, Math.min(yMax, e.y));
             })
-            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+            .on('end',   function(e,d) { if (!e.active) sim.alphaTarget(0); sim.stop(); })
         );
 
     nodeG.append('circle')
@@ -7824,7 +7884,7 @@ function drawNetworkPlot() {
     var tip = document.getElementById('d3-tooltip');
     nodeG.on('mouseover', function(e,d) {
         d3.select(this).select('circle').attr('stroke','#f39c12').attr('stroke-width',3.5);
-        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean;
+        tip.innerHTML = '<b>'+d.id+'</b><br>Count: '+d.count+'<br>Mean: '+d.phenoMean+'<br><span style="color:#e74c3c">Click to copy samples</span>';
         tip.style.display = 'block';
     }).on('mousemove', function(e) {
         tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY-10)+'px';
@@ -9679,12 +9739,14 @@ if (promoterStart < promoterEnd) {{
             else:
                 color = '#3498db'
             
+            hap_samples = hap_sample_df[hap_sample_df[hap_col] == hap]['SampleID'].tolist()
             network_nodes.append({
                 'id': hap,
                 'count': count,
                 'size': size,
                 'color': color,
-                'phenoMean': round(hap_pheno_means.get(hap, 0), 3)
+                'phenoMean': round(hap_pheno_means.get(hap, 0), 3),
+                'samples': hap_samples
             })
         
         # 构建边数据（Hamming距离，所有单倍型之间均连边确保连通）
@@ -10162,7 +10224,7 @@ function initNetwork() {{
         .call(d3.drag()
             .on('start', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }})
             .on('drag', function(event, d) {{ d.fx = event.x; d.fy = event.y; }})
-            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); d.fx = null; d.fy = null; }})
+            .on('end', function(event, d) {{ if (!event.active) networkSimulation.alphaTarget(0); networkSimulation.stop(); }})
         );
     
     const labels = networkG.append('g').selectAll('text').data(networkNodes).enter().append('text')
@@ -10954,7 +11016,12 @@ class HaplotypePhenotypeAnalyzer:
                         return False
                 except Exception as e:
                     logger.warning(f"  - [数据库] 加载启动子变异信息失败: {e}，尝试从VCF提取")
-        
+
+        # 数据库模式且无 promoter_variants.csv：跳过 VCF 回退（无索引的大 VCF 扫描极慢）
+        if gene_id and hasattr(self, 'database_dir') and self.database_dir:
+            logger.info(f"  - [数据库] 无启动子变异CSV，跳过VCF扫描")
+            return False
+
         # **回退到VCF提取**
         vcf_file = self.vcf_file
         
@@ -11115,13 +11182,13 @@ class HaplotypePhenotypeAnalyzer:
                         variant_info_df = pd.read_csv(variant_info_path)
                         preloaded_data['variant_info'] = {
                             int(row['position']): {  # 强制转换为整数，确保与VCF的pos类型一致
-                                'ref': row.get('ref', ''),
-                                'alt': row.get('alt', ''),
-                                'len_diff': row.get('len_diff', 0),
-                                'is_sv': row.get('is_sv', False),
-                                'maf': row.get('maf', 0.5),
-                                'missing_rate': row.get('missing_rate', 0.0),
-                                'annotation': row.get('annotation', 'other')  # 关键：包含annotation字段
+                                'ref': _safe_str(row.get('ref', '')),
+                                'alt': _safe_str(row.get('alt', '')),
+                                'len_diff': row.get('len_diff', 0) if pd.notna(row.get('len_diff')) else 0,
+                                'is_sv': bool(row.get('is_sv', False)) if pd.notna(row.get('is_sv')) else False,
+                                'maf': row.get('maf', 0.5) if pd.notna(row.get('maf')) else 0.5,
+                                'missing_rate': row.get('missing_rate', 0.0) if pd.notna(row.get('missing_rate')) else 0.0,
+                                'annotation': _safe_str(row.get('annotation', ''), 'other')
                             }
                             for _, row in variant_info_df.iterrows()
                         }
@@ -11879,8 +11946,10 @@ class HaplotypePhenotypeAnalyzer:
             except Exception as e:
                 logger.warning(f"  - 多图整合面板生成失败: {e}")
         except Exception as e:
+            import traceback
             logger.warning(f"综合HTML生成失败: {e}")
-            
+            logger.warning(f"Traceback: {traceback.format_exc()}")
+
         # 6. 生成报告
         logger.info("[Step 6] 生成分析报告...")
         perf_monitor.step_start("Step_6_Report_Generation")
