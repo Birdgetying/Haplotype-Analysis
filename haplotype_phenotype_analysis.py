@@ -6091,10 +6091,19 @@ class ReportGenerator:
         
         # 计算SVG宽度（与基因结构图对齐，使用相同的变量体系）
         n_vars = len(display_positions)
+
+        # 协变量列数（基因结构SVG的gene_area_start必须与表格序列列起始对齐）
+        # 排除非展示列：元数据列 + 当前表型列 + PCA协变量列（PC1,PC2,...）
+        covariate_cols = [c for c in hap_sample_df.columns
+                          if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]
+                          and not c.startswith('PC')]
+        n_cov_cols = len(covariate_cols)
+
         hap_col_w_for_min = 90
         eff_col_w_for_min = 180
         box_col_w_for_min = 180
-        gene_area_start = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min  # 450px，与基因结构图对齐
+        # gene_area_start必须包含协变量列宽度，否则基因结构X轴与表格序列列错位
+        gene_area_start = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min + n_cov_cols * box_col_w_for_min
         gene_area_width = n_vars * 20  # 基因区域宽度（变异列总宽度）
         legend_w_for_min = 220
         svg_total_width = gene_area_start + gene_area_width + legend_w_for_min  # 与基因结构图完全相同的总宽度
@@ -6109,6 +6118,9 @@ class ReportGenerator:
         gwas_plot_width = gene_area_width + legend_w_for_min  # 基因区域 + 图例区域
         # GWAS图左边距（与基因结构图的基因区域起始位置对齐）
         gwas_left_margin = gene_area_start  # 与基因结构图基因区域起始x坐标完全一致
+
+        # 网络图面板宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图对齐
+        network_w = 350 + n_cov_cols * 180
         
         # JSON序列化数据
         gwas_data_json = json.dumps(gwas_data, cls=NumpyEncoder)
@@ -6168,7 +6180,7 @@ class ReportGenerator:
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
         .top-section {{ display: flex; gap: 15px; align-items: stretch; }}
         .main-data-section {{ }}
-        .network-panel {{ width: 350px; min-width: 350px; height: 280px;
+        .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: 280px;
                          border: 1px solid #e0e0e0; border-radius: 6px;
                          background: #fafafa; position: relative; overflow: hidden; flex-shrink: 0; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px;
@@ -6325,7 +6337,7 @@ class ReportGenerator:
         hap_col_w = 90
         eff_col_w = 180
         box_col_w = 180
-        gene_area_start = hap_col_w + eff_col_w + box_col_w  # = 450px
+        gene_area_start = hap_col_w + eff_col_w + box_col_w + n_cov_cols * box_col_w  # 含协变量列偏移
         seq_col_w = 20  # 每个变异列宽度（调小以适应更多变异）
         gene_area_width = n_vars * seq_col_w
         legend_w = 220  # 图例宽度（增加以容纳双列图例）
@@ -6579,8 +6591,8 @@ class ReportGenerator:
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
         
-        # 新增：协变量箱线图列 - 排除已知列后的所有列
-        covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]]
+        # 新增：协变量箱线图列 - 排除元数据列 + 当前表型列 + PCA列
+        covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col] and not c.startswith('PC')]
         for cov_col in covariate_cols:
             html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # 协变量列
         
@@ -7223,14 +7235,9 @@ function updateConnectorLines() {
     console.log('[DEBUG] Total th count:', allThsList.length);
     
     var visibleThs = allThsList.filter(function(th, idx) {
-        // 跳过前3列和最后一列，只保留变异列
-        if (idx < 3) return false;
-        if (idx >= allThsList.length - 1) return false;
-        // 只保留可见的列
+        // 使用 seq-col-th class 识别序列列（不硬编码 idx，支持协变量列）
+        if (!th.classList.contains('seq-col-th')) return false;
         var isVisible = th.style.display !== 'none';
-        if (isVisible) {
-            console.log('[DEBUG] Visible th idx:', idx, 'text:', th.textContent.trim().substring(0, 20));
-        }
         return isVisible;
     });
     
