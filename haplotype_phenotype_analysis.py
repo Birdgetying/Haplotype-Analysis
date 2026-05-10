@@ -7534,10 +7534,6 @@ function applyFilters() {
         var typePass = typeAllowed(d);
         var synPass = synAllowed(d);
         var normAnn = annNorm(d);
-        if (!mafPass || !missPass || !annPass || !typePass || !synPass) {
-                        'ann:', d.annotation, 'normAnn:', normAnn, 'functional_ann:', d.functional_ann,
-                        'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass, 'typePass:', typePass, 'synPass:', synPass);
-        }
         return mafPass && missPass && annPass && typePass && synPass;
     });
     
