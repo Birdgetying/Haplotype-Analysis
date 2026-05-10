@@ -35,6 +35,7 @@ from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import pandas as pd
+from collections import Counter
 
 # 尝试导入 psutil 用于资源监控
 try:
@@ -301,6 +302,7 @@ class BuiltinHaplotypeExtractor:
         self.vcf_file = vcf_file
         self.vcf = pysam.VariantFile(vcf_file)
         self.samples = list(self.vcf.header.samples)
+        self.variant_info = {}
         print(f"[INFO] 内置提取器初始化成功，样本数: {len(self.samples)}")
     
     def extract_region(self, chrom: str, start: int, end: int, 
@@ -322,24 +324,35 @@ class BuiltinHaplotypeExtractor:
         
         positions = []
         genotypes_by_sample = {s: [] for s in self.samples}
+        variant_records = []
         snp_count = 0
         non_snp_count = 0
-        
+
         try:
             for record in self.vcf.fetch(chrom, start, end):
-                ref = record.ref
+                ref = record.ref or ''
                 alts = record.alts if record.alts else []
-                alt0 = alts[0] if alts else ""
-                
+                alt0 = alts[0] if alts else ''
+
                 # 数据库构建阶段：保留所有变异类型（SNP/indel/SV），不过滤
                 if is_snp(ref, alt0):
                     snp_count += 1
                 else:
                     non_snp_count += 1
-                
+
                 pos = record.pos
                 positions.append(pos)
-                
+
+                is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
+                svlen = None
+                if is_symbolic:
+                    try:
+                        sv = record.info.get('SVLEN')
+                        svlen = int(sv[0]) if isinstance(sv, (list, tuple)) else (int(sv) if sv is not None else None)
+                    except Exception:
+                        pass
+                variant_records.append((pos, ref, alt0, is_symbolic, svlen))
+
                 for sample in self.samples:
                     gt = record.samples[sample]['GT']
                     if gt is None or None in gt:
@@ -357,17 +370,51 @@ class BuiltinHaplotypeExtractor:
         except Exception as e:
             print(f"[WARNING] 提取区域 {chrom}:{start}-{end} 失败: {e}")
             return None, None, None
-        
-        if filtered_count > 0:
-            print(f"[INFO] 过滤掉的非SNP变异数: {filtered_count}")
-        
+
         if len(positions) == 0:
             print(f"[INFO] 区域 {chrom}:{start}-{end} 无变异")
             return positions, None, None
-        
+
         # 日志统计：SNP vs 非SNP
         print(f"[INFO] 变异类型统计: SNP={snp_count}, 非SNP={non_snp_count}, 总计={len(positions)}")
-        
+
+        self.variant_info = {}
+        for i, (pos, ref, alt0, is_symbolic, svlen) in enumerate(variant_records):
+            alleles_at_pos = []
+            missing_count = 0
+            for sample in self.samples:
+                if genotypes_by_sample[sample] and i < len(genotypes_by_sample[sample]):
+                    allele = genotypes_by_sample[sample][i]
+                    if allele == 'N':
+                        missing_count += 1
+                    else:
+                        alleles_at_pos.append(allele)
+            n_total = len(self.samples)
+            missing_rate = missing_count / n_total if n_total > 0 else 0
+            maf = 0.5
+            if alleles_at_pos:
+                allele_counts = Counter(alleles_at_pos)
+                if len(allele_counts) >= 2:
+                    counts = sorted(allele_counts.values(), reverse=True)
+                    maf = counts[1] / len(alleles_at_pos)
+            if is_symbolic:
+                len_diff = svlen if svlen is not None else 0
+                is_sv = True
+            else:
+                try:
+                    len_diff = len(str(alt0)) - len(str(ref))
+                except Exception:
+                    len_diff = 0
+                is_sv = abs(len_diff) >= 50
+            self.variant_info[pos] = {
+                'ref': str(ref),
+                'alt': str(alt0),
+                'len_diff': len_diff,
+                'is_sv': is_sv,
+                'maf': maf,
+                'missing_rate': missing_rate
+            }
+
         # 过滤无变异位点（所有样本在该位点的等位基因相同）
         invariant_positions = []
         for i in range(len(positions)):
@@ -383,10 +430,14 @@ class BuiltinHaplotypeExtractor:
         if invariant_positions:
             print(f"[INFO] 过滤掉的无变异位点数: {len(invariant_positions)}")
             keep_indices = [i for i in range(len(positions)) if i not in invariant_positions]
+            removed_positions = set(positions[i] for i in invariant_positions)
             positions = [positions[i] for i in keep_indices]
             for sample in self.samples:
                 if genotypes_by_sample[sample]:
                     genotypes_by_sample[sample] = [genotypes_by_sample[sample][i] for i in keep_indices]
+            # 同步清理 variant_info 中被过滤掉的位点
+            for rp in removed_positions:
+                self.variant_info.pop(rp, None)
             print(f"[INFO] 过滤后有效变异位点数: {len(positions)}")
         
         if len(positions) == 0:
@@ -1676,8 +1727,9 @@ def analyze_gene_association(gene_info: dict, vcf_file: str, pheno_df: pd.DataFr
                     start=start,
                     end=end,
                     gene_id=gene_id,
-                    phenotype_cols=all_pheno_cols,  # 修改：传入所有表型列
-                    cluster_haplotypes=cluster_haplotypes
+                    phenotype_cols=all_pheno_cols,
+                    cluster_haplotypes=cluster_haplotypes,
+                    database_dir=database_dir  # 使用已构建的数据库，避免重复VCF扫描
                 )
                 
                 # 查找生成的HTML文件
