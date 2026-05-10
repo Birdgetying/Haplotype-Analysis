@@ -6116,8 +6116,9 @@ class ReportGenerator:
         main_min_width = max(svg_width_for_min, table_width_for_min)
         # GWAS图绘图区域宽度（只包含基因区域，不包含左侧固定列）
         gwas_plot_width = gene_area_width + legend_w_for_min  # 基因区域 + 图例区域
-        # GWAS图左边距（与基因结构图的基因区域起始位置对齐）
-        gwas_left_margin = gene_area_start  # 与基因结构图基因区域起始x坐标完全一致
+        # GWAS图左边距（GWAS SVG内部基因区域起始的x坐标，固定86与01b88e0对齐公式一致）
+        # 对齐公式：network_w + 14(margin-left) + 86(gwasLeftMargin) = gene_area_start
+        gwas_left_margin = 86
 
         # 网络图面板宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图对齐
         network_w = 350 + n_cov_cols * 180
@@ -6178,7 +6179,7 @@ class ReportGenerator:
         
         /* 整合布局 */
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
-        .top-section {{ display: flex; gap: 15px; align-items: stretch; }}
+        .top-section {{ display: flex; flex-direction: row; align-items: flex-start; gap: 0; }}
         .main-data-section {{ }}
         .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: 280px;
                          border: 1px solid #e0e0e0; border-radius: 6px;
@@ -6194,7 +6195,8 @@ class ReportGenerator:
                             transition: all 0.2s; }}
         .network-mode-btn:hover {{ background: #3498db; color: white; }}
         .network-mode-btn.active {{ background: #3498db; color: white; }}
-        .gene-gwas-panel {{ flex: 1; height: 280px; margin-left: 0; border: 1px solid #e0e0e0;
+        /* GWAS面板：14px间距 → left edge = network_w+14，内部ml=86 → gene area起始 = network_w+100 = gene_area_start */
+        .gene-gwas-panel {{ flex: 1; height: 280px; margin-left: 14px; border: 1px solid #e0e0e0;
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px;
                            font-size: 12px; font-weight: 600; color: #2c3e50;
