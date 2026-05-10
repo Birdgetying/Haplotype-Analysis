@@ -6119,6 +6119,8 @@ class ReportGenerator:
         # GWAS图左边距（GWAS SVG内部基因区域起始的x坐标，固定86与01b88e0对齐公式一致）
         # 对齐公式：network_w + 14(margin-left) + 86(gwasLeftMargin) = gene_area_start
         gwas_left_margin = 86
+        # GWAS图底部连线延伸长度：基于GWAS面板高度(280) - SVG绘图区(180) + 裕量
+        gwas_bottom_extension = 120
 
         # 网络图面板宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图对齐
         network_w = 350 + n_cov_cols * 180
@@ -6352,6 +6354,9 @@ class ReportGenerator:
         gene_h = 18       # 基因结构高度
         var_top_y = axis_y - 8   # 变异小竖线顶部 y
         line_end_y = svg_height - 2  # 斜线终点 y（再往下一点，与表格更好地对齐）
+        # 变异向上延伸线长度：基于GWAS面板高度(280px) + 裕量，确保能到达GWAS图区域
+        _gwas_panel_h = 280
+        up_line_extension = _gwas_panel_h + 40
                 
         html += f'<svg id="gene-structure-svg" data-gene-start="{gene_area_start}" data-gene-width="{gene_area_width}" width="{svg_width}" height="{svg_height}" style="display:block;margin:0;overflow:visible;">\n'
         
@@ -6511,8 +6516,8 @@ class ReportGenerator:
             # 检查是否是lead variant
             is_lead_variant = (pos == lead_pos)
             
-            # 向上的虚线：从变异圆圈顶部向上延伸，与GWAS图的竖线对齐（长度进一步增加）
-            html += f'<line class="var-up-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y-3}" x2="{gene_x}" y2="{var_top_y-200}" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>\n'
+            # 向上的虚线：从变异圆圈顶部向上延伸，与GWAS图的竖线对齐
+            html += f'<line class="var-up-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y-3}" x2="{gene_x}" y2="{var_top_y - up_line_extension}" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>\n'
             
             # 变异竖线：从圆圈顶部一直延伸到断线上端 (gene_y+gene_h)
             stroke_width = 2.0 if is_lead_variant else 1.2
@@ -7074,6 +7079,7 @@ var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
 var geneAreaWidth = {gene_area_width_js};  // 基因区域宽度（与基因结构图完全一致）
 var gwasPlotWidth = {gwas_plot_width};  // GWAS图绘图区域宽度（基因区域+图例）
 var gwasLeftMargin = {gwas_left_margin};  // GWAS图左边距（与基因结构图基因区域起始对齐）
+var gwasBottomExtension = {gwas_bottom_extension};  // GWAS图底部连线延伸长度
 var leadVariantPos = __LEAD_POS__;
 var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
@@ -8050,12 +8056,13 @@ function drawGWASPlot(data) {
 
     // 在GWAS图底部画竖虚线，与下方基因结构图的变异位置对齐，并向上延伸到散点
     // 由于GWAS图和基因结构图使用相同的x坐标系，只需画竖线即可
+    // 底部延伸长度由Python端gwas_bottom_extension变量控制
     g.append('g').attr('class', 'gwas-vertical-lines')
         .selectAll('line')
         .data(data)
         .join('line')
         .attr('x1', function(d) { return xSc(d.pos); })
-        .attr('y1', iH+50)  // 从GWAS图底部开始
+        .attr('y1', iH + gwasBottomExtension)  // 从GWAS图底部向下延伸
         .attr('x2', function(d) { return xSc(d.pos); })
         .attr('y2', function(d) { return ySc(d.logp); }) // 向上延伸到散点位置
         .attr('stroke', '#999')
@@ -8396,6 +8403,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{gene_area_width_js}', str(gene_area_width))
         html = html.replace('{gwas_plot_width}',    str(gwas_plot_width))
         html = html.replace('{gwas_left_margin}',   str(gwas_left_margin))
+        html = html.replace('{gwas_bottom_extension}', str(gwas_bottom_extension))
         _lead_js = str(lead_pos) if lead_pos is not None else "null"
         _exon_json = json.dumps([[int(a[0]), int(a[1])] for a in (exons or [])])
         _glabel = json.dumps(gene_id or chrom or "Gene")
@@ -11025,8 +11033,21 @@ class HaplotypePhenotypeAnalyzer:
                 except Exception as e:
                     logger.warning(f"  - [数据库] 加载启动子变异信息失败: {e}，尝试从VCF提取")
 
-        # 数据库模式且无 promoter_variants.csv：跳过 VCF 回退（无索引的大 VCF 扫描极慢）
+        # 数据库模式且无 promoter_variants.csv：先尝试从 variant_info.csv 判断启动子区域是否有变异
         if gene_id and hasattr(self, 'database_dir') and self.database_dir:
+            variant_info_csv = os.path.join(self.database_dir, gene_id, 'variant_info.csv')
+            if os.path.exists(variant_info_csv):
+                try:
+                    vi_df = pd.read_csv(variant_info_csv)
+                    promoter_vars = vi_df[(vi_df['position'] >= promoter_start) & (vi_df['position'] <= promoter_end)]
+                    if len(promoter_vars) > 0:
+                        logger.info(f"  - [数据库] 从variant_info推断：启动子区域有 {len(promoter_vars)} 个变异")
+                        return True
+                    else:
+                        logger.info(f"  - [数据库] 从variant_info推断：启动子区域无变异")
+                        return False
+                except Exception as e:
+                    logger.warning(f"  - [数据库] 从variant_info推断启动子变异失败: {e}")
             logger.info(f"  - [数据库] 无启动子变异CSV，跳过VCF扫描")
             return False
 
