@@ -249,14 +249,14 @@ def setup_logging(log_dir: str = "./logs", prefix: str = "haplotype_analysis") -
         log_dir = os.path.join(os.getcwd(), log_dir)
     
     os.makedirs(log_dir, exist_ok=True)
-    print(f"[DEBUG] 日志目录: {log_dir}")
+    print(f"[配置] 日志目录: {log_dir}")
     
     # Unix时间戳作为文件名核心标识
     timestamp = int(time.time())
     log_filename = f"{prefix}_{timestamp}.log"
     log_filepath = os.path.join(log_dir, log_filename)
     
-    print(f"[DEBUG] 日志文件: {log_filepath}")
+    print(f"[配置] 日志文件: {log_filepath}")
     
     # 创建 logger
     logger = logging.getLogger('HaplotypeAnalysis')
@@ -2164,7 +2164,7 @@ class PhenotypeAssociation:
         duplicate_cols.discard('SampleID')  # SampleID是合并键，保留
         
         if duplicate_cols:
-            print(f"[DEBUG] 发现重复列，从表型数据中删除: {duplicate_cols}")
+            print(f"[信息] 发现重复列，从表型数据中删除: {duplicate_cols}")
             self.phenotype_df = self.phenotype_df.drop(columns=list(duplicate_cols))
         
         self.merged_df = pd.merge(
@@ -5161,7 +5161,7 @@ class ReportGenerator:
         if not os.path.isabs(self.output_dir):
             self.output_dir = os.path.join(os.getcwd(), self.output_dir)
         os.makedirs(self.output_dir, exist_ok=True)
-        print(f"[DEBUG] 输出目录: {self.output_dir}")
+        print(f"[配置] 输出目录: {self.output_dir}")
         self.results = {}
     
     def add_result(self, key: str, result: dict):
@@ -5612,41 +5612,26 @@ class ReportGenerator:
         
         def get_var_color(pos):
             """snp_effects 优先，无则回退到variant_info，最后回退到位置分类"""
-            # DEBUG - 打印所有位置的信息
-            if snp_effects:
-                if pos in snp_effects:
-                    ann = snp_effects[pos]
-                    # 对于UTR/other类型，额外检查variant_info看是否是indel
-                    if ann in ('UTR', 'other', 'promoter') and variant_info and pos in variant_info:
-                        vinfo = variant_info[pos]
-                        ref = _safe_str(vinfo.get('ref', ''))
-                        alt = _safe_str(vinfo.get('alt', ''))
-                        # 检查符号等位基因
-                        is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
-                        if is_symbolic or vinfo.get('is_sv', False):
-                            pass  # snp_effects annotation overrides variant_info SV (symbolic)
-                            return var_type_colors['SV'], 'SV'
-                        len_diff = abs(len(ref) - len(alt))
-                        if len_diff > 0 and len_diff < 50:  # indel
-                            if len(alt) > len(ref):
-                                pass  # snp_effects annotation overrides variant_info INS
-                                return var_type_colors['INS'], 'INS'
-                            else:
-                                pass  # snp_effects annotation overrides variant_info DEL
-                                return var_type_colors['DEL'], 'DEL'
-                        elif len_diff >= 50:  # SV
-                            pass  # snp_effects annotation overrides variant_info SV
-                            return var_type_colors['SV'], 'SV'
-                    color = var_type_colors.get(ann, '#95a5a6')
-                    pass  # found in snp_effects, ann and color determined
-                    return color, ann
-            
-            # 回退到variant_info（VCF解析的数据）
+            if snp_effects and pos in snp_effects:
+                ann = snp_effects[pos]
+                if ann in ('UTR', 'other', 'promoter') and variant_info and pos in variant_info:
+                    vinfo = variant_info[pos]
+                    ref = _safe_str(vinfo.get('ref', ''))
+                    alt = _safe_str(vinfo.get('alt', ''))
+                    is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
+                    if is_symbolic or vinfo.get('is_sv', False):
+                        return var_type_colors['SV'], 'SV'
+                    len_diff = abs(len(ref) - len(alt))
+                    if 0 < len_diff < 50:
+                        return var_type_colors['INS' if len(alt) > len(ref) else 'DEL'], 'INS' if len(alt) > len(ref) else 'DEL'
+                    elif len_diff >= 50:
+                        return var_type_colors['SV'], 'SV'
+                return var_type_colors.get(ann, '#95a5a6'), ann
+
             if variant_info and pos in variant_info:
                 vinfo = variant_info[pos]
                 ref = _safe_str(vinfo.get('ref', ''))
                 alt = _safe_str(vinfo.get('alt', ''))
-                # 检查符号等位基因或is_sv标记
                 is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
                 if is_symbolic or vinfo.get('is_sv', False):
                     return var_type_colors['SV'], 'SV'
@@ -5656,13 +5641,8 @@ class ReportGenerator:
                     return var_type_colors['DEL'], 'DEL'
                 elif abs(len(ref) - len(alt)) >= 50:
                     return var_type_colors['SV'], 'SV'
-            
-            if snp_effects:
-                pass  # pos not in snp_effects
-            else:
-                pass  # snp_effects is None or empty
-            
-            # 位置回退：分为 UTR / intron / other
+
+            # 位置回退：UTR / intron / other
             in_exon = any(es <= pos <= ee for es, ee in exons)
             in_cds_b = any(cs <= pos <= ce for cs, ce in cds)
             if in_exon and not in_cds_b:
@@ -5670,7 +5650,7 @@ class ReportGenerator:
             elif in_cds_b:
                 return var_type_colors['other'], 'other'
             elif g_start and g_end and g_start <= pos <= g_end:
-                return var_type_colors['intron'], 'intron'  # 在基因边界内 = 内含子
+                return var_type_colors['intron'], 'intron'
             return var_type_colors['other'], 'other'
         
         # 从 Haplotype_Seq 获取序列 - 显示全部变异位点
@@ -6493,17 +6473,7 @@ class ReportGenerator:
             # 表格前3列：hap-cell(90) + effect-cell(180) + box-cell(180) = 450px
             table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2
             
-            # 判断变异类型并获取颜色
-            # DEBUG: 第一列特殊调试
-            if idx == 0:
-                print(f"[DEBUG-FIRST-COL] pos={pos}, snp_effects keys sample: {list(snp_effects.keys())[:5] if snp_effects else 'None'}")
-                print(f"[DEBUG-FIRST-COL] variant_info has pos: {pos in variant_info if variant_info else 'No variant_info'}")
-                if variant_info and pos in variant_info:
-                    vinfo = variant_info[pos]
-                    print(f"[DEBUG-FIRST-COL] variant_info: ref={vinfo.get('ref')}, alt={vinfo.get('alt')}")
             var_color, var_type = get_var_color(pos)
-            if idx == 0:
-                print(f"[DEBUG-FIRST-COL] result: var_type={var_type}, var_color={var_color}")
             var_types_found.add(var_type)
             
             # 获取该位置的变异信息（用于过滤）
@@ -6786,13 +6756,6 @@ class ReportGenerator:
                     
                     # 根据实际类型确定颜色（而不是base）
                     color = base_colors.get(actual_type, '#666')
-                    
-                    # DEBUG: 第一列特殊调试
-                    if idx == 0 and i == 0:  # 第一行第一列
-                        print(f"[DEBUG-TABLE-FIRST-COL] hap={hap}, base={base}, actual_type={actual_type}, color={color}, pos={pos}, display_base={display_base}")
-                        if pos and variant_info and pos in variant_info:
-                            vinfo = variant_info[pos]
-                            print(f"[DEBUG-TABLE-FIRST-COL] variant_info: ref={vinfo.get('ref')}, alt={vinfo.get('alt')}, len_diff={vinfo.get('len_diff')}")
                     
                     # 根据文本长度调整字体大小，避免重叠
                     if len(display_base) > 4:
@@ -7224,23 +7187,16 @@ window.addEventListener('message', function(ev) {
 var tableColumnPositions = null;
 
 function updateConnectorLines() {
-    console.log('[DEBUG] updateConnectorLines called');
-    
     // 获取SVG和表格的相对位置
     var svg = document.querySelector('#gene-structure-svg');
     var table = document.querySelector('.data-table');
     if (!svg || !table) {
-        console.log('[DEBUG] SVG or table not found');
-        return;
+return;
     }
     
     var svgRect = svg.getBoundingClientRect();
-    console.log('[DEBUG] SVG rect:', svgRect.left, svgRect.top, svgRect.width, svgRect.height);
-    
     // 获取所有th，然后过滤出可见的变异列
     var allThsList = Array.from(table.querySelectorAll('thead th'));
-    console.log('[DEBUG] Total th count:', allThsList.length);
-    
     var visibleThs = allThsList.filter(function(th, idx) {
         // 使用 seq-col-th class 识别序列列（不硬编码 idx，支持协变量列）
         if (!th.classList.contains('seq-col-th')) return false;
@@ -7248,12 +7204,9 @@ function updateConnectorLines() {
         return isVisible;
     });
     
-    console.log('[DEBUG] Visible th count:', visibleThs.length);
-    
     // 如果没有可见的变异列，隐藏所有连线
     if (visibleThs.length === 0) {
-        console.log('[DEBUG] No visible columns, hiding all connectors');
-        document.querySelectorAll('.js-connector').forEach(function(line) {
+document.querySelectorAll('.js-connector').forEach(function(line) {
             line.style.display = 'none';
         });
         return;
@@ -7261,38 +7214,21 @@ function updateConnectorLines() {
     
     // 获取所有连线
     var allConnectors = document.querySelectorAll('.js-connector');
-    console.log('[DEBUG] Total connectors:', allConnectors.length);
-    
     // 建立位置到连线的映射（统一使用字符串格式）
     var posToConnector = {};
-    var missingDataPos = 0;
-    allConnectors.forEach(function(line, idx) {
+    allConnectors.forEach(function(line) {
         var pos = line.getAttribute('data-pos');
         if (pos) {
-            // 统一转换为字符串格式
-            var posKey = String(parseInt(pos));
-            posToConnector[posKey] = line;
-        } else {
-            missingDataPos++;
-            if (missingDataPos <= 5) {
-                console.log('[DEBUG] Connector', idx, 'missing data-pos:', line.outerHTML.substring(0, 100));
-            }
+            posToConnector[String(parseInt(pos))] = line;
         }
     });
-    console.log('[DEBUG] Connectors missing data-pos:', missingDataPos);
-    console.log('[DEBUG] posToConnector keys count:', Object.keys(posToConnector).length);
-    console.log('[DEBUG] posToConnector keys:', Object.keys(posToConnector));
-    
     // 隐藏所有连线
     allConnectors.forEach(function(line) {
         line.style.display = 'none';
     });
     
     // 为每个可见列计算连线位置
-    // 使用getBoundingClientRect获取实际的列位置（更准确）
-    var connectedCount = 0;
-    
-    visibleThs.forEach(function(th, visibleIdx) {
+    visibleThs.forEach(function(th) {
         // 从th的文本中提取位置
         var posText = th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posStr = String(parseInt(posText));
@@ -7300,8 +7236,7 @@ function updateConnectorLines() {
         // 查找对应的连线
         var line = posToConnector[posStr];
         if (!line) {
-            console.log('[DEBUG] No connector for pos:', posStr);
-            return;
+return;
         }
         
         // 获取连线起点（基因结构上的真实位置）
@@ -7324,8 +7259,6 @@ function updateConnectorLines() {
         var minTableY = parseFloat(line.getAttribute('data-gene-y')) + 40;
         var tableY = Math.max(rawTableY, minTableY);
         
-        console.log('[DEBUG] Connecting pos:', posStr, 'geneX:', geneX, 'tableX:', tableX, 'scaleFactor:', scaleFactor);
-        
         // 更新连线坐标
         line.setAttribute('x1', geneX);
         line.setAttribute('y1', geneY);
@@ -7335,7 +7268,6 @@ function updateConnectorLines() {
         connectedCount++;
     });
     
-    console.log('[DEBUG] Connected', connectedCount, 'of', visibleThs.length, 'visible columns');
 }
 
 // 页面加载完成后计算连线
@@ -7581,16 +7513,12 @@ applyFilters = function() {
 };
 
 function applyFilters() {
-    console.log('[DEBUG] ==================== applyFilters START ====================');
-    console.log('[DEBUG] applyFilters called at:', new Date().toISOString());
-    console.log('[DEBUG] currentFilter:', JSON.stringify(currentFilter));
     
     // 获取所有选中的annotation类型
     var checkedTypes = [];
     document.querySelectorAll('.ann-cb:checked').forEach(function(cb) {
         checkedTypes.push(cb.value);
     });
-    console.log('[DEBUG] Checked annotation types:', checkedTypes);
     
     // 过滤数据（基于MAF、Missing Rate和Annotation）
     var filtered = gwasData.filter(function(d) {
@@ -7601,30 +7529,25 @@ function applyFilters() {
         var synPass = synAllowed(d);
         var normAnn = annNorm(d);
         if (!mafPass || !missPass || !annPass || !typePass || !synPass) {
-            console.log('[DEBUG] Filtered OUT pos:', d.pos, 'maf:', d.maf, 'missing:', d.missing_rate, 
                         'ann:', d.annotation, 'normAnn:', normAnn, 'functional_ann:', d.functional_ann,
                         'mafPass:', mafPass, 'missPass:', missPass, 'annPass:', annPass, 'typePass:', typePass, 'synPass:', synPass);
         }
         return mafPass && missPass && annPass && typePass && synPass;
     });
-    console.log('[DEBUG] Filtered data count:', filtered.length, 'of', gwasData.length);
     
     drawGWASPlot(filtered);
     
     // 构建通过过滤的位置集合
     var posSet = {};
     filtered.forEach(function(d){ posSet[d.pos] = true; });
-    console.log('[DEBUG] posSet all keys:', Object.keys(posSet));
     
     // 获取所有变异列的位置（从第4列开始，前3列是Haplotype/Effect/Phenotype）
     var allThs = document.querySelectorAll('.data-table thead th');
-    console.log('[DEBUG] Total th count:', allThs.length);
     
     // 打印所有th的内容和索引
     allThs.forEach(function(th, idx) {
         var text = th.textContent.trim().substring(0, 30);
         var display = th.style.display;
-        console.log('[DEBUG] th idx:', idx, 'text:', text, 'display:', display);
     });
     
     var varIndices = [];  // 记录保留的列索引
@@ -7641,22 +7564,15 @@ function applyFilters() {
             var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g,'');
             var pos = parseInt(posText);
             var inPosSet = posSet[pos] !== undefined;
-            console.log('[DEBUG] Checking column idx:', idx, 'text:', thText, 'posText:', posText, 'parsedPos:', pos, 'inPosSet:', inPosSet);
             // 检查该位置是否通过过滤
             if (inPosSet) {{
                 varIndices.push(idx);
                 varPositions.push(pos);
-                console.log('[DEBUG] >>> KEEPING column idx:', idx, 'pos:', pos);
             }} else {{
-                console.log('[DEBUG] --- SKIPPING column idx:', idx, 'pos:', pos, '(not in posSet)');
             }}
         }} else {{
-            console.log('[DEBUG] --- SKIPPING column idx:', idx, 'text:', thText, '(fixed column)');
         }}
     }});
-    console.log('[DEBUG] Final varIndices:', varIndices);
-    console.log('[DEBUG] Final varPositions:', varPositions);
-    console.log('[DEBUG] ==================== applyFilters END ====================');
     
     // 更新基因结构图上的变异元素（竖线、圆圈、斜线、向上虚线）
     document.querySelectorAll('.var-line, .var-circle, .var-connector, .var-up-line').forEach(function(el) {
@@ -7680,11 +7596,9 @@ function applyFilters() {
 
 // 同步更新表格列：隐藏被过滤的列，重新排列保留的列
 function updateTableColumns(keepIndices, keepPositions) {
-    console.log('[DEBUG] updateTableColumns called with keepIndices:', keepIndices, 'keepPositions:', keepPositions);
     
     var table = document.querySelector('.data-table');
     if (!table) {
-        console.log('[DEBUG] Table not found!');
         return;
     }
     
@@ -7693,11 +7607,9 @@ function updateTableColumns(keepIndices, keepPositions) {
     
     // 获取所有th和td
     var allThs = Array.from(theadRow.querySelectorAll('th'));
-    console.log('[DEBUG] updateTableColumns: total th count:', allThs.length);
     
     // 将keepIndices转换为Set以便快速查找
     var keepIndicesSet = new Set(keepIndices);
-    console.log('[DEBUG] updateTableColumns: keepIndicesSet:', Array.from(keepIndicesSet));
     
     // 处理表头
     allThs.forEach(function(th, idx) {{
@@ -7706,12 +7618,10 @@ function updateTableColumns(keepIndices, keepPositions) {
         var isFixedCol = !th.classList.contains('seq-col-th');
         if (isFixedCol) {{
             // 固定列始终显示
-            console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - FIXED, showing');
             th.style.display = '';
         }} else {{
             // 变异列：根据keepIndicesSet决定是否显示
             var shouldShow = keepIndicesSet.has(idx);
-            console.log('[DEBUG] updateTableColumns: idx', idx, '(' + text + ') - var column, shouldShow:', shouldShow);
             if (shouldShow) {{
                 th.style.display = '';
             }} else {{
@@ -7938,7 +7848,6 @@ function drawGWASPlot(data) {
         });
         currentLeadPos = leadVariant.pos;
     }
-    console.log('[DEBUG] drawGWASPlot currentLeadPos:', currentLeadPos);
 
     d3.select('#gwas-gene-viz').selectAll('*').remove();
 
@@ -8414,16 +8323,6 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__DISPLAY_POSITIONS__", _display_pos_json)
         html = html.replace("__LD_R2_MATRIX__", ld_r2_json)
         
-        # DEBUG: 检查exportSVG是否存在
-        if 'exportSVG' in html:
-            print("[DEBUG] exportSVG found in HTML before saving")
-        else:
-            print("[DEBUG] WARNING: exportSVG NOT found in HTML before saving")
-        if 'SVG</button>' in html:
-            print("[DEBUG] SVG button found in HTML before saving")
-        else:
-            print("[DEBUG] WARNING: SVG button NOT found in HTML before saving")
-
         # 使用基因名作为HTML文件名（如果提供了gene_id）
         if gene_id:
             html_filename = f"{gene_id}.html"
@@ -9847,7 +9746,7 @@ if (promoterStart < promoterEnd) {{
         
         # 获取已生成的 integrated_analysis.html 内容（由run_analysis()中的generate_integrated_html()生成）
         # 不再重新生成以避免覆盖
-        print("[DEBUG] Skipping duplicate integrated_analysis.html generation (already generated by run_analysis)")
+        print("[信息] 跳过重复的 integrated_analysis.html 生成（已由 run_analysis 生成）")
 
         # JSON 序列化
         network_nodes_json = json.dumps(network_nodes, cls=NumpyEncoder)
@@ -10698,7 +10597,7 @@ class HaplotypePhenotypeAnalyzer:
             else:
                 print(f"[WARNING] pysam不可用，无法从VCF获取样本ID")
         except Exception as e:
-            print(f"[DEBUG] GEMMA格式解析失败: {e}")
+            print(f"[警告] GEMMA格式解析失败: {e}")
         
         print(f"[WARNING] 无法解析表型文件")
         return pd.DataFrame()

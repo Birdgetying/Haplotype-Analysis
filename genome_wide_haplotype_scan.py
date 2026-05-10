@@ -120,7 +120,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
         r = subprocess.run(['bgzip', '--version'], capture_output=True, check=False)
         if r.returncode == 0:
             _bgzip_available = True
-            print(f"[DEBUG] 检测到bgzip可用，输出VCF将使用bgzip压缩（支持pysam随机访问）")
+            print(f"[信息] 检测到bgzip可用，输出VCF将使用bgzip压缩（支持pysam随机访问）")
     except (FileNotFoundError, PermissionError):
         pass
 
@@ -133,7 +133,7 @@ def create_subset_vcf(input_vcf: str, chrom: str, start: int, end: int,
     if use_tabix:
         # 优先使用CSI索引（常见于大VCF），其次使用TBI索引
         index_path = csi_path if os.path.exists(csi_path) else tbi_path
-        print(f"[DEBUG] 使用tabix索引快速查询: {index_path}")
+        print(f"[信息] 使用tabix索引快速查询: {index_path}")
         try:
             import pysam as _pysam
             tbx = _pysam.TabixFile(input_vcf, index=index_path)
@@ -1400,7 +1400,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
                         
                         # 调试：打印原始样本ID格式
                         raw_sample_ids = list(gene_expr.index[:5]) if hasattr(gene_expr, 'index') else list(gene_expr.keys())[:5]
-                        print(f"  [DEBUG] {gene_id}: 协变量样本ID示例(前5个): {raw_sample_ids}")
+                        print(f"  [信息] {gene_id}: 协变量样本ID示例(前5个): {raw_sample_ids}")
                         
                         # 转换为DataFrame：SampleID, expression_value
                         expr_dict = {'SampleID': [], cophe_title: []}
@@ -2527,7 +2527,7 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                 import traceback
                 error_detail = traceback.format_exc()
                 print(f"  [WARNING] {gene_id} 关联分析失败: {e}")
-                print(f"  [DEBUG] 详细错误:\n{error_detail}")
+                print(f"  [详细错误]:\n{error_detail}")
         
         perf.step_end("association_analysis")
     
