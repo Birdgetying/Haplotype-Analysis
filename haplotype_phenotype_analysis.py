@@ -5629,7 +5629,8 @@ class ReportGenerator:
                         return var_type_colors['SV'], 'SV'
                     len_diff = abs(len(ref) - len(alt))
                     if 0 < len_diff < 50:
-                        return var_type_colors['INS' if len(alt) > len(ref) else 'DEL'], 'INS' if len(alt) > len(ref) else 'DEL'
+                        ann_type = 'INS' if len(alt) > len(ref) else 'DEL'
+                        return var_type_colors[ann_type], ann_type
                     elif len_diff >= 50:
                         return var_type_colors['SV'], 'SV'
                 return var_type_colors.get(ann, '#95a5a6'), ann
@@ -7253,8 +7254,7 @@ return;
         var thRect = th.getBoundingClientRect();
         
         // 计算缩放比例（基于SVG的实际宽度与逻辑宽度的比值）
-        var svgElement = document.querySelector('#gene-structure-svg');
-        var svgLogicalWidth = svgElement.width.baseVal.value;
+        var svgLogicalWidth = svg.width.baseVal.value;
         var scaleFactor = svgRect.width / svgLogicalWidth;
 
         // 计算表格列中心相对于SVG的位置（考虑缩放）
@@ -7271,7 +7271,6 @@ return;
         line.setAttribute('x2', tableX);
         line.setAttribute('y2', tableY);
         line.style.display = 'block';
-        connectedCount++;
     });
     
 }
@@ -7545,12 +7544,6 @@ function applyFilters() {
     
     // 获取所有变异列的位置（从第4列开始，前3列是Haplotype/Effect/Phenotype）
     var allThs = document.querySelectorAll('.data-table thead th');
-    
-    // 打印所有th的内容和索引
-    allThs.forEach(function(th, idx) {
-        var text = th.textContent.trim().substring(0, 30);
-        var display = th.style.display;
-    });
     
     var varIndices = [];  // 记录保留的列索引
     var varPositions = [];  // 记录保留的位置
