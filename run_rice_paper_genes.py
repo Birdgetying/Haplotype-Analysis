@@ -289,8 +289,8 @@ def save_database(data, out_dir, h5_info=None):
         'exons': h5_info.get('exons', []) if h5_info else [],
         'cds': h5_info.get('cds', []) if h5_info else [],
     }
-    with open(os.path.join(gene_dir, 'gene_info.json'), 'w') as f:
-        json.dump(gene_info, f, indent=2)
+    with open(os.path.join(gene_dir, 'gene_info.json'), 'w', encoding='utf-8') as f:
+        json.dump(gene_info, f, indent=2, ensure_ascii=False)
 
     data['hap_df'].to_csv(os.path.join(gene_dir, 'haplotype_data.csv'), index=False)
     data['hap_sample_df'].to_csv(os.path.join(gene_dir, 'haplotype_samples.csv'), index=False)
@@ -338,7 +338,7 @@ def save_database(data, out_dir, h5_info=None):
         promoter_df = pd.DataFrame(promoter_variants)
         promoter_df.to_csv(os.path.join(gene_dir, 'promoter_variants.csv'), index=False)
         # 详细文本报告
-        with open(os.path.join(gene_dir, 'promoter_variants_detail.txt'), 'w') as f:
+        with open(os.path.join(gene_dir, 'promoter_variants_detail.txt'), 'w', encoding='utf-8') as f:
             f.write(f"启动子区域变异分析报告\n")
             f.write(f"{'=' * 60}\n")
             f.write(f"基因: {gene_id}\n")
@@ -493,8 +493,8 @@ if __name__ == '__main__':
                 gi['promoter_start'] = gi['gene_end'] + 1
                 gi['promoter_end'] = gi['gene_end'] + PROMOTER_LENGTH
 
-        with open(os.path.join(gene_dir, 'gene_info.json'), 'w') as f:
-            json.dump(gi, f, indent=2)
+        with open(os.path.join(gene_dir, 'gene_info.json'), 'w', encoding='utf-8') as f:
+            json.dump(gi, f, indent=2, ensure_ascii=False)
 
     # Build GFF3 for paper genes
     print("\n[2] Building GFF3...")
@@ -522,7 +522,7 @@ if __name__ == '__main__':
             gff_lines.append(f'{chrom}\t.\tCDS\t{cs}\t{ce}\t.\t{strand}\t.\tID={gene_id}.cds{i+1};Parent={gene_id}.mRNA')
 
     gff_path = r'D:\Desktop\data\水稻\rice_test_genes_paper.gff3'
-    with open(gff_path, 'w') as f:
+    with open(gff_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(gff_lines) + '\n')
     print(f"GFF3 saved: {gff_path}")
 

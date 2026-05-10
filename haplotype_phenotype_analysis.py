@@ -15,6 +15,7 @@
 
 import os
 import sys
+import io
 import argparse
 import gzip
 import time
@@ -28,6 +29,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib import rcParams
 from scipy import stats
+
+# Windows 编码修复
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 from scipy.stats import f_oneway, ttest_ind, pearsonr, spearmanr
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder
@@ -11051,7 +11057,7 @@ class HaplotypePhenotypeAnalyzer:
                 
                 # 保存详细信息到文件
                 promoter_var_file = os.path.join(self.output_dir, "promoter_variants_detail.txt")
-                with open(promoter_var_file, 'w') as f:
+                with open(promoter_var_file, 'w', encoding='utf-8') as f:
                     f.write(f"Gene: {gene_id}\n")
                     f.write(f"Promoter: {chrom}:{promoter_start:,}-{promoter_end:,}\n")
                     f.write(f"Total variants: {len(variants)}\n\n")

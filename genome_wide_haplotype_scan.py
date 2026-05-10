@@ -26,6 +26,7 @@
 
 import os
 import sys
+import io
 import argparse
 import gzip
 import time
@@ -36,6 +37,10 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import pandas as pd
 from collections import Counter
+
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # 尝试导入 psutil 用于资源监控
 try:
@@ -1028,8 +1033,8 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             'exons': gtf_data.get('exons', []),
             'cds': gtf_data.get('cds', [])
         }
-        with open(os.path.join(gene_data_dir, 'gene_info.json'), 'w') as f:
-            json.dump(gene_info_dict, f, indent=2)
+        with open(os.path.join(gene_data_dir, 'gene_info.json'), 'w', encoding='utf-8') as f:
+            json.dump(gene_info_dict, f, indent=2, ensure_ascii=False)
         
         if hap_df is None or len(hap_df) == 0:
             print(f"[WARNING] hap_df 为空，但 hap_sample_df 有 {len(hap_sample_df) if hap_sample_df is not None else 0} 行")
@@ -1303,7 +1308,7 @@ def process_single_gene(gene_info: dict, vcf_file: str, pheno_df: pd.DataFrame,
             n_pure_promoter = len(promoter_variants) - n_overlaps_cds
             
             # 同时保存详细文本报告
-            with open(os.path.join(gene_data_dir, 'promoter_variants_detail.txt'), 'w') as f:
+            with open(os.path.join(gene_data_dir, 'promoter_variants_detail.txt'), 'w', encoding='utf-8') as f:
                 f.write(f"启动子区域变异分析报告\n")
                 f.write(f"=" * 60 + "\n")
                 f.write(f"基因: {gene_id}\n")
@@ -2112,8 +2117,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                         if cached_vcf_mtime == 0:
                             print(f"  [{processed+1}/{total_genes}] {gene_id}: [CACHE FIX] 旧缓存缺少 vcf_mtime，自动补充")
                             cached_info['vcf_mtime'] = vcf_mtime
-                            with open(cached_gene_info_file, 'w') as f:
-                                json.dump(cached_info, f, indent=2)
+                            with open(cached_gene_info_file, 'w', encoding='utf-8') as f:
+                                json.dump(cached_info, f, indent=2, ensure_ascii=False)
                             cached_vcf_mtime = vcf_mtime
                         
                         if vcf_mtime <= cached_vcf_mtime:
@@ -2185,8 +2190,8 @@ def run_genome_scan(vcf_file: str, gff_file: str, pheno_file: str,
                     with open(gene_info_file, 'r') as f:
                         info = json.load(f)
                     info['vcf_mtime'] = os.path.getmtime(vcf_file)
-                    with open(gene_info_file, 'w') as f:
-                        json.dump(info, f, indent=2)
+                    with open(gene_info_file, 'w', encoding='utf-8') as f:
+                        json.dump(info, f, indent=2, ensure_ascii=False)
                 except Exception as e:
                     print(f"  [WARNING] 保存 VCF 修改时间失败: {e}")
         
