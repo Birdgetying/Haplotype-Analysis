@@ -6591,8 +6591,7 @@ class ReportGenerator:
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
         
-        # 新增：协变量箱线图列 - 排除元数据列 + 当前表型列 + PCA列
-        covariate_cols = [c for c in hap_sample_df.columns if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col] and not c.startswith('PC')]
+        # 协变量箱线图列 - 复用上方已计算的 covariate_cols（避免重复计算）
         for cov_col in covariate_cols:
             html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # 协变量列
         
