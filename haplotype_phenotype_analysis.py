@@ -30,10 +30,15 @@ import matplotlib.patches as patches
 from matplotlib import rcParams
 from scipy import stats
 
-# Windows 编码修复
+# Windows 编码修复（支持重复import）
 if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    try:
+        if not isinstance(sys.stdout, io.TextIOWrapper):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if not isinstance(sys.stderr, io.TextIOWrapper):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except (ValueError, AttributeError):
+        pass
 from scipy.stats import f_oneway, ttest_ind, pearsonr, spearmanr
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder
@@ -4355,18 +4360,28 @@ class PromoterAnnotator:
 
 class HaplotypeScorer:
     """
-    多组分单倍型打分模型
+    多组分单倍型打分模型 (v2)
 
-    综合五个维度计算每个单倍型的得分（0-1归一化）：
-    1. VariantEffectScore  — 变异功能严重度加权
-    2. BurdenScore         — 稀有变异(MAF<0.05)负荷
-    3. GWASScore           — 外部GWAS信号整合
-    4. MultiOmicsScore     — 表达协变量关联
-    5. FineMappingScore    — 近似可信集后验概率
+    综合六个维度计算每个单倍型的得分：
+    1. VariantEffectScore  — LD剪枝后的变异功能严重度 (避免计数连锁位点)
+    2. BurdenScore         — LD剪枝后的稀有变异(MAF<0.05)负荷
+    3. MultiOmicsScore     — 多组学协变量标准化偏差
+    4. FineMappingScore    — 近似贝叶斯因子 + LD剪枝 (已整合GWAS信号)
+    5. EffectSizeScore     — 贝叶斯收缩后的标准化效应量
+    6. GeneticDistinctScore — 功能加权的Hamming距离
+
+    v2改进:
+    - GWASScore合并入FineMappingScore (去冗余)
+    - VariantEffect/Burden使用LD block剪枝 (避免连锁位点重复计数)
+    - Winsorize+MinMax归一化替代双重MinMax (抗离群值)
+    - EffectSize使用经验贝叶斯收缩替代硬截断
+    - Hamming距离按变异功能权重加权
+    - PVE驱动的置信度校准
 
     引用文献思路:
     - Gene-based haplotype GWAS: Lo et al. 2023, Hamazaki & Iwata 2020
     - Combined multi-omics burden + GWAS fine-mapping framework
+    - Wakefield (2009) ABF for fine-mapping
     """
 
     FUNCTIONAL_WEIGHTS = {
@@ -4386,9 +4401,8 @@ class HaplotypeScorer:
     DEFAULT_COMPONENT_WEIGHTS = {
         'variant_effect': 1.0,
         'burden': 1.0,
-        'gwas': 0.8,
         'multi_omics': 0.8,
-        'fine_mapping': 0.6,
+        'fine_mapping': 0.8,        # 整合GWAS信号，无需单独的gwas组件
         'effect_size': 0.9,
         'genetic_distinct': 0.5,
     }
@@ -4423,6 +4437,9 @@ class HaplotypeScorer:
         self.pos_annotation = self._build_annotation_map()
         self.pos_maf = self._build_maf_map()
         self.pos_gwas_logp = self._build_gwas_map()
+
+        # LD block索引: {pos: block_id}, LD_BLOCK_R2 = 0.5
+        self.pos_ld_block = self._build_ld_blocks()
 
         # Haplotype data
         self.hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
@@ -4540,6 +4557,92 @@ class HaplotypeScorer:
                 seq_map[hap] = rows['Haplotype_Seq'].iloc[0].replace('|', '')
         return seq_map
 
+    def _build_ld_blocks(self):
+        """构建LD block索引: 将r²≥阈值的位点归入同一block
+
+        Returns:
+            dict: {pos: block_id} 每个位点所属的LD block编号
+        """
+        n = len(self.variant_positions)
+        if n == 0:
+            return {}
+        if self.ld_r2_matrix is None:
+            return {pos: i for i, pos in enumerate(self.variant_positions)}  # 无LD矩阵→每位置独立block
+
+        LD_BLOCK_R2 = 0.5
+        # Union-Find
+        parent = list(range(n))
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(x, y):
+            rx, ry = find(x), find(y)
+            if rx != ry:
+                parent[rx] = ry
+
+        # 仅遍历上三角
+        for i in range(n):
+            row = self.ld_r2_matrix[i] if i < len(self.ld_r2_matrix) else []
+            for j in range(i + 1, min(len(row), n)):
+                r2 = row[j] if isinstance(row, list) else 0.0
+                if isinstance(r2, (int, float)) and r2 >= LD_BLOCK_R2:
+                    union(i, j)
+
+        # 构建pos→block_id映射
+        block_id_map = {}
+        block_counter = 0
+        root_to_block = {}
+        for i, pos in enumerate(self.variant_positions):
+            root = find(i)
+            if root not in root_to_block:
+                root_to_block[root] = block_counter
+                block_counter += 1
+            block_id_map[pos] = root_to_block[root]
+        return block_id_map
+
+    def _ld_block_single_contrib(self, pos, raw_contrib, lead_key_func=None):
+        """对LD block内的位点进行剪枝，保留单个贡献值
+
+        在一个LD block中，选择具有最大贡献的位点作为block代表。
+        已被其他位点代表的位点返回0（避免重复计数）。
+
+        Args:
+            pos: 当前位置
+            raw_contrib: 当前位置的贡献值（剪枝前）
+            lead_key_func: 可选，用于选择block代表位点的排序函数，
+                           func(pos) → key，key最大者为代表。默认使用raw_contrib。
+
+        Returns:
+            float: 剪枝后的贡献值
+        """
+        if self.ld_r2_matrix is None:
+            return raw_contrib
+
+        block_id = self.pos_ld_block.get(pos)
+        if block_id is None:
+            return raw_contrib
+
+        # 找到同一block中的所有位置
+        block_positions = [p for p, b in self.pos_ld_block.items() if b == block_id]
+        if len(block_positions) <= 1:
+            return raw_contrib
+
+        # 确定代表位点
+        if lead_key_func is None:
+            lead_key_func = lambda p: raw_contrib if p == pos else 0.0
+
+        # 重新计算所有block成员的贡献，选出最大者
+        best_pos = max(block_positions, key=lead_key_func)
+
+        # 只有代表位点保留贡献，其他被剪枝
+        if pos == best_pos:
+            return raw_contrib
+        return 0.0
+
     def _is_alt_allele(self, pos, allele):
         """判断等位基因是否为ALT（非参考）等位基因
 
@@ -4559,8 +4662,19 @@ class HaplotypeScorer:
         return True  # 无参考信息时，非N即视为变异（保守）
 
     def compute_variant_effect_score(self):
-        """变异效应得分：单倍型中实际携带的ALT等位基因的功能严重度总和"""
+        """变异效应得分：LD剪枝后的功能严重度总和
+
+        LD block内的连锁位点只贡献一次（以block内最大功能权重为代表）。
+        避免同一功能事件被多个连锁位点重复计数。
+        """
         seq_map = self._get_hap_seq_map()
+        # 预计算每个位点在其LD block中是否是代表位点
+        pos_func_weight = {}
+        for pos in self.variant_positions:
+            ann = self.pos_annotation.get(pos, 'other')
+            pos_func_weight[pos] = self.FUNCTIONAL_WEIGHTS.get(ann, 0.1)
+        lead_key = lambda p: pos_func_weight.get(p, 0)
+
         scores = {}
         for hap, seq in seq_map.items():
             total = 0.0
@@ -4571,16 +4685,32 @@ class HaplotypeScorer:
                         continue
                     ann = self.pos_annotation[pos]
                     weight = self.FUNCTIONAL_WEIGHTS.get(ann, 0.1)
+                    # LD剪枝：仅block代表位点保留贡献
+                    weight = self._ld_block_single_contrib(pos, weight, lead_key)
                     total += weight
             scores[hap] = total
         return scores
 
     def compute_burden_score(self):
-        """稀有变异负荷得分：仅统计实际携带的、MAF<阈值的ALT等位基因
+        """稀有变异负荷得分：LD剪枝后的功能严重度×稀有度
 
-        权重 = 功能严重度 × (-log10(MAF))，越稀有权重越高
+        对每个LD block内MAF<阈值的位点，以block内最大贡献为代表。
+        避免连锁稀有变异重复加和导致高LD区域得分虚高。
         """
         seq_map = self._get_hap_seq_map()
+        # 预计算每个位点的burden贡献（用于选block代表）
+        pos_burden_contrib = {}
+        for pos in self.variant_positions:
+            ann = self.pos_annotation.get(pos, 'other')
+            func_w = self.FUNCTIONAL_WEIGHTS.get(ann, 0.1)
+            maf = self.pos_maf.get(pos, 0.5)
+            if maf < self.maf_threshold:
+                rarity_w = -np.log10(max(maf, 1e-4))
+                pos_burden_contrib[pos] = func_w * rarity_w
+            else:
+                pos_burden_contrib[pos] = 0.0
+        lead_key = lambda p: pos_burden_contrib.get(p, 0)
+
         scores = {}
         for hap, seq in seq_map.items():
             total = 0.0
@@ -4594,9 +4724,11 @@ class HaplotypeScorer:
                 if maf < self.maf_threshold:
                     ann = self.pos_annotation[pos]
                     func_w = self.FUNCTIONAL_WEIGHTS.get(ann, 0.1)
-                    # -log10(MAF): MAF=0.001→3, MAF=0.01→2, MAF=0.05→1.3
                     rarity_w = -np.log10(max(maf, 1e-4))
-                    total += func_w * rarity_w
+                    contrib = func_w * rarity_w
+                    # LD剪枝：仅block代表位点保留贡献
+                    contrib = self._ld_block_single_contrib(pos, contrib, lead_key)
+                    total += contrib
             scores[hap] = total
         return scores
 
@@ -4835,42 +4967,72 @@ class HaplotypeScorer:
         return scores
 
     def compute_effect_size_score(self):
-        """效应量得分：基于HaplotypeEffectAnalyzer的标准化效应量
+        """效应量得分：经验贝叶斯收缩后的标准化效应量
 
-        score[hap] = |Cohen's d| × sample_factor
+        使用 James-Stein 风格的收缩估计：
+        d_shrunk = d × (1 - (k-2) / Σ z²_i)  for each d
 
-        - |d|: 0.2=小, 0.5=中, 0.8=大 (Cohen's convention)
-        - 小样本量降权防止不稳定估计
+        其中 z² = d² / (1/n₁ + 1/n₂ + d²/(2N)) 近似方差倒数权重。
+        小样本组的|d|向总体均值收缩，防止不稳定估计。
         """
         hap_effects = self.effect_results.get('haplotype_effects', [])
         if not hap_effects:
             return {hap: 0.0 for hap in self.unique_haps}
 
-        max_n = max((h.get('n_samples', 1) for h in hap_effects), default=1)
-        scores = {}
+        # 提取有样本量的单倍型的|d|和n
+        hap_d = {}
+        hap_n = {}
         for h in hap_effects:
             hap_name = h.get('haplotype', '')
             if hap_name in self.unique_haps:
-                d = abs(h.get('cohens_d', 0))
-                n = h.get('n_samples', 1)
-                # 极小样本量(<30% of max_n 或 <5)降权
-                sample_factor = min(1.0, n / max(max_n * 0.3, 5))
-                scores[hap_name] = d * sample_factor
+                hap_d[hap_name] = abs(h.get('cohens_d', 0))
+                hap_n[hap_name] = h.get('n_samples', 1)
 
-        # Fill any missing haplotypes
-        for hap in self.unique_haps:
-            if hap not in scores:
-                scores[hap] = 0.0
+        if not hap_d:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        N_total = sum(hap_n.values())
+        # 精度权重：n_i/N_total × 1/(1/n_i + 零避免)
+        z_sq = []
+        for name in hap_d:
+            d = hap_d[name]
+            n = hap_n[name]
+            # 近似方差: var(d) ≈ (n₁+n₂)/(n₁n₂) + d²/(2(n₁+n₂))
+            # 简化：使用 n 比例权重
+            w = n / max(N_total * 0.01, 1)  # 样本量权重
+            z_sq.append(w * d ** 2)
+
+        z_sq_sum = sum(z_sq)
+        k = len(hap_d)
+
+        # James-Stein shrinkage factor
+        if k > 2 and z_sq_sum > 0:
+            shrinkage = max(0.0, 1.0 - (k - 2) / z_sq_sum)
+        else:
+            shrinkage = 1.0
+
+        d_mean = np.mean(list(hap_d.values()))
+        scores = {}
+        for hap_name in self.unique_haps:
+            if hap_name in hap_d:
+                d = hap_d[hap_name]
+                # 向群体均值收缩
+                d_shrunk = d_mean + shrinkage * (d - d_mean)
+                scores[hap_name] = d_shrunk
+            else:
+                scores[hap_name] = 0.0
+
         return scores
 
     def compute_genetic_distinctiveness_score(self):
-        """遗传分化得分：样本量加权的平均Hamming距离
+        """遗传分化得分：功能加权 + LD压缩的Hamming距离
 
-        对每个单倍型，计算其与其他所有单倍型之间的Hamming距离
-        （逐位比较等位基因不同的位点数），以目标单倍型的样本量加权。
-        距离越大 → 该单倍型在群体中越独特。
+        对每个单倍型，计算其与其他单倍型的加权Hamming距离：
+        - 每个位点的权重 = 归一化后的FUNCTIONAL_WEIGHTS (避免错义突变被同义突变等权)
+        - LD block内的位点共享权重 (r²≥0.5的位点仅贡献一次权重)
+        - 样本量加权平均
 
-        公式: score[hap] = Σⱼ (nⱼ × Hamming(seq_hap, seqⱼ)) / Σⱼ nⱼ
+        公式: score[hap] = Σⱼ nⱼ × (Σ_k w_k × I[allele_ik ≠ allele_jk]) / (Σ_k w_k) / Σⱼ nⱼ
         """
         if len(self.unique_haps) < 2:
             return {hap: 0.0 for hap in self.unique_haps}
@@ -4885,7 +5047,43 @@ class HaplotypeScorer:
             rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
             hap_counts[hap] = len(rows)
 
-        # 计算每个单倍型的加权平均Hamming距离
+        # 位点功能权重 (由annotation决定，LD block内共享)
+        # LD block → 该block中所有位点的最大功能权重 (只贡献一次)
+        raw_weights = []
+        pos_weights = {}
+        for i, pos in enumerate(self.variant_positions):
+            ann = self.pos_annotation.get(pos, 'other')
+            raw_weights.append(self.FUNCTIONAL_WEIGHTS.get(ann, 0.1))
+
+        # LD block压缩: block内位点均分最大权重 (避免连锁位点重复贡献)
+        from collections import defaultdict
+        block_positions = defaultdict(list)
+        for pos in self.variant_positions:
+            block_id = self.pos_ld_block.get(pos, pos)  # fallback用pos自身作id
+            block_positions[block_id].append(pos)
+
+        block_max_w = {}
+        for bid, positions in block_positions.items():
+            block_max_w[bid] = max(
+                self.FUNCTIONAL_WEIGHTS.get(self.pos_annotation.get(p, 'other'), 0.1)
+                for p in positions
+            )
+
+        for i, pos in enumerate(self.variant_positions):
+            bid = self.pos_ld_block.get(pos, pos)
+            # block内所有位点贡献 = block_max_w / block_size (避免大block主导)
+            n_in_block = len(block_positions[bid])
+            pos_weights[pos] = block_max_w[bid] / n_in_block if n_in_block > 0 else raw_weights[i]
+
+        total_w = sum(pos_weights.values())
+        if total_w <= 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # 归一化权重
+        for pos in pos_weights:
+            pos_weights[pos] /= total_w
+
+        # 计算每个单倍型的加权平均距离
         distances = {}
         for hap_i in self.unique_haps:
             seq_i = seq_map.get(hap_i, '')
@@ -4902,12 +5100,23 @@ class HaplotypeScorer:
                 n_j = hap_counts.get(hap_j, 0)
                 if n_j == 0:
                     continue
-                # Hamming距离：逐位比较
-                ham = sum(1 for a, b in zip(seq_i, seq_j) if a != b)
-                # 处理长度不一致的边界情况
+
+                # 加权Hamming距离
+                weighted_ham = 0.0
+                common_len = min(len(seq_i), len(seq_j))
+                for k in range(common_len):
+                    if seq_i[k] != seq_j[k]:
+                        pos = self.variant_positions[k] if k < len(self.variant_positions) else None
+                        w = pos_weights.get(pos, 1.0 / max(len(self.variant_positions), 1)) if pos is not None else 0.0
+                        weighted_ham += w
+
+                # 长度差异按缺失位点平均权重处理
                 len_diff = abs(len(seq_i) - len(seq_j))
-                ham += len_diff
-                weighted_sum += ham * n_j
+                if len_diff > 0 and len(self.variant_positions) > 0:
+                    avg_w = 1.0 / len(self.variant_positions)
+                    weighted_ham += len_diff * avg_w
+
+                weighted_sum += weighted_ham * n_j
                 total_other += n_j
 
             distances[hap_i] = weighted_sum / total_other if total_other > 0 else 0.0
@@ -5019,68 +5228,88 @@ class HaplotypeScorer:
 
         return scores
 
-    def _minmax_normalize(self, scores_dict):
-        """Min-Max归一化到 [0, 1]，自动剔除NaN值"""
+    def _winsorize_normalize(self, scores_dict, lower_pct=2.5, upper_pct=97.5):
+        """Winsorize + Min-Max归一化到 [0, 1]
+
+        先用分位数裁剪极端值（抗离群值），再做MinMax归一化。
+        仅总分不在0-1范围时调用，单个组件保留原始尺度。
+        """
         if not scores_dict:
-            return {}
-        vals = [v for v in scores_dict.values() if isinstance(v, (int, float)) and v == v]  # v==v 过滤NaN
-        if not vals:
-            return {k: 0.0 for k in scores_dict}
-        vmin, vmax = min(vals), max(vals)
-        if vmax == vmin:
-            return {k: 0.0 for k in scores_dict}  # 无区分力 → 不贡献总分
+            return {}, 0.0
+        vals = np.array([v for v in scores_dict.values()
+                        if isinstance(v, (int, float)) and v == v])
+        if len(vals) == 0:
+            return {k: 0.0 for k in scores_dict}, 0.0
+
+        vmin_raw, vmax_raw = vals.min(), vals.max()
+        if vmax_raw == vmin_raw:
+            return {k: 0.0 for k in scores_dict}, 1.0  # spread=1避免除零
+
+        # Winsorize: 裁剪上下极端值
+        lower = np.percentile(vals, lower_pct)
+        upper = np.percentile(vals, upper_pct)
+        if upper <= lower:
+            upper = lower + 1e-8
+
         result = {}
         for k, v in scores_dict.items():
-            if isinstance(v, float) and v != v:  # NaN
+            if isinstance(v, float) and v != v:
                 result[k] = 0.0
             else:
-                result[k] = (v - vmin) / (vmax - vmin)
-        return result
+                clipped = np.clip(float(v), lower, upper)
+                result[k] = (clipped - lower) / (upper - lower)
+
+        spread = (upper - lower) / (vmax_raw - vmin_raw) if (vmax_raw - vmin_raw) > 0 else 1.0
+        return result, spread
 
     def score_all(self):
         """
         主入口：计算所有单倍型的综合得分 + 每个样本的得分 + 回归统计
 
-        七个评分组件：
-        1. variant_effect      — 变异功能严重度
-        2. burden              — 稀有变异负荷
-        3. gwas                — GWAS信号整合
-        4. multi_omics         — 多组学协变量偏差
-        5. fine_mapping        — LD-pruned 近似贝叶斯因子
-        6. effect_size         — 单倍型效应量 (Cohen's d)
-        7. genetic_distinct    — 遗传分化距离 (AMOVA近似)
+        六个评分组件 (v2):
+        1. variant_effect      — LD剪枝后的变异功能严重度
+        2. burden              — LD剪枝后的稀有变异负荷
+        3. multi_omics         — 多组学协变量标准化偏差
+        4. fine_mapping        — 近似贝叶斯因子 + LD剪枝 (整合GWAS信号)
+        5. effect_size         — 贝叶斯收缩后的效应量
+        6. genetic_distinct    — 功能加权的遗传分化距离
+
+        归一化策略:
+        - 每个组件 Winsorize(2.5%/97.5%) + MinMax → [0,1]
+        - 加权求和（权重由 component_weights 控制）
+        - 最终总分不再二次归一化，保留绝对尺度
 
         PVE校准：若PVE < 5%，标记 low_confidence=True
 
         Returns:
             dict with per_sample, per_haplotype, r_squared, regression_pvalue,
-                 slope, intercept, component_weights, confidence_level, low_confidence
+                 slope, intercept, component_weights, confidence_level, low_confidence,
+                 circularity_warning
         """
-        # 计算七个组件的原始得分
+        # 计算六个组件的原始得分
         raw_components = {
             'variant_effect': self.compute_variant_effect_score(),
             'burden': self.compute_burden_score(),
-            'gwas': self.compute_gwas_score(),
             'multi_omics': self.compute_multi_omics_score(),
             'fine_mapping': self.compute_fine_mapping_score(),
             'effect_size': self.compute_effect_size_score(),
             'genetic_distinct': self.compute_genetic_distinctiveness_score(),
         }
 
-        # 归一化各组件
-        norm_components = {k: self._minmax_normalize(v) for k, v in raw_components.items()}
+        # Winsorize + MinMax 归一化各组件
+        norm_components = {}
+        for k, v in raw_components.items():
+            norm_components[k], _ = self._winsorize_normalize(v)
 
-        # 加权求和得到每个单倍型的总分
+        # 加权求和得到每个单倍型的总分 (不二次归一化)
         hap_total = {}
         for hap in self.unique_haps:
             total = 0.0
-            for comp_name in norm_components:
-                w = self.component_weights.get(comp_name, 1.0)
-                total += w * norm_components[comp_name].get(hap, 0.0)
+            for comp_name in self.component_weights:
+                if comp_name in norm_components:
+                    w = self.component_weights[comp_name]
+                    total += w * norm_components[comp_name].get(hap, 0.0)
             hap_total[hap] = total
-
-        # MinMax 归一化总分
-        hap_total_norm = self._minmax_normalize(hap_total)
 
         # PVE 置信度校准
         if self.pve is not None:
@@ -5103,7 +5332,7 @@ class HaplotypeScorer:
             entry = {}
             for comp_name in sorted(norm_components.keys()):
                 entry[comp_name] = round(norm_components[comp_name].get(hap, 0), 4)
-            entry['total'] = round(hap_total_norm.get(hap, 0), 4)
+            entry['total'] = round(hap_total.get(hap, 0), 4)
             per_haplotype[hap] = entry
 
         # 构建 per_sample 输出 + 线性回归
@@ -5112,7 +5341,7 @@ class HaplotypeScorer:
         phenos_for_reg = []
         for _, row in self.hap_sample_df.iterrows():
             hap = row[self.hap_col]
-            score = hap_total_norm.get(hap, 0.0)
+            score = hap_total.get(hap, 0.0)
             pheno = row[self.phenotype_col]
             sample_id = row.get('SampleID', '')
             if pd.notna(pheno):
@@ -5125,7 +5354,7 @@ class HaplotypeScorer:
                 scores_for_reg.append(score)
                 phenos_for_reg.append(float(pheno))
 
-        # 线性回归
+        # 线性回归: 评分 vs 表型
         r_squared = None
         regression_pvalue = None
         slope = 0.0
@@ -5140,6 +5369,12 @@ class HaplotypeScorer:
             except Exception:
                 pass
 
+        # 循环论证风险标注: FineMapping使用GWAS的-log10(p)作为输入，
+        # 而回归以相同表型为因变量 → R²可能被抬高
+        circularity_warning = (
+            self.pve is not None and self.pve < 0.10 and r_squared is not None and r_squared > 0.5
+        )
+
         return {
             'per_sample': per_sample,
             'per_haplotype': per_haplotype,
@@ -5151,6 +5386,7 @@ class HaplotypeScorer:
             'confidence_level': confidence_level,
             'low_confidence': low_confidence,
             'pve': self.pve,
+            'circularity_warning': circularity_warning,
         }
 
 
@@ -5962,7 +6198,7 @@ class ReportGenerator:
                 effect_results=effect_results,
                 promoter_start=promoter_start, promoter_end=promoter_end,
                 strand=strand,
-                pve=None
+                pve=self.results.get('pve', {}).get('eta_squared', None) if 'pve' in self.results else None
             )
             score_results = scorer.score_all()
             haplotype_score_json = json.dumps(score_results, cls=NumpyEncoder)
