@@ -4716,11 +4716,35 @@ class HaplotypeScorer:
             return 'binary'  # 两分类当binary处理
         return 'categorical'
 
+    def _compute_column_entropy(self, col):
+        """计算单列的归一化香农熵 (0-1)，作为信息量权重
+
+        熵 = -Σ p_i·log₂(p_i), 归一化 = 熵 / log₂(n_categories)
+        返回值 ∈ [0, 1]: 0 = 常数列(无信息), 1 = 各类别均匀分布(最高信息)
+        """
+        series = self.hap_sample_df[col].dropna()
+        if len(series) < 2:
+            return 0.0
+        counts = series.value_counts()
+        n_cats = len(counts)
+        if n_cats < 2:
+            return 0.0
+        probs = counts.values / counts.values.sum()
+        entropy = -np.sum(probs * np.log2(np.maximum(probs, 1e-12)))
+        max_entropy = np.log2(n_cats)
+        if max_entropy < 1e-12:
+            return 0.0
+        return entropy / max_entropy
+
     def _compute_pca_mahalanobis(self, numeric_cols):
         """PCA去相关 + 马氏距离计算数值型协变量偏差
 
         步骤: PCA降维(保留95%方差) → 各PC标准化偏差平方和 → 开方
         PCA后各主成分正交，自然消除协变量间相关性
+
+        Returns:
+            (scores_dict, weight) 或 None
+            weight = n_features × retained_variance_ratio (信息量加权)
         """
         numeric_data = self.hap_sample_df[numeric_cols].dropna()
         n_samples, n_features = numeric_data.shape
@@ -4734,15 +4758,14 @@ class HaplotypeScorer:
             return self._compute_per_covariate_fallback(numeric_cols)
 
         try:
-            # 标准化后PCA
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(numeric_data)
             pca = PCA(n_components=min(n_features, n_samples - 1))
             X_pca = pca.fit_transform(X_scaled)
 
-            # 保留解释95%方差的PC数（至少1个）
             cumsum_var = np.cumsum(pca.explained_variance_ratio_)
             n_components = max(1, int(np.searchsorted(cumsum_var, 0.95)) + 1)
+            retained_variance = cumsum_var[n_components - 1]
 
             pca_df = pd.DataFrame(
                 X_pca[:, :n_components],
@@ -4752,7 +4775,6 @@ class HaplotypeScorer:
         except Exception:
             return self._compute_per_covariate_fallback(numeric_cols)
 
-        # 按单倍型计算各PC的标准化偏差
         scores = {}
         for hap in self.unique_haps:
             hap_mask = self.hap_sample_df.loc[pca_df.index, self.hap_col] == hap
@@ -4772,10 +4794,14 @@ class HaplotypeScorer:
                 n_valid += 1
 
             scores[hap] = np.sqrt(sum_sq_dev) / max(n_valid, 1) if n_valid > 0 else 0.0
-        return scores
+
+        weight = float(n_features) * retained_variance
+        return (scores, weight)
 
     def _compute_per_covariate_fallback(self, numeric_cols):
-        """回退方案：逐协变量独立标准化偏差（不处理相关性）"""
+        """回退方案：逐协变量独立标准化偏差（不处理相关性）
+        Returns: (scores_dict, weight) or None
+        """
         scores = {}
         for hap in self.unique_haps:
             hap_rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
@@ -4792,7 +4818,8 @@ class HaplotypeScorer:
                     comp_sum += abs(cov_mean - all_vals.mean()) / cov_std
                     n_cov += 1
             scores[hap] = comp_sum / max(n_cov, 1)
-        return scores
+        weight = float(len(numeric_cols))
+        return (scores, weight)
 
     def _compute_binary_deviation(self, col):
         """二分类协变量：比例标准化偏差 |p_hap - p_all| / sqrt(p_all*(1-p_all))"""
@@ -4858,13 +4885,17 @@ class HaplotypeScorer:
         return scores
 
     def compute_multi_omics_score(self):
-        """多组学得分：综合数值/二分类/多分类协变量的标准化偏差
+        """多组学得分：信息量加权综合数值/二分类/多分类协变量偏差
 
         数值型：PCA去相关后各主成分标准化偏差的RMSE
+          权重 = n_numeric_cols × PCA保留方差比
         二分类：比例标准化偏差
+          权重 = 归一化香农熵 (平衡类别→1, 极端分布→0)
         多分类：one-hot哑变量标准化偏差均值
+          权重 = 归一化香农熵 (均匀分布→1, 单一类别→0)
 
-        最终得分为所有有效协变量组件的均值
+        最终得分 = Σ(w_i × score_i) / Σ(w_i)
+        信息量高的组件自动获得更高权重，避免低信息协变量稀释PCA。
         """
         exclude = {'SampleID', 'Hap_Name', 'Haplotype_Seq',
                    'Unnamed: 0', 'index', self.phenotype_col}
@@ -4884,35 +4915,41 @@ class HaplotypeScorer:
             elif cov_type == 'categorical':
                 categorical_cols.append(col)
 
-        # 收集各组件的单倍型得分
-        all_components = []
+        # 收集 (scores_dict, weight) 元组
+        scored_components = []
 
-        # 1. 数值型：PCA + Mahalanobis
+        # 1. 数值型：PCA + Mahalanobis → weight = n_features × retained_variance
         if numeric_cols:
-            pca_scores = self._compute_pca_mahalanobis(numeric_cols)
-            if pca_scores is not None:
-                all_components.append(pca_scores)
+            pca_result = self._compute_pca_mahalanobis(numeric_cols)
+            if pca_result is not None:
+                scored_components.append(pca_result)
 
-        # 2. 二分类：比例标准化偏差
+        # 2. 二分类：比例标准化偏差 → weight = 归一化香农熵
         for col in binary_cols:
             bin_scores = self._compute_binary_deviation(col)
             if bin_scores is not None:
-                all_components.append(bin_scores)
+                weight = self._compute_column_entropy(col)
+                scored_components.append((bin_scores, weight))
 
-        # 3. 多分类：one-hot哑变量标准化偏差
+        # 3. 多分类：one-hot哑变量标准化偏差 → weight = 归一化香农熵
         for col in categorical_cols:
             cat_scores = self._compute_categorical_deviation(col)
             if cat_scores is not None:
-                all_components.append(cat_scores)
+                weight = self._compute_column_entropy(col)
+                scored_components.append((cat_scores, weight))
 
-        # 所有组件等权平均
-        if not all_components:
+        if not scored_components:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # 信息量加权平均: Σ(w_i × score_i) / Σ(w_i)
+        total_weights = sum(w for _, w in scored_components)
+        if total_weights <= 0:
             return {hap: 0.0 for hap in self.unique_haps}
 
         scores = {}
         for hap in self.unique_haps:
-            total = sum(comp.get(hap, 0.0) for comp in all_components)
-            scores[hap] = total / len(all_components)
+            weighted_sum = sum(w * comp.get(hap, 0.0) for comp, w in scored_components)
+            scores[hap] = weighted_sum / total_weights
         return scores
 
     def compute_effect_size_score(self):
