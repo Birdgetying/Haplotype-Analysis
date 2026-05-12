@@ -4775,6 +4775,14 @@ class HaplotypeScorer:
         except Exception:
             return self._compute_per_covariate_fallback(numeric_cols)
 
+        # 预计算各PC的全局均值和标准差，避免在嵌套循环中重复O(n)
+        global_means = {pc: pca_df[pc].mean() for pc in pca_df.columns}
+        global_stds = {}
+        for pc in pca_df.columns:
+            std = pca_df[pc].std()
+            if pd.notna(std) and std > 0:
+                global_stds[pc] = std
+
         scores = {}
         for hap in self.unique_haps:
             hap_mask = self.hap_sample_df.loc[pca_df.index, self.hap_col] == hap
@@ -4785,11 +4793,8 @@ class HaplotypeScorer:
 
             sum_sq_dev = 0.0
             n_valid = 0
-            for pc in pca_df.columns:
-                global_std = pca_df[pc].std()
-                if pd.isna(global_std) or global_std == 0:
-                    continue
-                dev = (hap_pca[pc].mean() - pca_df[pc].mean()) / global_std
+            for pc in global_stds:
+                dev = (hap_pca[pc].mean() - global_means[pc]) / global_stds[pc]
                 sum_sq_dev += dev ** 2
                 n_valid += 1
 
@@ -4979,22 +4984,18 @@ class HaplotypeScorer:
 
         N_total = sum(hap_n.values())
 
-        # Step 1: 计算每个效应量的精确方差和精度
         hap_var = {}
         for name in hap_d:
             d = hap_d[name]
             n1 = hap_n[name]
             n2 = max(N_total - n1, 1)
-            # Cohen's d 抽样方差公式
             hap_var[name] = (n1 + n2) / (n1 * n2) + (d ** 2) / (2 * (n1 + n2))
             hap_var[name] = max(hap_var[name], 1e-8)
 
-        # Step 2: 精度加权均值 μ̂_pw = Σ(wᵢ·dᵢ) / Σwᵢ
         precisions = {name: 1.0 / hap_var[name] for name in hap_d}
         total_prec = sum(precisions.values())
         d_pw_mean = sum(precisions[name] * hap_d[name] for name in hap_d) / total_prec
 
-        # Step 3: 精度标化的z-score平方和 → James-Stein收缩因子
         z_sq_sum = sum(
             precisions[name] * (hap_d[name] - d_pw_mean) ** 2 for name in hap_d
         )
@@ -5005,7 +5006,6 @@ class HaplotypeScorer:
         else:
             shrinkage = 1.0
 
-        # Step 4: 向精度加权均值收缩
         scores = {}
         for hap_name in self.unique_haps:
             if hap_name in hap_d:
@@ -5109,21 +5109,18 @@ class HaplotypeScorer:
         if n_pos == 0:
             return {hap: 0.0 for hap in self.unique_haps}
 
-        # Early skip: 无有效GWAS信号时，所有logBF为-inf，无需计算
-        if max(self.pos_gwas_logp.values()) <= 0:
+        # 无有效GWAS信号时，所有logBF为-inf，无需计算
+        if not any(v > 0 for v in self.pos_gwas_logp.values()):
             return {hap: 0.0 for hap in self.unique_haps}
 
-        from scipy import stats as _scipy_stats
-
-        # Step 1: per-position log-BF via Z-statistic approximation
-        # ABF ≈ exp(Z²/2) where Z = Φ⁻¹(1-p/2), 在log空间计算避免溢出
         pos_log_bf = {}
         for pos in self.variant_positions:
             logp = self.pos_gwas_logp.get(pos, 0.0)
             if logp > 0:
                 pval = np.power(10, -logp)
                 pval = max(pval, 1e-300)
-                z_sq = _scipy_stats.chi2.isf(pval, 1)  # χ² = Z², isf避免1-pval精度丢失
+                # χ² = Z², isf(q)=isf(1-p/2) 避免 1-pval 精度丢失
+                z_sq = stats.chi2.isf(pval, 1)
                 pos_log_bf[pos] = z_sq / 2.0
             else:
                 pos_log_bf[pos] = -np.inf
@@ -5188,7 +5185,7 @@ class HaplotypeScorer:
 
         return scores
 
-    def _winsorize_normalize(self, scores_dict, lower_pct=None, upper_pct=None):
+    def _winsorize_normalize(self, scores_dict):
         """Winsorize + Min-Max 归一化到 [0, 1]，百分位边界自适应样本量
 
         单倍型数 n < 10:  直接MinMax，不剪裁（百分位数无意义）
@@ -5207,11 +5204,7 @@ class HaplotypeScorer:
         if vmax_raw == vmin_raw:
             return {k: 0.0 for k in scores_dict}
 
-        # 自适应百分位边界
-        if lower_pct is not None and upper_pct is not None:
-            pass  # 显式指定时直接使用
-        elif n_valid < 10:
-            # 样本太少，直接MinMax
+        if n_valid < 10:
             lower, upper = vmin_raw, vmax_raw
         elif n_valid < 30:
             lower = np.percentile(vals, 5.0)
@@ -5328,8 +5321,7 @@ class HaplotypeScorer:
         intercept = 0.0
         if len(scores_for_reg) > 2:
             try:
-                from scipy import stats as scipy_stats
-                slope, intercept, r_value, p_value, _ = scipy_stats.linregress(
+                slope, intercept, r_value, p_value, _ = stats.linregress(
                     scores_for_reg, phenos_for_reg)
                 r_squared = round(r_value ** 2, 4)
                 regression_pvalue = float(p_value)
