@@ -4384,6 +4384,10 @@ class HaplotypeScorer:
     - Wakefield (2009) ABF for fine-mapping
     """
 
+    # 协变量识别时排除的非表型列
+    RESERVED_COLUMNS = {'SampleID', 'Hap_Name', 'Haplotype_Seq',
+                        'Unnamed: 0', 'index'}
+
     FUNCTIONAL_WEIGHTS = {
         'missense_non_conservative': 5, 'frameshift': 5,
         'missense_semi_conservative': 4, 'missense_conservative': 3,
@@ -4752,12 +4756,6 @@ class HaplotypeScorer:
             return None
 
         try:
-            from sklearn.decomposition import PCA
-            from sklearn.preprocessing import StandardScaler
-        except ImportError:
-            return self._compute_per_covariate_fallback(numeric_cols)
-
-        try:
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(numeric_data)
             pca = PCA(n_components=min(n_features, n_samples - 1))
@@ -4773,6 +4771,8 @@ class HaplotypeScorer:
                 index=numeric_data.index
             )
         except Exception:
+            import traceback
+            traceback.print_exc()
             return self._compute_per_covariate_fallback(numeric_cols)
 
         # 预计算各PC的全局均值和标准差，避免在嵌套循环中重复O(n)
@@ -4902,8 +4902,7 @@ class HaplotypeScorer:
         最终得分 = Σ(w_i × score_i) / Σ(w_i)
         信息量高的组件自动获得更高权重，避免低信息协变量稀释PCA。
         """
-        exclude = {'SampleID', 'Hap_Name', 'Haplotype_Seq',
-                   'Unnamed: 0', 'index', self.phenotype_col}
+        exclude = self.RESERVED_COLUMNS | {self.phenotype_col}
         covariate_cols = [c for c in self.hap_sample_df.columns if c not in exclude]
 
         if not covariate_cols:
@@ -5066,8 +5065,11 @@ class HaplotypeScorer:
                 common_len = min(len(seq_i), len(seq_j))
                 for k in range(common_len):
                     if seq_i[k] != seq_j[k]:
-                        pos = self.variant_positions[k] if k < len(self.variant_positions) else None
-                        w = pos_weights.get(pos, 1.0 / max(len(self.variant_positions), 1)) if pos is not None else 0.0
+                        if k < len(self.variant_positions):
+                            pos = self.variant_positions[k]
+                            w = pos_weights.get(pos, 1.0 / max(len(self.variant_positions), 1))
+                        else:
+                            w = 0.0
                         weighted_ham += w
 
                 len_diff = abs(len(seq_i) - len(seq_j))
