@@ -4698,23 +4698,6 @@ class HaplotypeScorer:
                 pos_burden[pos] = 0.0
         return self._compute_ld_pruned_haplotype_score(pos_burden)
 
-    def compute_gwas_score(self):
-        """GWAS信号得分：单倍型实际携带的ALT等位基因的-log10(p)连续加权求和"""
-        seq_map = self._get_hap_seq_map()
-        scores = {}
-        for hap, seq in seq_map.items():
-            total = 0.0
-            for i, pos in enumerate(self.variant_positions):
-                if i >= len(seq):
-                    continue
-                allele = seq[i]
-                if not self._is_alt_allele(pos, allele):
-                    continue
-                logp = self.pos_gwas_logp.get(pos, 0.0)
-                total += logp  # 连续加权，无硬阈值
-            scores[hap] = total
-        return scores
-
     def _classify_covariate(self, col):
         """将协变量列分类为 'numeric', 'binary', 'categorical'"""
         series = self.hap_sample_df[col].dropna()
@@ -4933,17 +4916,19 @@ class HaplotypeScorer:
         return scores
 
     def compute_effect_size_score(self):
-        """效应量得分：样本量加权贝叶斯收缩
+        """效应量得分：精度加权James-Stein经验贝叶斯收缩
 
-        James-Stein风格收缩：d_shrunk = d_mean + shrinkage × (d - d_mean)
-        权重使用样本量比例 n/N_total 近似（替代需要n₁,n₂的精确方差）。
-        小样本组的|d|向总体均值收缩，防止不稳定估计。
+        使用Cohen's d的精确抽样方差:
+          var(d) = (n₁+n₂)/(n₁·n₂) + d²/(2·(n₁+n₂))
+        其中 n₁ = 单倍型组样本数, n₂ = 其余样本数
+
+        精度加权均值 + 精度标化z-score驱动收缩:
+          d_shrunk = d_pw_mean + shrinkage × (d - d_pw_mean)
         """
         hap_effects = self.effect_results.get('haplotype_effects', [])
         if not hap_effects:
             return {hap: 0.0 for hap in self.unique_haps}
 
-        # 提取有样本量的单倍型的|d|和n
         hap_d = {}
         hap_n = {}
         for h in hap_effects:
@@ -4956,32 +4941,39 @@ class HaplotypeScorer:
             return {hap: 0.0 for hap in self.unique_haps}
 
         N_total = sum(hap_n.values())
-        # 精度权重：n_i/N_total × 1/(1/n_i + 零避免)
-        z_sq = []
+
+        # Step 1: 计算每个效应量的精确方差和精度
+        hap_var = {}
         for name in hap_d:
             d = hap_d[name]
-            n = hap_n[name]
-            # 近似方差: var(d) ≈ (n₁+n₂)/(n₁n₂) + d²/(2(n₁+n₂))
-            # 简化：使用 n 比例权重
-            w = n / max(N_total * 0.01, 1)  # 样本量权重
-            z_sq.append(w * d ** 2)
+            n1 = hap_n[name]
+            n2 = max(N_total - n1, 1)
+            # Cohen's d 抽样方差公式
+            hap_var[name] = (n1 + n2) / (n1 * n2) + (d ** 2) / (2 * (n1 + n2))
+            hap_var[name] = max(hap_var[name], 1e-8)
 
-        z_sq_sum = sum(z_sq)
+        # Step 2: 精度加权均值 μ̂_pw = Σ(wᵢ·dᵢ) / Σwᵢ
+        precisions = {name: 1.0 / hap_var[name] for name in hap_d}
+        total_prec = sum(precisions.values())
+        d_pw_mean = sum(precisions[name] * hap_d[name] for name in hap_d) / total_prec
+
+        # Step 3: 精度标化的z-score平方和 → James-Stein收缩因子
+        z_sq_sum = sum(
+            precisions[name] * (hap_d[name] - d_pw_mean) ** 2 for name in hap_d
+        )
         k = len(hap_d)
 
-        # James-Stein shrinkage factor
         if k > 2 and z_sq_sum > 0:
             shrinkage = max(0.0, 1.0 - (k - 2) / z_sq_sum)
         else:
             shrinkage = 1.0
 
-        d_mean = np.mean(list(hap_d.values()))
+        # Step 4: 向精度加权均值收缩
         scores = {}
         for hap_name in self.unique_haps:
             if hap_name in hap_d:
                 d = hap_d[hap_name]
-                # 向群体均值收缩
-                d_shrunk = d_mean + shrinkage * (d - d_mean)
+                d_shrunk = d_pw_mean + shrinkage * (d - d_pw_mean)
                 scores[hap_name] = d_shrunk
             else:
                 scores[hap_name] = 0.0
@@ -5075,12 +5067,16 @@ class HaplotypeScorer:
 
         参考方法: Wakefield (2009) ABF; GCTA-COJO 条件分析思想
         """
-        from scipy import stats as _scipy_stats
-
         seq_map = self._get_hap_seq_map()
         n_pos = len(self.variant_positions)
         if n_pos == 0:
             return {hap: 0.0 for hap in self.unique_haps}
+
+        # Early skip: 无有效GWAS信号时，所有logBF为-inf，无需计算
+        if max(self.pos_gwas_logp.values()) <= 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        from scipy import stats as _scipy_stats
 
         # Step 1: per-position log-BF via Z-statistic approximation
         # ABF ≈ exp(Z²/2) where Z = Φ⁻¹(1-p/2), 在log空间计算避免溢出
@@ -5155,21 +5151,38 @@ class HaplotypeScorer:
 
         return scores
 
-    def _winsorize_normalize(self, scores_dict, lower_pct=2.5, upper_pct=97.5):
-        """Winsorize + Min-Max归一化到 [0, 1]"""
+    def _winsorize_normalize(self, scores_dict, lower_pct=None, upper_pct=None):
+        """Winsorize + Min-Max 归一化到 [0, 1]，百分位边界自适应样本量
+
+        单倍型数 n < 10:  直接MinMax，不剪裁（百分位数无意义）
+        单倍型数 n < 30:  5%/95% 温和剪裁
+        单倍型数 n ≥ 30:  2.5%/97.5% 标准剪裁
+        """
         if not scores_dict:
             return {}
         vals = np.array([v for v in scores_dict.values()
                         if isinstance(v, (int, float)) and v == v])
-        if len(vals) == 0:
+        n_valid = len(vals)
+        if n_valid == 0:
             return {k: 0.0 for k in scores_dict}
 
         vmin_raw, vmax_raw = vals.min(), vals.max()
         if vmax_raw == vmin_raw:
             return {k: 0.0 for k in scores_dict}
 
-        lower = np.percentile(vals, lower_pct)
-        upper = np.percentile(vals, upper_pct)
+        # 自适应百分位边界
+        if lower_pct is not None and upper_pct is not None:
+            pass  # 显式指定时直接使用
+        elif n_valid < 10:
+            # 样本太少，直接MinMax
+            lower, upper = vmin_raw, vmax_raw
+        elif n_valid < 30:
+            lower = np.percentile(vals, 5.0)
+            upper = np.percentile(vals, 95.0)
+        else:
+            lower = np.percentile(vals, 2.5)
+            upper = np.percentile(vals, 97.5)
+
         if upper <= lower:
             upper = lower + 1e-8
 
