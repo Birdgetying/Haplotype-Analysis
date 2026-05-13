@@ -5870,20 +5870,20 @@ class ReportGenerator:
             
             # **关键修复**: 基于实际显示的单倍型序列，过滤掉"无变异位点"
             # 如果某位点在所有显示的单倍型中碱基都相同，则不显示该位点
-            top_hap_seqs = []
+            top_hap_alleles = []
             for hap in top_haps:
                 hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
                 if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
-                    seq = hap_rows['Haplotype_Seq'].iloc[0].replace('|', '')
-                    top_hap_seqs.append(seq)
-                        
+                    alleles = hap_rows['Haplotype_Seq'].iloc[0].split('|')
+                    top_hap_alleles.append(alleles)
+
             # 检查每个位点在显示的单倍型中是否有变异
             variable_indices = []
             for idx in range(len(all_positions)):
                 bases_at_pos = set()
-                for seq in top_hap_seqs:
-                    if idx < len(seq):
-                        bases_at_pos.add(seq[idx].upper())
+                for alleles in top_hap_alleles:
+                    if idx < len(alleles):
+                        bases_at_pos.add(alleles[idx].strip().upper())
                 # 只有当该位点在显示的单倍型中有多种碱基时才保留
                 if len(bases_at_pos) > 1:
                     variable_indices.append(idx)
@@ -6933,36 +6933,28 @@ class ReportGenerator:
                 
                 html += f'    <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">\n        {cov_box_html}\n    </td>\n'
             
-            # 序列列
+            # 序列列 — 按|分隔等位基因，保留多字符indel边界
             if 'Haplotype_Seq' in row.index:
-                seq = row['Haplotype_Seq'].replace('|', '')
+                alleles = str(row['Haplotype_Seq']).split('|')
                 for idx in range(len(display_positions)):
                     orig_idx = display_orig_indices[idx] if idx < len(display_orig_indices) else idx
-                    base = seq[orig_idx].upper() if orig_idx < len(seq) else 'N'
-                    
-                    # 获取位置信息
-                    pos = display_positions[idx] if idx < len(display_positions) else None
-                    
-                    # **关键修复**：对于+/-或I/D，根据variant_info的len_diff显示具体数值
-                    # 例如：+2bp（插入2个碱基）、-1bp（缺失1个碱基）
-                    # 支持两种格式：新格式(+/-)和旧格式(I/D)
-                    display_base = base
-                    actual_type = base  # 实际用于确定颜色的类型
-                    
-                    if base in ('+', '-', 'I', 'D') and pos and variant_info and pos in variant_info:
-                        len_diff = variant_info[pos].get('len_diff', 0)
-                        if len_diff > 0:  # 插入: alt比ref长
-                            display_base = f"+{len_diff}bp"  # 例如：+2bp
-                            actual_type = '+'  # 强制为插入类型（红色）
-                        elif len_diff < 0:  # 缺失: alt比ref短
-                            display_base = f"-{abs(len_diff)}bp"  # 例如：-1bp（使用绝对值）
-                            actual_type = '-'  # 强制为缺失类型（蓝色）
-                        else:
-                            display_base = "0bp"  # 理论上不应该出现
-                    
-                    # 根据实际类型确定颜色（而不是base）
+                    allele = alleles[orig_idx].strip().upper() if orig_idx < len(alleles) else ''
+
+                    # 确定显示文本和类型（用于颜色）
+                    if not allele or allele == 'DEL':
+                        display_base = 'Del'
+                        actual_type = '-'
+                    elif len(allele) == 1:
+                        display_base = allele
+                        actual_type = allele
+                    else:
+                        # 多字符等位基因 = 插入，显示长度
+                        n_bp = len(allele)
+                        display_base = allele if n_bp <= 3 else f"+{n_bp}bp"
+                        actual_type = '+'
+
                     color = base_colors.get(actual_type, '#666')
-                    
+
                     # 根据文本长度调整字体大小，避免重叠
                     if len(display_base) > 4:
                         font_size = "7px"
@@ -6970,7 +6962,7 @@ class ReportGenerator:
                         font_size = "8px"
                     else:
                         font_size = "9px"
-                    
+
                     html += f'<td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
             html += f'<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">{cnt}</td>\n'
