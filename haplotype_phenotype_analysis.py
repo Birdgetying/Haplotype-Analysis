@@ -7792,9 +7792,10 @@ function applyFilters() {
     // 同步更新表格：隐藏被过滤的列，重新排列保留的列
     updateTableColumns(varIndices, varPositions);
     
-    // 更新连线（在表格更新完成后，使用requestAnimationFrame确保DOM已更新）
+    // 更新连线和LD倒三角（在表格更新完成后，确保DOM已反映过滤结果）
     requestAnimationFrame(function() {
         updateConnectorLines();
+        drawLDTriangle();
     });
 }
 
@@ -11950,58 +11951,10 @@ class HaplotypePhenotypeAnalyzer:
             
             logger.info(f"  - SNP注释分布: {dict((k, sum(1 for v in snp_effects.values() if v==k)) for k in set(snp_effects.values()))}")
 
-            # **新增**: 根据 variant_info 过滤高缺失率和低频变异
-            filtered_positions = list(self.positions or [])
-            variant_info = None
-            if self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info:
-                variant_info = self.extractor.variant_info
-            elif self.variant_info:
-                variant_info = self.variant_info
-            
-            if variant_info:
-                original_count = len(filtered_positions)
-                
-                # 过滤参数（可配置，默认与原始分析一致）
-                max_missing_rate = getattr(self, 'max_missing_rate', 0.2)  # 缺失率 > 20% 的变异被过滤
-                min_maf = getattr(self, 'min_maf', 0.05)  # MAF < 5% 的变异被过滤
-                
-                filtered_positions = []
-                filtered_out = []
-                for pos in self.positions:
-                    if pos in variant_info:
-                        info = variant_info[pos]
-                        missing_rate = info.get('missing_rate', 0)
-                        maf = info.get('maf', 0.5)
-                        
-                        if missing_rate > max_missing_rate:
-                            filtered_out.append((pos, 'high_missing', missing_rate))
-                        elif maf < min_maf:
-                            filtered_out.append((pos, 'low_maf', maf))
-                        else:
-                            filtered_positions.append(pos)
-                    else:
-                        filtered_positions.append(pos)
-                
-                if len(filtered_positions) < original_count:
-                    logger.info(f"  - 变异过滤: {original_count} -> {len(filtered_positions)} (过滤 {original_count - len(filtered_positions)} 个)")
-                    logger.info(f"    过滤参数: max_missing_rate={max_missing_rate}, min_maf={min_maf}")
-                    # 记录被过滤的变异
-                    for pos, reason, value in filtered_out[:5]:
-                        logger.info(f"    过滤 {pos}: {reason}={value:.3f}")
-                    if len(filtered_out) > 5:
-                        logger.info(f"    ... 还有 {len(filtered_out) - 5} 个")
-
-                # 更新 self.positions 为过滤后的列表，保持下游一致
-                self.positions = filtered_positions
-                # 同步过滤 snp_effects，只保留通过过滤的位点
-                if snp_effects:
-                    filtered_pos_set = set(filtered_positions)
-                    snp_effects = {p: snp_effects[p] for p in filtered_positions
-                                   if p in snp_effects}
-            
+            # MAF/缺失率过滤由HTML面板JavaScript处理，Python端保持全部位点
             variant_pvalues = compute_variant_phenotype_pvalues(
                 assoc_module.merged_df,
-                filtered_positions,
+                self.positions,
                 first_pheno,
             )
                     
