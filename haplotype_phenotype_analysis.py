@@ -1344,7 +1344,8 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
         if isinstance(alt, str) and alt.startswith('<') and alt.endswith('>'):
             return 'SV'
         len_diff = abs(len(ref) - len(alt))
-        if len(ref) == 1 and len(alt) == 1:
+        valid_bases = {'A', 'T', 'G', 'C', 'a', 't', 'g', 'c'}
+        if len(ref) == 1 and len(alt) == 1 and ref.upper() in valid_bases and alt.upper() in valid_bases:
             return 'SNP'
         elif len_diff >= 50:  # 长度差>=50bp认为是SV
             return 'SV'
@@ -1352,8 +1353,6 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
             return 'INS'
         elif len(ref) > len(alt):  # 缺失
             return 'DEL'
-        elif len(alt) != len(ref):  # 长度不同但差值<50bp，根据长度判断
-            return 'INS' if len(alt) > len(ref) else 'DEL'
         else:
             return 'SNP'  # 长度相同视为SNP
 
@@ -1421,8 +1420,6 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                             effects[pos] = 'SV'
                         elif var_type in ('INS', 'DEL'):
                             effects[pos] = var_type  # 直接使用INS或DEL
-                        elif var_type == 'indel':
-                            effects[pos] = 'indel'
                         elif not in_exon:
                             # 区分启动子、内含子和基因间区
                             if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
@@ -1490,8 +1487,6 @@ def annotate_snp_effects_for_region(vcf_file: str, fasta_path: str, gene_chrom: 
                         effects[pos] = 'SV'
                     elif var_type in ('INS', 'DEL'):
                         effects[pos] = var_type  # 直接使用INS或DEL
-                    elif var_type == 'indel':
-                        effects[pos] = 'indel'
                     elif not in_exon:
                         # 区分启动子、内含子和基因间区
                         if promoter_start is not None and promoter_end is not None and promoter_start <= pos <= promoter_end:
@@ -1611,9 +1606,9 @@ class HaplotypeExtractor:
         # 纯合 ALT
         if gt == (1, 1) or gt == (1,) or gt == [1, 1] or gt == [1]:
             return alt_repr
-        # 杂合按 REF 处理
+        # 杂合子无法确定相位，返回N（该样本会被排除）
         if (isinstance(gt, (tuple, list)) and len(gt) >= 2 and 0 in gt and 1 in gt):
-            return ref_repr
+            return "N"
         return "N"
     
     def extract_region(self, chrom: str, start: int, end: int, min_samples: int = 2, snp_only: bool = True) -> tuple:
@@ -4476,7 +4471,7 @@ class HaplotypeScorer:
         if pos in self.snp_effects:
             ann = self.snp_effects[pos]
             # 修正：通过 variant_info 检查 indel/SV
-            if ann in ('UTR', 'other', 'promoter') and pos in self.variant_info:
+            if ann in ('UTR', 'other', 'promoter', 'intron') and pos in self.variant_info:
                 vinfo = self.variant_info[pos]
                 if vinfo.get('is_sv', False):
                     return 'SV'
@@ -5819,7 +5814,7 @@ class ReportGenerator:
             """snp_effects 优先，无则回退到variant_info，最后回退到位置分类"""
             if snp_effects and pos in snp_effects:
                 ann = snp_effects[pos]
-                if ann in ('UTR', 'other', 'promoter') and variant_info and pos in variant_info:
+                if ann in ('UTR', 'other', 'promoter', 'intron') and variant_info and pos in variant_info:
                     vinfo = variant_info[pos]
                     ref = _safe_str(vinfo.get('ref', ''))
                     alt = _safe_str(vinfo.get('alt', ''))
@@ -11972,6 +11967,14 @@ class HaplotypePhenotypeAnalyzer:
                         logger.info(f"    过滤 {pos}: {reason}={value:.3f}")
                     if len(filtered_out) > 5:
                         logger.info(f"    ... 还有 {len(filtered_out) - 5} 个")
+
+                # 更新 self.positions 为过滤后的列表，保持下游一致
+                self.positions = filtered_positions
+                # 同步过滤 snp_effects，只保留通过过滤的位点
+                if snp_effects:
+                    filtered_pos_set = set(filtered_positions)
+                    snp_effects = {p: snp_effects[p] for p in filtered_positions
+                                   if p in snp_effects}
             
             variant_pvalues = compute_variant_phenotype_pvalues(
                 assoc_module.merged_df,

@@ -6,22 +6,22 @@
 变异总数: 20
 
   位置: 24,657,335 | 距离TSS: 1,847bp | REF: A | ALT:  | MAF: 0.500
-  位置: 24,657,417 | 距离TSS: 1,765bp | REF: A | ALT: G | MAF: 0.148
+  位置: 24,657,417 | 距离TSS: 1,765bp | REF: G | ALT: A | MAF: 0.148
   位置: 24,657,798 | 距离TSS: 1,384bp | REF: C | ALT: T | MAF: 0.037
-  位置: 24,658,103 | 距离TSS: 1,079bp | REF: G | ALT: A | MAF: 0.148
+  位置: 24,658,103 | 距离TSS: 1,079bp | REF: A | ALT: G | MAF: 0.148
   位置: 24,658,223 | 距离TSS: 959bp | REF: AACTACCACGGT | ALT: A | MAF: 0.037
   位置: 24,658,305 | 距离TSS: 877bp | REF: C | ALT:  | MAF: 0.500
   位置: 24,658,388 | 距离TSS: 794bp | REF: G | ALT:  | MAF: 0.500
-  位置: 24,658,400 | 距离TSS: 782bp | REF: T | ALT: C | MAF: 0.148
+  位置: 24,658,400 | 距离TSS: 782bp | REF: C | ALT: T | MAF: 0.148
   位置: 24,658,430 | 距离TSS: 752bp | REF: G | ALT:  | MAF: 0.500
-  位置: 24,658,570 | 距离TSS: 612bp | REF: T | ALT: C | MAF: 0.148
-  位置: 24,658,766 | 距离TSS: 416bp | REF: A | ALT: T | MAF: 0.148
+  位置: 24,658,570 | 距离TSS: 612bp | REF: C | ALT: T | MAF: 0.148
+  位置: 24,658,766 | 距离TSS: 416bp | REF: T | ALT: A | MAF: 0.148
   位置: 24,658,801 | 距离TSS: 381bp | REF: A | ALT: T | MAF: 0.037
   位置: 24,658,811 | 距离TSS: 371bp | REF: G | ALT: A | MAF: 0.037
-  位置: 24,658,823 | 距离TSS: 359bp | REF: G | ALT: A | MAF: 0.185
+  位置: 24,658,823 | 距离TSS: 359bp | REF: A | ALT: G | MAF: 0.185
   位置: 24,658,885 | 距离TSS: 297bp | REF: A | ALT:  | MAF: 0.500
   位置: 24,658,886 | 距离TSS: 296bp | REF: G | ALT:  | MAF: 0.500
-  位置: 24,658,901 | 距离TSS: 281bp | REF: T | ALT: C | MAF: 0.185
+  位置: 24,658,901 | 距离TSS: 281bp | REF: C | ALT: T | MAF: 0.185
   位置: 24,659,010 | 距离TSS: 172bp | REF: G | ALT:  | MAF: 0.500
   位置: 24,659,017 | 距离TSS: 165bp | REF: G | ALT: GA | MAF: 0.037
-  位置: 24,659,078 | 距离TSS: 104bp | REF: A | ALT: C | MAF: 0.185
+  位置: 24,659,078 | 距离TSS: 104bp | REF: C | ALT: A | MAF: 0.185

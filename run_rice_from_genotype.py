@@ -32,6 +32,8 @@ GENES = [
 
 PROMOTER_LENGTH = 2000
 
+from rice_common import SNPEFF_TO_CATEGORY, load_h5_annotations, classify_variant
+
 
 def load_phenotype():
     """加载并标准化表型数据"""
@@ -199,21 +201,47 @@ def build_haplotype_for_gene(gene_info, pheno_df):
         })
     hap_df = pd.DataFrame(hap_list)
 
+    # 计算启动子区域（用于注释分类）
+    if strand == '+':
+        promoter_start = max(1, gene_start - PROMOTER_LENGTH)
+        promoter_end = gene_start - 1
+    else:
+        promoter_start = gene_end + 1
+        promoter_end = gene_end + PROMOTER_LENGTH
+
+    # 加载H5注释
+    h5_annotations = load_h5_annotations(H5_DIR, chrom, positions)
+
     # 构建 variant_info
     variant_info = {}
-    for var_id in var_ids:
-        pos = int(var_id[2:])
-        alleles_at_pos = [sample_alleles[s][var_ids.index(var_id)] for s in valid_samples]
+    for i, var_id in enumerate(var_ids):
+        pos = positions[i]
+        alleles_at_pos = [sample_alleles[s][i] for s in valid_samples]
         allele_counts = Counter(alleles_at_pos)
+        # 按频率降序：最常见等位基因视为ref，第二常见视为alt
+        sorted_by_freq = sorted(allele_counts.keys(), key=lambda a: allele_counts[a], reverse=True)
         sorted_counts = sorted(allele_counts.values(), reverse=True)
         maf = sorted_counts[1] / len(alleles_at_pos) if len(sorted_counts) >= 2 else 0.5
+
+        ref = sorted_by_freq[0] if sorted_by_freq else ''
+        alt = sorted_by_freq[1] if len(sorted_by_freq) > 1 else ''
+        len_diff = len(alt) - len(ref) if alt else 0
+        is_sv = abs(len_diff) >= 50
+
+        h5_anno = h5_annotations.get(pos)
+        annotation = classify_variant(
+            pos, ref, alt, gene_start, gene_end,
+            promoter_start, promoter_end, h5_anno=h5_anno, len_diff=len_diff
+        )
+
         variant_info[pos] = {
-            'ref': list(allele_counts.keys())[0],
-            'alt': list(allele_counts.keys())[1] if len(allele_counts) > 1 else '',
-            'len_diff': 0,
-            'is_sv': False,
+            'ref': ref,
+            'alt': alt,
+            'len_diff': len_diff,
+            'is_sv': is_sv,
             'maf': maf,
-            'missing_rate': 0.0
+            'missing_rate': 0.0,
+            'annotation': annotation
         }
 
     return {
@@ -274,7 +302,7 @@ def save_database(data, out_dir):
             'is_sv': info.get('is_sv', False),
             'maf': info.get('maf', 0.5),
             'missing_rate': info.get('missing_rate', 0.0),
-            'annotation': 'other'
+            'annotation': info.get('annotation', 'other')
         }
         for pos, info in vi.items()
     ])

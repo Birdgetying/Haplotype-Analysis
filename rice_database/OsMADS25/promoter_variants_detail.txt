@@ -28,9 +28,9 @@
   位置: 13,681,212 | 距离TSS: 339bp | REF: T | ALT:  | MAF: 0.500
   位置: 13,681,215 | 距离TSS: 342bp | REF: T | ALT:  | MAF: 0.500
   位置: 13,681,218 | 距离TSS: 345bp | REF: C | ALT:  | MAF: 0.500
-  位置: 13,681,241 | 距离TSS: 368bp | REF: CCTCTTTT | ALT: CCTTCTCTTTT | MAF: 0.333
+  位置: 13,681,241 | 距离TSS: 368bp | REF: CCTTCTCTTTT | ALT: CCTCTTTT | MAF: 0.333
   位置: 13,681,242 | 距离TSS: 369bp | REF: C | ALT:  | MAF: 0.500
-  位置: 13,681,245 | 距离TSS: 372bp | REF: DEL | ALT: CT | MAF: 0.333
+  位置: 13,681,245 | 距离TSS: 372bp | REF: CT | ALT: DEL | MAF: 0.333
   位置: 13,681,253 | 距离TSS: 380bp | REF: T | ALT:  | MAF: 0.500
   位置: 13,681,255 | 距离TSS: 382bp | REF: CTCCCT | ALT:  | MAF: 0.500
   位置: 13,681,265 | 距离TSS: 392bp | REF: CTCTTTTTT | ALT:  | MAF: 0.500

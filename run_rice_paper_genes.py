@@ -15,6 +15,8 @@ import numpy as np
 import gzip, csv, json, time
 from collections import Counter
 
+from rice_common import SNPEFF_TO_CATEGORY, classify_variant
+
 # ========== 配置 ==========
 GENO_DIR = r'D:\Desktop\data\水稻\Tab-separated genotype files'
 PHENO_PATH = r'D:\Desktop\data\水稻\Phenotypes\phenos.csv'
@@ -237,19 +239,37 @@ def build_haplotype_for_gene(gene_info, pheno_df):
 
     # Build variant_info
     variant_info = {}
+    # 计算启动子区域
+    if strand == '+':
+        promoter_start = max(1, gene_start - PROMOTER_LENGTH)
+        promoter_end = gene_start - 1
+    else:
+        promoter_start = gene_end + 1
+        promoter_end = gene_end + PROMOTER_LENGTH
+
     for i, var_id in enumerate(var_ids):
         pos = int(var_id[2:])
         alleles_at_pos = [sample_alleles[s][i] for s in valid_samples]
         allele_counts = Counter(alleles_at_pos)
+        # 按频率降序：最常见=ref，第二常见=alt
+        sorted_by_freq = sorted(allele_counts.keys(), key=lambda a: allele_counts[a], reverse=True)
         sorted_counts = sorted(allele_counts.values(), reverse=True)
         maf = sorted_counts[1] / len(alleles_at_pos) if len(sorted_counts) >= 2 else 0.5
+
+        ref = sorted_by_freq[0] if sorted_by_freq else ''
+        alt = sorted_by_freq[1] if len(sorted_by_freq) > 1 else ''
+        len_diff = len(alt) - len(ref) if alt else 0
+        is_sv = abs(len_diff) >= 50
+
         variant_info[pos] = {
-            'ref': list(allele_counts.keys())[0],
-            'alt': list(allele_counts.keys())[1] if len(allele_counts) > 1 else '',
-            'len_diff': 0,
-            'is_sv': False,
+            'ref': ref,
+            'alt': alt,
+            'len_diff': len_diff,
+            'is_sv': is_sv,
             'maf': maf,
-            'missing_rate': 0.0
+            'missing_rate': 0.0,
+            'promoter_start': promoter_start,
+            'promoter_end': promoter_end,
         }
 
     return {
@@ -296,16 +316,41 @@ def save_database(data, out_dir, h5_info=None):
     data['hap_sample_df'].to_csv(os.path.join(gene_dir, 'haplotype_samples.csv'), index=False)
 
     vi = data['variant_info']
-    variant_df = pd.DataFrame([{
-        'position': pos,
-        'ref': info.get('ref', ''),
-        'alt': info.get('alt', ''),
-        'len_diff': info.get('len_diff', 0),
-        'is_sv': info.get('is_sv', False),
-        'maf': info.get('maf', 0.5),
-        'missing_rate': info.get('missing_rate', 0.0),
-        'annotation': 'other'
-    } for pos, info in vi.items()])
+    # 从h5_info获取SnpEff注释
+    h5_annotations = h5_info.get('annotations', {}) if h5_info else {}
+    gene_start = data.get('gene_start', 0)
+    gene_end = data.get('gene_end', 0)
+    strand = data.get('strand', '+')
+
+    variant_rows = []
+    for pos, info in vi.items():
+        ref = info.get('ref', '')
+        alt = info.get('alt', '')
+        len_diff = info.get('len_diff', 0)
+        is_sv = info.get('is_sv', False)
+        promoter_start = info.get('promoter_start', 0)
+        promoter_end = info.get('promoter_end', 0)
+
+        # 从H5获取SnpEff注释
+        h5_entry = h5_annotations.get(pos, {})
+        snpeff_anno = h5_entry.get('anno', '') if isinstance(h5_entry, dict) else ''
+
+        annotation = classify_variant(
+            pos, ref, alt, gene_start, gene_end,
+            promoter_start, promoter_end, h5_anno=snpeff_anno, len_diff=len_diff
+        )
+
+        variant_rows.append({
+            'position': pos,
+            'ref': ref,
+            'alt': alt,
+            'len_diff': len_diff,
+            'is_sv': is_sv,
+            'maf': info.get('maf', 0.5),
+            'missing_rate': info.get('missing_rate', 0.0),
+            'annotation': annotation
+        })
+    variant_df = pd.DataFrame(variant_rows)
     variant_df.to_csv(os.path.join(gene_dir, 'variant_info.csv'), index=False)
 
     # 识别启动子区域变异并保存（供后续分析使用）
