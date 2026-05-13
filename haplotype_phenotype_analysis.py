@@ -8277,10 +8277,29 @@ function drawHaplotypeScorePlot(scoreData) {
         .attr('stroke', 'white').attr('stroke-width', 0.5)
         .attr('opacity', 0.85)
         .on('mouseover', function(event, d) {
+            var compInfo = '';
+            var ch = scoreData.per_haplotype ? scoreData.per_haplotype[d.haplotype] : null;
+            if (ch) {
+                var compNames = {
+                    'variant_effect': 'Variant Effect', 'burden': 'Burden',
+                    'multi_omics': 'Multi-Omics', 'fine_mapping': 'Fine-Map',
+                    'effect_size': 'Effect Size', 'genetic_distinct': 'Gen. Distinct'
+                };
+                var lines = [];
+                for (var key in compNames) {
+                    if (ch[key] !== undefined) {
+                        lines.push(compNames[key] + ': ' + ch[key].toFixed(3));
+                    }
+                }
+                if (lines.length > 0) {
+                    compInfo = '<br><span style="opacity:0.6;">Components:</span><br>'
+                        + '<span style="font-size:10px;">' + lines.join('<br>') + '</span>';
+                }
+            }
             tooltip.style('display', 'block')
                 .html('<b>' + d.sample_id + '</b><br>'
                     + 'Haplotype: ' + d.haplotype + '<br>'
-                    + 'Score: ' + d.score.toFixed(3) + '<br>'
+                    + 'Score: ' + d.score.toFixed(3) + compInfo + '<br>'
                     + 'Phenotype: ' + d.phenotype.toFixed(3));
         })
         .on('mousemove', function(event) {
