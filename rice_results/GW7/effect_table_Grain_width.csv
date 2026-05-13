@@ -1,0 +1,15 @@
+Haplotype,N,Mean,Effect,95% CI,Cohen's d,Effect Size,P-value,Direction
+Hap10,1,2.430,-0.747,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap14,1,2.460,-0.717,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap2,3,3.660,+0.483,"[0.22, 0.75]",2.134,large,0.0246*,positive (+)
+Hap3,2,3.575,+0.398,"[0.03, 0.77]",1.701,large,0.2252,positive (+)
+Hap12,1,3.560,+0.383,"[nan, nan]",0.000,negligible,1.0000,positive (+)
+Hap8,1,2.800,-0.377,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap9,1,3.530,+0.353,"[nan, nan]",0.000,negligible,1.0000,positive (+)
+Hap11,1,2.890,-0.287,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap5,1,3.000,-0.177,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap7,1,3.000,-0.177,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap4,2,3.120,-0.057,"[-0.66, 0.55]",-0.221,small,0.8812,negative (-)
+Hap6,1,3.150,-0.027,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap13,1,3.150,-0.027,"[nan, nan]",0.000,negligible,1.0000,negative (-)
+Hap1,10,3.177,REF,-,-,-,-,-

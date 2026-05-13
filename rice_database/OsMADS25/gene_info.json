@@ -1,0 +1,27 @@
+{
+  "gene_id": "OsMADS25",
+  "chrom": "chr04",
+  "start": 13667728,
+  "end": 13682873,
+  "gene_start": 13667728,
+  "gene_end": 13680873,
+  "strand": "-",
+  "length": 15146,
+  "promoter_length": 2000,
+  "exons": [
+    [
+      13672936,
+      13675039
+    ]
+  ],
+  "cds": [
+    [
+      13672936,
+      13675039
+    ]
+  ],
+  "promoter_actual_length": 2000,
+  "promoter_expansion_status": "none",
+  "promoter_start": 13680874,
+  "promoter_end": 13682873
+}

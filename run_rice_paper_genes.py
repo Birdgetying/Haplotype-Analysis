@@ -19,8 +19,8 @@ from collections import Counter
 GENO_DIR = r'D:\Desktop\data\水稻\Tab-separated genotype files'
 PHENO_PATH = r'D:\Desktop\data\水稻\Phenotypes\phenos.csv'
 H5_DIR = r'D:\Desktop\data\水稻\Results of variant effect annotation'
-OUT_DB = r'D:\Desktop\project1\rice_database3'
-OUT_RESULTS = r'D:\Desktop\project1\rice_results3'
+OUT_DB = r'D:\Desktop\project1\rice_database'
+OUT_RESULTS = r'D:\Desktop\project1\rice_results'
 
 PROMOTER_LENGTH = 2000
 

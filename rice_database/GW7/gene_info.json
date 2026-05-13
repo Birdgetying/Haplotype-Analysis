@@ -1,0 +1,27 @@
+{
+  "gene_id": "GW7",
+  "chrom": "chr07",
+  "start": 24657182,
+  "end": 24674279,
+  "gene_start": 24659182,
+  "gene_end": 24674279,
+  "strand": "+",
+  "length": 17098,
+  "promoter_length": 2000,
+  "exons": [
+    [
+      24664520,
+      24668947
+    ]
+  ],
+  "cds": [
+    [
+      24664520,
+      24667874
+    ]
+  ],
+  "promoter_actual_length": 2000,
+  "promoter_expansion_status": "none",
+  "promoter_start": 24657182,
+  "promoter_end": 24659181
+}

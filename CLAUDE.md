@@ -44,22 +44,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 输出目录结构
 
 ```
-database/{gene_id}/        — gene_info.json, haplotype_data.csv, phenotype_data.csv, association_result.csv 等
-results/{gene_id}/          — integrated_analysis.html + boxplot/effect_forest/pca_plot 等 PDF
+rice_database/{gene_id}/   — 水稻分析数据库 (gene_info.json, haplotype_data.csv, phenotype_data.csv, variant_info.csv)
+rice_results/{gene_id}/     — 水稻分析结果 (GW7.html + boxplot/effect_forest/pca_plot 等 PDF)
+results/{gene_id}/          — 大麦/小麦分析结果
 ```
 
-### 其他脚本
+水稻数据源: `D:\Desktop\data\水稻\`
+
+### 水稻脚本
+
+| 脚本 | 用途 | 数据源 |
+|------|------|--------|
+| `run_rice_paper_genes.py` | **主要脚本** — 论文基因(GW7/DEP1/OsMADS25)从基因型构建数据库+生成HTML | tab-separated genotype files |
+| `run_rice_html.py` | 从已有数据库重新生成HTML报告 | rice_database/ |
+| `run_rice_test.py` | 快速测试 (3个chr01基因, VCF提取) | rice4k_geno_add_del.vcf.gz |
+| `run_rice_from_genotype.py` | 从tab-separated基因型构建数据库(通用) | tab-separated genotype files |
+
+### 小麦/大麦脚本
 
 | 脚本 | 用途 |
 |------|------|
 | `run_genome_scan.sh` | 大麦 Morex_v3 全基因组批量扫描 (集群) |
 | `run_haplotype_analysis.sh` | 小麦 CS-IAAS 单基因分析 (集群) |
-| `run_rice_from_genotype.py` | 水稻从tab-separated基因型构建数据库 |
-| `run_rice_html.py` | 水稻从已有数据库生成HTML报告 |
-| `run_rice_paper_genes.py` | 水稻论文基因分析 |
-| `run_rice_test.py` | 水稻测试 (3个chr01基因) |
 | `plot_Gene_HapSeq.py` | 基因单倍型序列可视化 |
-| `feasible_test_database_analysis.py` | 数据库分析可行性测试 |
 
 ### 依赖
 

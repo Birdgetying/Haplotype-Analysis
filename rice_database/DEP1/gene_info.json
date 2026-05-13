@@ -1,0 +1,27 @@
+{
+  "gene_id": "DEP1",
+  "chrom": "chr09",
+  "start": 16404348,
+  "end": 16420832,
+  "gene_start": 16406348,
+  "gene_end": 16420832,
+  "strand": "+",
+  "length": 16485,
+  "promoter_length": 2000,
+  "exons": [
+    [
+      16411558,
+      16415391
+    ]
+  ],
+  "cds": [
+    [
+      16411558,
+      16415391
+    ]
+  ],
+  "promoter_actual_length": 2000,
+  "promoter_expansion_status": "none",
+  "promoter_start": 16404348,
+  "promoter_end": 16406347
+}
