@@ -7719,12 +7719,6 @@ function drawLDTriangle() {
     console.log('[LD] LD倒三角图绘制完成: ' + nc + '个列, 菱形数量' + nc*(nc-1)/2);
 }
 
-// 过滤更新时重绘LD图
-var _origApplyFilters = applyFilters;
-applyFilters = function() {
-    _origApplyFilters();
-    requestAnimationFrame(function() { drawLDTriangle(); });
-};
 
 function applyFilters() {
     
@@ -11951,7 +11945,8 @@ class HaplotypePhenotypeAnalyzer:
             
             logger.info(f"  - SNP注释分布: {dict((k, sum(1 for v in snp_effects.values() if v==k)) for k in set(snp_effects.values()))}")
 
-            # MAF/缺失率过滤由HTML面板JavaScript处理，Python端保持全部位点
+            # 不过滤位点 — HTML面板有交互式MAF/缺失率slider，
+            # 若Python预过滤则LD倒三角/GWAS图/连线无法随slider联动更新
             variant_pvalues = compute_variant_phenotype_pvalues(
                 assoc_module.merged_df,
                 self.positions,
