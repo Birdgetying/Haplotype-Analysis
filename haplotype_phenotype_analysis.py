@@ -5861,10 +5861,12 @@ class ReportGenerator:
             
             # 初始显示全部变异位点
             all_positions = variant_positions if variant_positions else list(range(seq_len))
-            # 当 variant_positions 经过过滤（条目数 < Haplotype_Seq长度）时，
-            # 需要用 variant_info 构建正确的 position→原始索引 映射，否则
-            # all_orig_indices 的顺序索引会与全长 Haplotype_Seq 错位，导致LD倒三角错乱
-            if seq_len > 0 and len(all_positions) != seq_len and variant_info:
+            # variant_positions 经MAF/缺失率过滤后条目数可能 < Haplotype_Seq 全长，
+            # 必须用 variant_info（权威全长位置集）重建 position→序列索引 映射，
+            # 否则顺序索引 [0..M-1] 会与全长序列错位，LD倒三角和变异检测均受影响
+            if seq_len == 0 or len(all_positions) == seq_len or not variant_info:
+                all_orig_indices = list(range(len(all_positions)))
+            else:
                 full_positions = sorted(variant_info.keys())
                 pos_to_idx = {pos: i for i, pos in enumerate(full_positions)}
                 mapped_indices = []
@@ -5874,13 +5876,14 @@ class ReportGenerator:
                     if orig_idx is not None and orig_idx < seq_len:
                         kept_positions.append(pos)
                         mapped_indices.append(orig_idx)
+                    # 位点不在 variant_info 中（理论上不应出现）→ 跳过
                 if mapped_indices:
                     all_orig_indices = mapped_indices
                     all_positions = kept_positions
                 else:
+                    logging.getLogger(__name__).warning(
+                        "变异位置过滤后无法匹配到variant_info中的索引，LD倒三角可能不准确")
                     all_orig_indices = list(range(len(all_positions)))
-            else:
-                all_orig_indices = list(range(len(all_positions)))
             
             # **关键修复**: 基于实际显示的单倍型序列，过滤掉"无变异位点"
             # 如果某位点在所有显示的单倍型中碱基都相同，则不显示该位点
@@ -5895,7 +5898,7 @@ class ReportGenerator:
             variable_indices = []
             for idx in range(len(all_positions)):
                 bases_at_pos = set()
-                orig_seq_idx = all_orig_indices[idx] if idx < len(all_orig_indices) else idx
+                orig_seq_idx = all_orig_indices[idx]
                 for alleles in top_hap_alleles:
                     if orig_seq_idx < len(alleles):
                         bases_at_pos.add(alleles[orig_seq_idx].strip().upper())
