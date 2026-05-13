@@ -5874,7 +5874,7 @@ class ReportGenerator:
             for hap in top_haps:
                 hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
                 if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
-                    alleles = hap_rows['Haplotype_Seq'].iloc[0].split('|')
+                    alleles = str(hap_rows['Haplotype_Seq'].iloc[0]).split('|')
                     top_hap_alleles.append(alleles)
 
             # 检查每个位点在显示的单倍型中是否有变异
