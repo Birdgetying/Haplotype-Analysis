@@ -5861,7 +5861,26 @@ class ReportGenerator:
             
             # 初始显示全部变异位点
             all_positions = variant_positions if variant_positions else list(range(seq_len))
-            all_orig_indices = list(range(len(all_positions)))
+            # 当 variant_positions 经过过滤（条目数 < Haplotype_Seq长度）时，
+            # 需要用 variant_info 构建正确的 position→原始索引 映射，否则
+            # all_orig_indices 的顺序索引会与全长 Haplotype_Seq 错位，导致LD倒三角错乱
+            if seq_len > 0 and len(all_positions) != seq_len and variant_info:
+                full_positions = sorted(variant_info.keys())
+                pos_to_idx = {pos: i for i, pos in enumerate(full_positions)}
+                mapped_indices = []
+                kept_positions = []
+                for pos in all_positions:
+                    orig_idx = pos_to_idx.get(pos)
+                    if orig_idx is not None and orig_idx < seq_len:
+                        kept_positions.append(pos)
+                        mapped_indices.append(orig_idx)
+                if mapped_indices:
+                    all_orig_indices = mapped_indices
+                    all_positions = kept_positions
+                else:
+                    all_orig_indices = list(range(len(all_positions)))
+            else:
+                all_orig_indices = list(range(len(all_positions)))
             
             # **关键修复**: 基于实际显示的单倍型序列，过滤掉"无变异位点"
             # 如果某位点在所有显示的单倍型中碱基都相同，则不显示该位点
@@ -5876,16 +5895,17 @@ class ReportGenerator:
             variable_indices = []
             for idx in range(len(all_positions)):
                 bases_at_pos = set()
+                orig_seq_idx = all_orig_indices[idx] if idx < len(all_orig_indices) else idx
                 for alleles in top_hap_alleles:
-                    if idx < len(alleles):
-                        bases_at_pos.add(alleles[idx].strip().upper())
+                    if orig_seq_idx < len(alleles):
+                        bases_at_pos.add(alleles[orig_seq_idx].strip().upper())
                 # 只有当该位点在显示的单倍型中有多种碱基时才保留
                 if len(bases_at_pos) > 1:
                     variable_indices.append(idx)
-            
+
             # 过滤后的显示位点
             display_positions = [all_positions[i] for i in variable_indices]
-            display_orig_indices = variable_indices
+            display_orig_indices = [all_orig_indices[i] for i in variable_indices]
             
             # 确保位置按升序排列（避免负链基因位置混乱）
             sorted_pairs = sorted(zip(display_positions, display_orig_indices), key=lambda x: x[0])
