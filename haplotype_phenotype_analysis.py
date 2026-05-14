@@ -7561,6 +7561,8 @@ function drawLDTriangle() {
     // 获取表格中所有可见变异列的屏幕坐标
     var table = document.querySelector('.data-table');
     if (!table) { console.log('[LD] table not found'); return; }
+    // 强制浏览器完成table-layout:fixed重排，确保offsetLeft反映display变更
+    void table.offsetHeight;
     var allThs = Array.from(table.querySelectorAll('thead th'));
     // 用 seq-col-th class 识别序列列
     var visibleVarThs = allThs.filter(function(th, idx) {
@@ -7811,11 +7813,18 @@ function applyFilters() {
     // 同步更新表格：隐藏被过滤的列，重新排列保留的列
     updateTableColumns(varIndices, varPositions);
     
-    // 更新连线和LD倒三角（在表格更新完成后，确保DOM已反映过滤结果）
+    // 更新连线和LD倒三角
+    // 先用RAF更新连线（可读取最新的布局信息）
+    // 再用setTimeout绘制LD倒三角，确保浏览器完成table-layout:fixed的列重排
     requestAnimationFrame(function() {
         updateConnectorLines();
-        drawLDTriangle();
     });
+    setTimeout(function() {
+        // 强制读取布局属性，触发同步重排以确保offsetLeft是最新的
+        var table = document.querySelector('.data-table');
+        if (table) { void table.offsetHeight; }
+        drawLDTriangle();
+    }, 60);
 }
 
 // 同步更新表格列：隐藏被过滤的列，重新排列保留的列
