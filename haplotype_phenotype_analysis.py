@@ -6067,6 +6067,7 @@ class ReportGenerator:
         # 准备GWAS P值数据（优先 per-position 关联 p 值；缺省 1.0 表示无检验）
         variant_pvalues = variant_pvalues or {}
         gwas_data = []
+        missing_vi_positions = []  # 追踪variant_info中缺失的位点
         for pos in display_positions:
             ip = int(pos)
             pval = variant_pvalues.get(ip, variant_pvalues.get(pos, 1.0))
@@ -6081,6 +6082,20 @@ class ReportGenerator:
                     ann = snp_effects[ip]
                 elif pos in snp_effects:
                     ann = snp_effects[pos]
+            # 若snp_effects归类为启动子/UTR/内含子/other，但variant_info表明是结构变异，
+            # 则修正ann为SV/INS/DEL，确保颜色与checkbox过滤类别一致
+            if ann in ('promoter', 'UTR', 'intron', 'other') and info:
+                is_symbolic = isinstance(info.get('alt', ''), str) and info.get('alt', '').startswith('<')
+                if is_symbolic or info.get('is_sv', False):
+                    ann = 'SV'
+                else:
+                    len_diff_val = info.get('len_diff', 0)
+                    if abs(len_diff_val) >= 50:
+                        ann = 'SV'
+                    elif len_diff_val > 0:
+                        ann = 'INS'
+                    elif len_diff_val < 0:
+                        ann = 'DEL'
             # 构建功能注释信息（用于indel/SV的位置分类，决定过滤行为）
             functional_ann = ann
             if ann in ('indel', 'INS', 'DEL', 'SV'):
@@ -6097,19 +6112,29 @@ class ReportGenerator:
                 else:
                     functional_ann = 'other'
             
+            # 若variant_info缺失此位点数据，记录用于批量警告
+            maf_val = float(info.get('maf', 0.5))
+            missing_val = float(info.get('missing_rate', 0.0))
+            if not info:
+                missing_vi_positions.append(ip)
+
             gwas_data.append({
                 'pos': ip,
                 'pvalue': float(pval),
                 'logp': float(-np.log10(max(pval, 1e-300))),
-                'maf': float(info.get('maf', 0.5)),
-                'missing_rate': float(info.get('missing_rate', 0.0)),
+                'maf': maf_val,
+                'missing_rate': missing_val,
                 'annotation': ann,
                 'functional_ann': functional_ann,
-                # **关键修复**：添加启动子变异CDS重叠信息
                 'overlaps_cds': info.get('overlaps_cds', False),
                 'overlapping_genes': info.get('overlapping_genes', '')
             })
 
+        if missing_vi_positions:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"gwas_data中有 {len(missing_vi_positions)}/{len(display_positions)} 个位点在variant_info中缺失，"
+                "MAF默认0.5、缺失率默认0.0，这些位点将始终通过HTML面板过滤")
         lead_pos = None
         if gwas_data:
             lead_pos = int(min(gwas_data, key=lambda x: x["pvalue"])["pos"])
@@ -8039,14 +8064,15 @@ function drawGWASPlot(data) {
     var iW = geneAreaWidth || (W - ml - mr);  // 内区宽度 = 基因区域宽度，确保与基因结构图比例一致
     var iH = H - mt - mb;
 
-    // 动态计算当前数据中的lead variant（P值最小）
-    var currentLeadPos = null;
-    if (data.length > 0) {
-        var leadVariant = data.reduce(function(min, d) {
-            return d.pvalue < min.pvalue ? d : min;
-        });
-        currentLeadPos = leadVariant.pos;
-    }
+	    // 使用全局lead variant（Python预计算，r²值相对此位点）
+	    // 若全局lead被过滤掉则不显示lead标记，避免r²着色与标记不一致
+	    var globalLeadInData = false;
+	    if (leadVariantPos != null) {
+	        for (var i = 0; i < data.length; i++) {
+	            if (+data[i].pos === +leadVariantPos) { globalLeadInData = true; break; }
+	        }
+	    }
+	    var currentLeadPos = globalLeadInData ? leadVariantPos : null;
 
     d3.select('#gwas-gene-viz').selectAll('*').remove();
 
