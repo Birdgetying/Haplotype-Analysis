@@ -5702,14 +5702,20 @@ class ReportGenerator:
             variant_pvalues: 变异P值字典 {pos: pvalue}
             network_data: 网络图数据 {'nodes': [], 'edges': []}
         """
-        import sys
+        import sys, re
         if sys.stdout.encoding != 'utf-8':
             sys.stdout.reconfigure(encoding='utf-8')
         if sys.stderr.encoding != 'utf-8':
             sys.stderr.reconfigure(encoding='utf-8')
 
         hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
-        hap_counts = hap_sample_df.groupby(hap_col).size().sort_values(ascending=False)
+        hap_counts_raw = hap_sample_df.groupby(hap_col).size()
+        # 平局时按Hap名称数字部分排序（Hap5 < Hap10），确保top8选择确定且与haplotype_data.csv一致
+        def _hap_num(name):
+            m = re.search(r'(\d+)$', str(name))
+            return int(m.group(1)) if m else 0
+        sorted_hap = sorted(hap_counts_raw.items(), key=lambda x: (-x[1], _hap_num(x[0])))
+        hap_counts = pd.Series(dict(sorted_hap))
         
         # 构建单倍型到样本的映射字典 {hap_name: [sample1, sample2, ...]}
         hap_samples_map = {}
