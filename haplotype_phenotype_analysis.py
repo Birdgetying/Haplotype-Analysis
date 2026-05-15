@@ -6448,7 +6448,7 @@ class ReportGenerator:
         .score-legend-item {{ display: flex; align-items: center; gap: 4px; }}
         .score-legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
         .score-stats {{ font-size: 10px; color: #555; padding: 2px 12px; }}
-        .ld-right-panel {{ flex: 1; min-width: 0; overflow: visible; }}
+        .ld-right-panel {{ flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; }}
         .footer {{ background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
                   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
                   border-radius: 0 0 10px 10px; }}
