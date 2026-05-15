@@ -7581,16 +7581,12 @@ function drawLDTriangle() {
         return;
     }
     
-    // 计算每列的屏幕坐标（列中心），同时需要定位到ldR2Matrix中对应的索引
-    var colInfos = [];  // {screenX, matIdx}
-    var canvasEl = canvas;
-    var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
-        
+    // Step A: 先用绝对屏幕坐标收集列信息（此时wrapper/canvas宽度可能和最终不同）
+    // 等canvas尺寸设置完成、布局稳定后，再转换为wrapper相对坐标
+    var colInfosAbs = [];  // {absScreenX, matIdx} — 绝对屏幕坐标
     visibleVarThs.forEach(function(th) {
-        // 用getBoundingClientRect直接获取th屏幕坐标，避免offsetLeft依赖offsetParent的问题
         var thRect = th.getBoundingClientRect();
-        var centerX = thRect.left + thRect.width / 2 - wrapRect.left;
-        // 找该列在displayPositions中的索引
+        var absCenterX = thRect.left + thRect.width / 2;  // 绝对屏幕X坐标
         var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posVal = parseInt(posText);
         var matIdx = -1;
@@ -7598,70 +7594,71 @@ function drawLDTriangle() {
             if (displayPositions[pi] === posVal) { matIdx = pi; break; }
         }
         if (matIdx >= 0) {
-            colInfos.push({ screenX: centerX, matIdx: matIdx });
+            colInfosAbs.push({ absScreenX: absCenterX, matIdx: matIdx });
         }
     });
-    
-    if (colInfos.length < 2) {
+
+    if (colInfosAbs.length < 2) {
         document.getElementById('ld-triangle-wrapper').style.display = 'none';
         var rp2 = document.querySelector('.ld-right-panel'); if (rp2) rp2.style.minWidth = '';
         return;
     }
-    
-    // 计算canvas尺寸
-    var cellW = colInfos.length > 1 ? 
-        (colInfos[colInfos.length-1].screenX - colInfos[0].screenX) / (colInfos.length - 1) : 20;
+
+    // Step B: 在绝对坐标空间计算cellW和canvasW（不受wrapper位置影响）
+    var absFirstX = colInfosAbs[0].absScreenX;
+    var absLastX = colInfosAbs[colInfosAbs.length-1].absScreenX;
+    var ncAbs = colInfosAbs.length;
+    var cellW = ncAbs > 1 ? (absLastX - absFirstX) / (ncAbs - 1) : 20;
     cellW = Math.max(cellW, 10);
     var halfCell = cellW / 2;
-    
-    var nc = colInfos.length;
+
     var paddingTop = 10;
     var paddingBottom = 20;
-    // 倒三角高度：深度从1到nc-1，所以总高度 = (nc-1) * halfCell
-    var canvasH = Math.ceil(paddingTop + (nc - 1) * halfCell + paddingBottom);
-    
-    // canvas宽度只覆盖序列列区域，不包吨固定列（Haplotype/Effect/Phenotype等）
-    // 使用序列列的实际总宽度：最后一列的canvasX + 半个cell宽度 - 第一列的canvasX + 半个cell宽度
-    var firstColX = colInfos[0].screenX;
-    var lastColX = colInfos[colInfos.length-1].screenX;
-    var canvasW = Math.ceil(lastColX - firstColX + cellW);
-    canvasW = Math.max(canvasW, 100); // 最小宽度100px
-    
-    // 先设置canvas尺寸，才能通过getBoundingClientRect计算缩放比
+    var canvasH = Math.ceil(paddingTop + (ncAbs - 1) * halfCell + paddingBottom);
+
+    var canvasW = Math.ceil(absLastX - absFirstX + cellW);
+    canvasW = Math.max(canvasW, 100);
+
+    // Step C: 先设置canvas尺寸，触发布局更新
     canvas.width = canvasW;
     canvas.height = canvasH;
     canvas.style.width = canvasW + 'px';
     canvas.style.height = canvasH + 'px';
 
-    // 计算canvas显示尺寸与内部坐标的比例
-    // canvasScaleX = layout_pixels / visual_pixels. 当页面有CSS transform缩放时此值≠1
+    // Step D: 布局稳定后，获取wrapper和canvas的新位置，计算canvasScaleX
     var canvasDisplayRect = canvas.getBoundingClientRect();
     var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
 
-    // wrapper需要添加padding-left使其与序列列对齐
-    // firstColX/cellW来自getBoundingClientRect(visual空间), paddingLeft是CSS属性(layout空间)
-    // 需要用canvasScaleX将visual坐标转换为layout坐标
     var wrapper = document.getElementById('ld-triangle-wrapper');
+    var wrapRectNew = wrapper.getBoundingClientRect();
+
+    // Step E: 将绝对屏幕坐标转换为wrapper相对坐标（使用新的wrapRect）
+    var firstColX = absFirstX - wrapRectNew.left;
+
+    // Step F: 设置paddingLeft对齐序列列
     var padLeft = Math.max(0, (firstColX - cellW/2) * canvasScaleX);
     wrapper.style.paddingLeft = padLeft + 'px';
 
-    // 将ld-right-panel的min-width设置为内容实际宽度，确保Canvas能通过content-wrapper滚动条完整显示
-    // 面板宽度 = paddingLeft + canvas宽度 + colorbar余量
+    // Step G: 将ld-right-panel的min-width设置为内容实际宽度
     var rightPanel = wrapper.parentElement;
     if (rightPanel) {
         rightPanel.style.minWidth = (padLeft + canvasW + 200) + 'px';
     }
 
-    // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
-    for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
-        colInfos[ci2].canvasX = (colInfos[ci2].screenX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
+    // Step H: 构建canvas坐标（相对canvas左上角）
+    var colInfos = [];
+    for (var ci = 0; ci < colInfosAbs.length; ci++) {
+        var relX = colInfosAbs[ci].absScreenX - wrapRectNew.left;  // 相对wrapper左边缘
+        var cx = (relX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
+        colInfos.push({ canvasX: cx, matIdx: colInfosAbs[ci].matIdx });
     }
-    
-    // 用canvas内部坐标重新计算细胞宽度
+
+    // Step I: 用canvas坐标重新计算halfCell
     if (colInfos.length > 1) {
         halfCell = (colInfos[colInfos.length-1].canvasX - colInfos[0].canvasX) / (colInfos.length - 1) / 2;
-        halfCell = Math.max(halfCell, 8); // 增加最小宽度以避免重叠
+        halfCell = Math.max(halfCell, 8);
     }
+    var nc = colInfos.length;
     
     var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvasW, canvasH);
