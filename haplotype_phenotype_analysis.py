@@ -7586,12 +7586,9 @@ function drawLDTriangle() {
     var wrapRect = document.getElementById('ld-triangle-wrapper').getBoundingClientRect();
         
     visibleVarThs.forEach(function(th) {
-        // 使用offsetLeft获取列相对于table的偏移，再加table相对于wrapper的偏移
-        var tableEl = th.closest('table');
-        var tableRect = tableEl.getBoundingClientRect();
-        var thOffsetInTable = th.offsetLeft + th.offsetWidth / 2;
-        var tableOffsetInWrap = tableRect.left - wrapRect.left;
-        var centerX = tableOffsetInWrap + thOffsetInTable;
+        // 用getBoundingClientRect直接获取th屏幕坐标，避免offsetLeft依赖offsetParent的问题
+        var thRect = th.getBoundingClientRect();
+        var centerX = thRect.left + thRect.width / 2 - wrapRect.left;
         // 找该列在displayPositions中的索引
         var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
         var posVal = parseInt(posText);
