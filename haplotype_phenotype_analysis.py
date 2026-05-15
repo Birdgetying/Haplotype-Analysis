@@ -7625,20 +7625,23 @@ function drawLDTriangle() {
     var canvasW = Math.ceil(lastColX - firstColX + cellW);
     canvasW = Math.max(canvasW, 100); // 最小宽度100px
     
-    // wrapper需要添加padding-left使其与序列列对齐（即第一列的screenX）
-    var wrapper = document.getElementById('ld-triangle-wrapper');
-    wrapper.style.paddingLeft = Math.max(0, firstColX - cellW/2) + 'px';
-    
+    // 先设置canvas尺寸，才能通过getBoundingClientRect计算缩放比
     canvas.width = canvasW;
     canvas.height = canvasH;
     canvas.style.width = canvasW + 'px';
     canvas.style.height = canvasH + 'px';
-    
+
     // 计算canvas显示尺寸与内部坐标的比例
+    // canvasScaleX = layout_pixels / visual_pixels. 当页面有CSS transform缩放时此值≠1
     var canvasDisplayRect = canvas.getBoundingClientRect();
-    // canvasScaleX: canvas内部像素坐标 / canvas显示CSS像素坐标的比率
     var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
-    
+
+    // wrapper需要添加padding-left使其与序列列对齐
+    // firstColX/cellW来自getBoundingClientRect(visual空间), paddingLeft是CSS属性(layout空间)
+    // 需要用canvasScaleX将visual坐标转换为layout坐标
+    var wrapper = document.getElementById('ld-triangle-wrapper');
+    wrapper.style.paddingLeft = Math.max(0, (firstColX - cellW/2) * canvasScaleX) + 'px';
+
     // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
         colInfos[ci2].canvasX = (colInfos[ci2].screenX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
