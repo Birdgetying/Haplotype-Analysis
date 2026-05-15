@@ -7559,7 +7559,7 @@ function drawLDTriangle() {
     var matrix = ldR2Matrix;
     if (!matrix || matrix.length < 2) {
         document.getElementById('ld-triangle-wrapper').style.display = 'none';
-        console.log('[LD] no LD data, hiding');
+        var rp = document.querySelector('.ld-right-panel'); if (rp) rp.style.minWidth = '';
         return;
     }
     var n = matrix.length;
@@ -7577,6 +7577,7 @@ function drawLDTriangle() {
     
     if (visibleVarThs.length < 2) {
         document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        var rp3 = document.querySelector('.ld-right-panel'); if (rp3) rp3.style.minWidth = '';
         return;
     }
     
@@ -7603,6 +7604,7 @@ function drawLDTriangle() {
     
     if (colInfos.length < 2) {
         document.getElementById('ld-triangle-wrapper').style.display = 'none';
+        var rp2 = document.querySelector('.ld-right-panel'); if (rp2) rp2.style.minWidth = '';
         return;
     }
     
@@ -7640,7 +7642,15 @@ function drawLDTriangle() {
     // firstColX/cellW来自getBoundingClientRect(visual空间), paddingLeft是CSS属性(layout空间)
     // 需要用canvasScaleX将visual坐标转换为layout坐标
     var wrapper = document.getElementById('ld-triangle-wrapper');
-    wrapper.style.paddingLeft = Math.max(0, (firstColX - cellW/2) * canvasScaleX) + 'px';
+    var padLeft = Math.max(0, (firstColX - cellW/2) * canvasScaleX);
+    wrapper.style.paddingLeft = padLeft + 'px';
+
+    // 将ld-right-panel的min-width设置为内容实际宽度，确保Canvas能通过content-wrapper滚动条完整显示
+    // 面板宽度 = paddingLeft + canvas宽度 + colorbar余量
+    var rightPanel = wrapper.parentElement;
+    if (rightPanel) {
+        rightPanel.style.minWidth = (padLeft + canvasW + 200) + 'px';
+    }
 
     // 将所有colInfos的screenX转换为canvas内部坐标（相对canvas左上角）
     for (var ci2 = 0; ci2 < colInfos.length; ci2++) {
