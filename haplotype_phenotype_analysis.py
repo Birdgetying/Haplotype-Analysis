@@ -7842,21 +7842,25 @@ function applyFilters() {
 
 // 同步更新表格列：隐藏被过滤的列，重新排列保留的列
 function updateTableColumns(keepIndices, keepPositions) {
-    
+
     var table = document.querySelector('.data-table');
     if (!table) {
         return;
     }
-    
+
     var theadRow = table.querySelector('thead tr');
     var tbodyRows = table.querySelectorAll('tbody tr');
-    
+
     // 获取所有th和td
     var allThs = Array.from(theadRow.querySelectorAll('th'));
-    
+
     // 将keepIndices转换为Set以便快速查找
     var keepIndicesSet = new Set(keepIndices);
-    
+
+    // 同步更新 <colgroup> 中的 <col> 元素，消除隐藏列产生的20px间隙
+    var colgroup = table.querySelector('colgroup');
+    var allCols = colgroup ? Array.from(colgroup.querySelectorAll('col')) : [];
+
     // 处理表头
     allThs.forEach(function(th, idx) {{
         var text = th.textContent.trim().substring(0, 20);
@@ -7873,9 +7877,21 @@ function updateTableColumns(keepIndices, keepPositions) {
             }} else {{
                 th.style.display = 'none';
             }}
+            // 同步更新对应<col>的宽度，消除隐藏列残留的空间
+            if (allCols[idx]) {{
+                if (shouldShow) {{
+                    allCols[idx].style.width = '20px';
+                    allCols[idx].style.minWidth = '20px';
+                    allCols[idx].style.maxWidth = '20px';
+                }} else {{
+                    allCols[idx].style.width = '0';
+                    allCols[idx].style.minWidth = '0';
+                    allCols[idx].style.maxWidth = '0';
+                }}
+            }}
         }}
     }});
-    
+
     // 处理数据行
     tbodyRows.forEach(function(row) {{
         var tds = Array.from(row.querySelectorAll('td'));
