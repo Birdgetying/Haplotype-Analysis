@@ -7648,18 +7648,21 @@ function drawLDTriangle() {
     var paddingBottom = 20;
     var canvasH = Math.ceil(paddingTop + (ncAbs - 1) * halfCell + paddingBottom);
 
-    var canvasW = Math.ceil(absLastX - absFirstX + cellW);
-    canvasW = Math.max(canvasW, 100);
+    var canvasW_screen = Math.ceil(absLastX - absFirstX + cellW);
+    canvasW_screen = Math.max(canvasW_screen, 100);
 
-    // Step C: 先设置canvas尺寸，触发布局更新
-    canvas.width = canvasW;
-    canvas.height = canvasH;
-    canvas.style.width = canvasW + 'px';
-    canvas.style.height = canvasH + 'px';
+    // Step C: canvas尺寸必须用CSS像素（屏幕像素/zoomFactor），而非屏幕像素
+    // 否则zoom<1时buffer太小→右半菱形被截断
+    var canvasCSSW = Math.ceil(canvasW_screen / zoomFactor);
+    var canvasCSSH = Math.ceil(canvasH / zoomFactor);
+    canvas.width = canvasCSSW;
+    canvas.height = canvasCSSH;
+    canvas.style.width = canvasCSSW + 'px';
+    canvas.style.height = canvasCSSH + 'px';
 
     // Step D: 布局稳定后，获取wrapper和canvas的新位置，计算canvasScaleX
     var canvasDisplayRect = canvas.getBoundingClientRect();
-    var canvasScaleX = canvasW / (canvasDisplayRect.width || canvasW);
+    var canvasScaleX = canvasCSSW / (canvasDisplayRect.width || canvasCSSW);
 
     var wrapper = document.getElementById('ld-triangle-wrapper');
     var wrapRectNew = wrapper.getBoundingClientRect();
@@ -7674,7 +7677,7 @@ function drawLDTriangle() {
     // Step G: 将ld-right-panel的min-width设置为内容实际宽度
     var rightPanel = wrapper.parentElement;
     if (rightPanel) {
-        rightPanel.style.minWidth = (padLeft + canvasW + 200) + 'px';
+        rightPanel.style.minWidth = (padLeft + canvasCSSW + 200) + 'px';
     }
 
     // Step H: 构建canvas坐标（相对canvas左上角）
@@ -7693,7 +7696,7 @@ function drawLDTriangle() {
     var nc = colInfos.length;
     
     var ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvasW, canvasH);
+    ctx.clearRect(0, 0, canvasCSSW, canvasCSSH);
     
     // 绘制倒三角图形单元（经典Haploview风格）
     for (var i = 0; i < nc; i++) {
@@ -7788,9 +7791,9 @@ function drawLDTriangle() {
         if (tipEl) tipEl.textContent = '';
     };
     
-    console.log('[LD] nc=' + nc + ' canvasW=' + canvasW + ' padLeft=' + padLeft + ' halfCell=' + halfCell.toFixed(1) + ' canvasScaleX=' + canvasScaleX.toFixed(3));
+    console.log('[LD] nc=' + nc + ' canvasCSSW=' + canvasCSSW + ' canvasW_screen=' + canvasW_screen + ' padLeft=' + padLeft + ' halfCell=' + halfCell.toFixed(1) + ' canvasScaleX=' + canvasScaleX.toFixed(3) + ' zoomFactor=' + zoomFactor.toFixed(3));
     console.log('[LD] firstColX=' + firstColX.toFixed(1) + ' absFirstX=' + absFirstX.toFixed(1) + ' absLastX=' + absLastX.toFixed(1) + ' wrapRectNew.left=' + wrapRectNew.left.toFixed(1));
-    console.log('[LD] LD倒三角图: ' + nc + '列, 菱形' + nc*(nc-1)/2 + '个, canvas=' + canvasW + 'x' + canvasH);
+    console.log('[LD] LD倒三角图: ' + nc + '列, 菱形' + nc*(nc-1)/2 + '个, canvas=' + canvasCSSW + 'x' + canvasCSSH);
 }
 
 
