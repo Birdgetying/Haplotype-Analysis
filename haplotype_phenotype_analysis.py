@@ -7581,22 +7581,54 @@ function drawLDTriangle() {
         return;
     }
     
-    // Step A: 先用绝对屏幕坐标收集列信息（此时wrapper/canvas宽度可能和最终不同）
-    // 等canvas尺寸设置完成、布局稳定后，再转换为wrapper相对坐标
-    var colInfosAbs = [];  // {absScreenX, matIdx} — 绝对屏幕坐标
-    visibleVarThs.forEach(function(th) {
-        var thRect = th.getBoundingClientRect();
-        var absCenterX = thRect.left + thRect.width / 2;  // 绝对屏幕X坐标
-        var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
-        var posVal = parseInt(posText);
-        var matIdx = -1;
-        for (var pi = 0; pi < displayPositions.length; pi++) {
-            if (displayPositions[pi] === posVal) { matIdx = pi; break; }
+    // Step A: 用<col>宽度精确计算各列绝对屏幕坐标
+    // table-layout:fixed下，列位置完全由<col>宽度决定，不依赖getBoundingClientRect时序
+    var colgroup2 = table.querySelector('colgroup');
+    var allCols2 = colgroup2 ? Array.from(colgroup2.querySelectorAll('col')) : [];
+    var tableRect2 = table.getBoundingClientRect();
+    var tableLeft2 = tableRect2.left;
+
+    // 建立th索引→是否为seq列的映射，以及所有<col>的当前宽度
+    var colIsSeqMap = [];
+    var colWidths = [];
+    for (var ci = 0; ci < allThs.length; ci++) {
+        colIsSeqMap.push(allThs[ci].classList.contains('seq-col-th'));
+        var cw = 0;
+        if (allCols2[ci]) {
+            cw = parseFloat(allCols2[ci].style.width);
+            if (isNaN(cw)) { cw = parseFloat(getComputedStyle(allCols2[ci]).width) || 0; }
         }
-        if (matIdx >= 0) {
-            colInfosAbs.push({ absScreenX: absCenterX, matIdx: matIdx });
+        colWidths.push(cw);
+    }
+
+    // 计算zoom因子: CSS像素→屏幕像素的转换比例
+    var totalCSSWidth = 0;
+    for (var ti = 0; ti < colWidths.length; ti++) { totalCSSWidth += colWidths[ti]; }
+    var zoomFactor = totalCSSWidth > 0 ? tableRect2.width / totalCSSWidth : 1;
+
+    var colInfosAbs = [];  // {absScreenX, matIdx}
+    var runningX = 0;
+    for (var ci2 = 0; ci2 < allThs.length; ci2++) {
+        var cw2 = colWidths[ci2];
+        if (colIsSeqMap[ci2] && allThs[ci2].style.display !== 'none' && cw2 > 0) {
+            var absCenterX = tableLeft2 + (runningX + cw2 / 2) * zoomFactor;
+            var thEl2 = allThs[ci2];
+            var posText2 = thEl2.getAttribute('data-pos') || thEl2.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
+            var posVal2 = parseInt(posText2);
+            var matIdx2 = -1;
+            for (var pi2 = 0; pi2 < displayPositions.length; pi2++) {
+                if (displayPositions[pi2] === posVal2) { matIdx2 = pi2; break; }
+            }
+            if (matIdx2 >= 0) {
+                colInfosAbs.push({ absScreenX: absCenterX, matIdx: matIdx2 });
+            }
         }
-    });
+        runningX += cw2;
+    }
+
+    console.log('[LD] colInfosAbs(' + colInfosAbs.length + '): firstX=' + (colInfosAbs[0]?colInfosAbs[0].absScreenX:'none') + ' lastX=' + (colInfosAbs[colInfosAbs.length-1]?colInfosAbs[colInfosAbs.length-1].absScreenX:'none'));
+    console.log('[LD] displayPositions=' + displayPositions.length + ' gwasData=' + gwasData.length + ' matrix=' + (ldR2Matrix?ldR2Matrix.length:0));
+    console.log('[LD] visibleVarThs=' + visibleVarThs.length + ' allThs=' + allThs.length);
 
     if (colInfosAbs.length < 2) {
         document.getElementById('ld-triangle-wrapper').style.display = 'none';
@@ -7756,7 +7788,9 @@ function drawLDTriangle() {
         if (tipEl) tipEl.textContent = '';
     };
     
-    console.log('[LD] LD倒三角图绘制完成: ' + nc + '个列, 菱形数量' + nc*(nc-1)/2);
+    console.log('[LD] nc=' + nc + ' canvasW=' + canvasW + ' padLeft=' + padLeft + ' halfCell=' + halfCell.toFixed(1) + ' canvasScaleX=' + canvasScaleX.toFixed(3));
+    console.log('[LD] firstColX=' + firstColX.toFixed(1) + ' absFirstX=' + absFirstX.toFixed(1) + ' absLastX=' + absLastX.toFixed(1) + ' wrapRectNew.left=' + wrapRectNew.left.toFixed(1));
+    console.log('[LD] LD倒三角图: ' + nc + '列, 菱形' + nc*(nc-1)/2 + '个, canvas=' + canvasW + 'x' + canvasH);
 }
 
 
@@ -7823,6 +7857,8 @@ function applyFilters() {
         el.style.display = passed ? '' : 'none';
     });
     
+    console.log('[applyFilters] maf=' + currentFilter.maf + ' miss=' + currentFilter.missingRate + ' filtered=' + filtered.length + ' varIndices=' + varIndices.length);
+
     // 同步更新表格：隐藏被过滤的列，重新排列保留的列
     updateTableColumns(varIndices, varPositions);
     
@@ -7861,7 +7897,10 @@ function updateTableColumns(keepIndices, keepPositions) {
     var colgroup = table.querySelector('colgroup');
     var allCols = colgroup ? Array.from(colgroup.querySelectorAll('col')) : [];
 
+    console.log('[updateTableColumns] keep=' + keepIndices.length + ' ths=' + allThs.length + ' cols=' + allCols.length);
+
     // 处理表头
+    var visCnt = 0;
     allThs.forEach(function(th, idx) {{
         var text = th.textContent.trim().substring(0, 20);
         // 判断是否为序列列（带 seq-col-th class）
@@ -7874,6 +7913,7 @@ function updateTableColumns(keepIndices, keepPositions) {
             var shouldShow = keepIndicesSet.has(idx);
             if (shouldShow) {{
                 th.style.display = '';
+                visCnt++;
             }} else {{
                 th.style.display = 'none';
             }}
@@ -7911,6 +7951,10 @@ function updateTableColumns(keepIndices, keepPositions) {
             }}
         }});
     }});
+
+    // 强制浏览器重排以读取新的<col>宽度
+    void table.offsetHeight;
+    console.log('[updateTableColumns] done, visible seq=' + visCnt);
 }
 
 // ==================== 单倍型网络图（D3 force simulation） ====================
