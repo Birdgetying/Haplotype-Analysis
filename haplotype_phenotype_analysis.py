@@ -7601,10 +7601,15 @@ function drawLDTriangle() {
         colWidths.push(cw);
     }
 
-    // 计算zoom因子: CSS像素→屏幕像素的转换比例
-    var totalCSSWidth = 0;
-    for (var ti = 0; ti < colWidths.length; ti++) { totalCSSWidth += colWidths[ti]; }
-    var zoomFactor = totalCSSWidth > 0 ? tableRect2.width / totalCSSWidth : 1;
+    // 直接从.content元素测量CSS transform缩放比例，避免表格估算不准确
+    var contentEl = document.querySelector('.content');
+    var zoomFactor = 1;
+    if (contentEl && contentEl.offsetWidth > 0) {
+        var contentRect = contentEl.getBoundingClientRect();
+        zoomFactor = contentRect.width / contentEl.offsetWidth;
+    }
+    // 限制合理范围，防止异常值
+    zoomFactor = Math.max(0.1, Math.min(10, zoomFactor));
 
     var colInfosAbs = [];  // {absScreenX, matIdx}
     var runningX = 0;
