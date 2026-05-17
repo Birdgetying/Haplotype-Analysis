@@ -6543,6 +6543,7 @@ class ReportGenerator:
         <span style="border-left:1px solid #ddd;padding-left:12px;margin-left:4px;"></span>
         <button id="manualFilterBtn" class="manual-mode-btn" onclick="toggleManualFilter()" title="Click variants in gene structure to hide them">Manual Filter: OFF</button>
         <button id="manualClearBtn" class="manual-clear-btn" onclick="clearManualFilter()" title="Clear all manually filtered variants">Clear Manual</button>
+        <button id="manualUndoBtn" class="manual-clear-btn" onclick="undoManualFilter()" title="Undo last manual filter action" style="display:none;">Undo</button>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
     </div>
     
@@ -7312,6 +7313,7 @@ var ldR2Matrix = __LD_R2_MATRIX__;  // LD r²矩阵（n x n），与displayPosit
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
 var manualFilterMode = false;
 var manualBlacklist = new Set();  // 手动过滤的变异位置集合
+var manualFilterHistory = [];  // 记录操作历史 {pos, action: 'add'|'remove'}
 
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
@@ -7416,18 +7418,43 @@ function toggleManualFilter() {
         btn.textContent = 'Manual Filter: ON';
         btn.classList.add('active');
         clearBtn.classList.add('show');
+        updateUndoButton();  // 显示undo按钮（如果有历史记录）
     } else {
         btn.textContent = 'Manual Filter: OFF';
         btn.classList.remove('active');
         clearBtn.classList.remove('show');
+        document.getElementById('manualUndoBtn').style.display = 'none';
     }
     updateManualFilterVisuals();
 }
 
 function clearManualFilter() {
     manualBlacklist.clear();
+    manualFilterHistory = [];
+    updateUndoButton();
     updateManualFilterVisuals();
     applyFilters();
+}
+
+function undoManualFilter() {
+    if (manualFilterHistory.length === 0) return;
+    var last = manualFilterHistory.pop();
+    if (last.action === 'add') {
+        manualBlacklist.delete(last.pos);
+    } else {
+        manualBlacklist.add(last.pos);
+    }
+    updateUndoButton();
+    updateManualFilterVisuals();
+    applyFilters();
+}
+
+function updateUndoButton() {
+    var undoBtn = document.getElementById('manualUndoBtn');
+    if (undoBtn) {
+        undoBtn.style.display = manualFilterHistory.length > 0 ? 'inline-block' : 'none';
+        undoBtn.textContent = 'Undo (' + manualFilterHistory.length + ')';
+    }
 }
 
 function updateManualFilterVisuals() {
@@ -7454,6 +7481,8 @@ function resetFilters() {
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
     // 也清除手动过滤
     manualBlacklist.clear();
+    manualFilterHistory = [];
+    updateUndoButton();
     if (manualFilterMode) { toggleManualFilter(); }
     updateManualFilterVisuals();
     applyFilters();
@@ -8668,9 +8697,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isNaN(pos)) return;
             if (manualBlacklist.has(pos)) {
                 manualBlacklist.delete(pos);  // 取消过滤
+                manualFilterHistory.push({pos: pos, action: 'remove'});
             } else {
                 manualBlacklist.add(pos);     // 添加到黑名单
+                manualFilterHistory.push({pos: pos, action: 'add'});
             }
+            updateUndoButton();
             updateManualFilterVisuals();
             applyFilters();
         });

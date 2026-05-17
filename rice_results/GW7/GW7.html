@@ -174,6 +174,7 @@
         <span style="border-left:1px solid #ddd;padding-left:12px;margin-left:4px;"></span>
         <button id="manualFilterBtn" class="manual-mode-btn" onclick="toggleManualFilter()" title="Click variants in gene structure to hide them">Manual Filter: OFF</button>
         <button id="manualClearBtn" class="manual-clear-btn" onclick="clearManualFilter()" title="Clear all manually filtered variants">Clear Manual</button>
+        <button id="manualUndoBtn" class="manual-clear-btn" onclick="undoManualFilter()" title="Undo last manual filter action" style="display:none;">Undo</button>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
     </div>
     
@@ -872,7 +873,7 @@
                     <div class="bar-whisker" style="left:0.0%;width:93.54838709677419%;"></div>
                     <div class="bar-box" style="left:26.61290322580645%;width:16.93548387096774%;"></div>
                     <div class="bar-median" style="left:32.25806451612903%;"></div>
-                    <div class="data-dot" style="left:58.1%;top:79%;"></div><div class="data-dot" style="left:29.0%;top:48%;"></div><div class="data-dot" style="left:16.1%;top:60%;"></div><div class="data-dot" style="left:32.3%;top:73%;"></div><div class="data-dot" style="left:32.3%;top:55%;"></div><div class="data-dot" style="left:25.8%;top:81%;"></div><div class="data-dot" style="left:38.7%;top:41%;"></div><div class="data-dot" style="left:0.0%;top:62%;"></div><div class="data-dot" style="left:93.5%;top:40%;"></div><div class="data-dot" style="left:45.2%;top:68%;"></div>
+                    <div class="data-dot" style="left:58.1%;top:23%;"></div><div class="data-dot" style="left:29.0%;top:80%;"></div><div class="data-dot" style="left:16.1%;top:30%;"></div><div class="data-dot" style="left:32.3%;top:34%;"></div><div class="data-dot" style="left:32.3%;top:22%;"></div><div class="data-dot" style="left:25.8%;top:65%;"></div><div class="data-dot" style="left:38.7%;top:80%;"></div><div class="data-dot" style="left:0.0%;top:18%;"></div><div class="data-dot" style="left:93.5%;top:32%;"></div><div class="data-dot" style="left:45.2%;top:50%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -880,7 +881,7 @@
                         <div class="bar-whisker" style="left:19.928853493866285%;width:69.8483917236366%;"></div>
                         <div class="bar-box" style="left:40.992628628643665%;width:35.510718042784326%;"></div>
                         <div class="bar-median" style="left:66.99415056409603%;"></div>
-                        <div class="data-dot" style="left:19.9%;top:79%;"></div><div class="data-dot" style="left:74.6%;top:18%;"></div><div class="data-dot" style="left:77.1%;top:81%;"></div><div class="data-dot" style="left:34.2%;top:49%;"></div><div class="data-dot" style="left:86.7%;top:69%;"></div><div class="data-dot" style="left:61.3%;top:64%;"></div><div class="data-dot" style="left:66.1%;top:82%;"></div><div class="data-dot" style="left:23.7%;top:23%;"></div><div class="data-dot" style="left:89.8%;top:51%;"></div><div class="data-dot" style="left:67.9%;top:28%;"></div>
+                        <div class="data-dot" style="left:19.9%;top:37%;"></div><div class="data-dot" style="left:74.6%;top:79%;"></div><div class="data-dot" style="left:77.1%;top:52%;"></div><div class="data-dot" style="left:34.2%;top:46%;"></div><div class="data-dot" style="left:86.7%;top:71%;"></div><div class="data-dot" style="left:61.3%;top:55%;"></div><div class="data-dot" style="left:66.1%;top:51%;"></div><div class="data-dot" style="left:23.7%;top:17%;"></div><div class="data-dot" style="left:89.8%;top:39%;"></div><div class="data-dot" style="left:67.9%;top:35%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -888,7 +889,7 @@
                         <div class="bar-whisker" style="left:3.2520323704838363%;width:96.74796762951617%;"></div>
                         <div class="bar-box" style="left:19.715446064681228%;width:35.56910617297493%;"></div>
                         <div class="bar-median" style="left:29.268293272362683%;"></div>
-                        <div class="data-dot" style="left:22.8%;top:39%;"></div><div class="data-dot" style="left:3.3%;top:35%;"></div><div class="data-dot" style="left:35.8%;top:15%;"></div><div class="data-dot" style="left:14.6%;top:27%;"></div><div class="data-dot" style="left:22.8%;top:74%;"></div><div class="data-dot" style="left:18.7%;top:46%;"></div><div class="data-dot" style="left:72.4%;top:83%;"></div><div class="data-dot" style="left:100.0%;top:45%;"></div><div class="data-dot" style="left:50.4%;top:69%;"></div><div class="data-dot" style="left:56.9%;top:56%;"></div>
+                        <div class="data-dot" style="left:22.8%;top:62%;"></div><div class="data-dot" style="left:3.3%;top:24%;"></div><div class="data-dot" style="left:35.8%;top:29%;"></div><div class="data-dot" style="left:14.6%;top:65%;"></div><div class="data-dot" style="left:22.8%;top:62%;"></div><div class="data-dot" style="left:18.7%;top:46%;"></div><div class="data-dot" style="left:72.4%;top:40%;"></div><div class="data-dot" style="left:100.0%;top:24%;"></div><div class="data-dot" style="left:50.4%;top:75%;"></div><div class="data-dot" style="left:56.9%;top:40%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -896,7 +897,7 @@
                         <div class="bar-whisker" style="left:3.252032370614281%;width:96.74796762938571%;"></div>
                         <div class="bar-box" style="left:19.715446065127594%;width:35.16260152161258%;"></div>
                         <div class="bar-median" style="left:29.268293273890983%;"></div>
-                        <div class="data-dot" style="left:22.8%;top:25%;"></div><div class="data-dot" style="left:3.3%;top:63%;"></div><div class="data-dot" style="left:35.8%;top:56%;"></div><div class="data-dot" style="left:13.8%;top:76%;"></div><div class="data-dot" style="left:22.8%;top:78%;"></div><div class="data-dot" style="left:18.7%;top:17%;"></div><div class="data-dot" style="left:72.4%;top:75%;"></div><div class="data-dot" style="left:100.0%;top:43%;"></div><div class="data-dot" style="left:48.8%;top:45%;"></div><div class="data-dot" style="left:56.9%;top:73%;"></div>
+                        <div class="data-dot" style="left:22.8%;top:20%;"></div><div class="data-dot" style="left:3.3%;top:74%;"></div><div class="data-dot" style="left:35.8%;top:82%;"></div><div class="data-dot" style="left:13.8%;top:42%;"></div><div class="data-dot" style="left:22.8%;top:84%;"></div><div class="data-dot" style="left:18.7%;top:23%;"></div><div class="data-dot" style="left:72.4%;top:27%;"></div><div class="data-dot" style="left:100.0%;top:39%;"></div><div class="data-dot" style="left:48.8%;top:37%;"></div><div class="data-dot" style="left:56.9%;top:66%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -904,7 +905,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:100.0%;"></div>
                         <div class="bar-box" style="left:19.93648126385376%;width:47.54875670586468%;"></div>
                         <div class="bar-median" style="left:23.85936653455426%;"></div>
-                        <div class="data-dot" style="left:23.5%;top:57%;"></div><div class="data-dot" style="left:0.0%;top:42%;"></div><div class="data-dot" style="left:22.0%;top:63%;"></div><div class="data-dot" style="left:19.2%;top:49%;"></div><div class="data-dot" style="left:14.0%;top:60%;"></div><div class="data-dot" style="left:24.2%;top:67%;"></div><div class="data-dot" style="left:71.5%;top:60%;"></div><div class="data-dot" style="left:100.0%;top:62%;"></div><div class="data-dot" style="left:55.4%;top:59%;"></div><div class="data-dot" style="left:73.4%;top:63%;"></div>
+                        <div class="data-dot" style="left:23.5%;top:76%;"></div><div class="data-dot" style="left:0.0%;top:44%;"></div><div class="data-dot" style="left:22.0%;top:21%;"></div><div class="data-dot" style="left:19.2%;top:45%;"></div><div class="data-dot" style="left:14.0%;top:20%;"></div><div class="data-dot" style="left:24.2%;top:32%;"></div><div class="data-dot" style="left:71.5%;top:67%;"></div><div class="data-dot" style="left:100.0%;top:76%;"></div><div class="data-dot" style="left:55.4%;top:68%;"></div><div class="data-dot" style="left:73.4%;top:56%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -912,7 +913,7 @@
                         <div class="bar-whisker" style="left:14.446111477290916%;width:71.4071851358622%;"></div>
                         <div class="bar-box" style="left:25.692359771556177%;width:28.536679417071348%;"></div>
                         <div class="bar-median" style="left:38.43562705097368%;"></div>
-                        <div class="data-dot" style="left:38.2%;top:27%;"></div><div class="data-dot" style="left:44.0%;top:17%;"></div><div class="data-dot" style="left:14.4%;top:76%;"></div><div class="data-dot" style="left:38.6%;top:57%;"></div><div class="data-dot" style="left:23.9%;top:57%;"></div><div class="data-dot" style="left:57.6%;top:64%;"></div><div class="data-dot" style="left:69.0%;top:64%;"></div><div class="data-dot" style="left:19.8%;top:41%;"></div><div class="data-dot" style="left:85.9%;top:54%;"></div><div class="data-dot" style="left:31.1%;top:37%;"></div>
+                        <div class="data-dot" style="left:38.2%;top:69%;"></div><div class="data-dot" style="left:44.0%;top:85%;"></div><div class="data-dot" style="left:14.4%;top:60%;"></div><div class="data-dot" style="left:38.6%;top:18%;"></div><div class="data-dot" style="left:23.9%;top:34%;"></div><div class="data-dot" style="left:57.6%;top:66%;"></div><div class="data-dot" style="left:69.0%;top:39%;"></div><div class="data-dot" style="left:19.8%;top:57%;"></div><div class="data-dot" style="left:85.9%;top:35%;"></div><div class="data-dot" style="left:31.1%;top:67%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -920,7 +921,7 @@
                         <div class="bar-whisker" style="left:12.626263807808533%;width:82.82828727646032%;"></div>
                         <div class="bar-box" style="left:44.91341310712389%;width:18.650805992482983%;"></div>
                         <div class="bar-median" style="left:54.97835929745434%;"></div>
-                        <div class="data-dot" style="left:63.7%;top:79%;"></div><div class="data-dot" style="left:55.8%;top:27%;"></div><div class="data-dot" style="left:44.6%;top:49%;"></div><div class="data-dot" style="left:37.7%;top:83%;"></div><div class="data-dot" style="left:78.9%;top:69%;"></div><div class="data-dot" style="left:12.6%;top:33%;"></div><div class="data-dot" style="left:63.1%;top:56%;"></div><div class="data-dot" style="left:45.9%;top:72%;"></div><div class="data-dot" style="left:95.5%;top:48%;"></div><div class="data-dot" style="left:54.1%;top:83%;"></div>
+                        <div class="data-dot" style="left:63.7%;top:39%;"></div><div class="data-dot" style="left:55.8%;top:43%;"></div><div class="data-dot" style="left:44.6%;top:22%;"></div><div class="data-dot" style="left:37.7%;top:18%;"></div><div class="data-dot" style="left:78.9%;top:38%;"></div><div class="data-dot" style="left:12.6%;top:44%;"></div><div class="data-dot" style="left:63.1%;top:85%;"></div><div class="data-dot" style="left:45.9%;top:37%;"></div><div class="data-dot" style="left:95.5%;top:65%;"></div><div class="data-dot" style="left:54.1%;top:26%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -928,7 +929,7 @@
                         <div class="bar-whisker" style="left:1.1049712125852145%;width:74.03313701668263%;"></div>
                         <div class="bar-box" style="left:28.798340186735246%;width:20.994479358176964%;"></div>
                         <div class="bar-median" style="left:34.116022373302066%;"></div>
-                        <div class="data-dot" style="left:29.0%;top:57%;"></div><div class="data-dot" style="left:75.1%;top:20%;"></div><div class="data-dot" style="left:28.5%;top:71%;"></div><div class="data-dot" style="left:44.2%;top:54%;"></div><div class="data-dot" style="left:29.6%;top:55%;"></div><div class="data-dot" style="left:1.1%;top:62%;"></div><div class="data-dot" style="left:58.6%;top:38%;"></div><div class="data-dot" style="left:38.7%;top:31%;"></div><div class="data-dot" style="left:51.7%;top:77%;"></div><div class="data-dot" style="left:28.7%;top:35%;"></div>
+                        <div class="data-dot" style="left:29.0%;top:27%;"></div><div class="data-dot" style="left:75.1%;top:16%;"></div><div class="data-dot" style="left:28.5%;top:41%;"></div><div class="data-dot" style="left:44.2%;top:44%;"></div><div class="data-dot" style="left:29.6%;top:49%;"></div><div class="data-dot" style="left:1.1%;top:49%;"></div><div class="data-dot" style="left:58.6%;top:77%;"></div><div class="data-dot" style="left:38.7%;top:40%;"></div><div class="data-dot" style="left:51.7%;top:48%;"></div><div class="data-dot" style="left:28.7%;top:43%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -936,7 +937,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:79.13045208317796%;"></div>
                         <div class="bar-box" style="left:32.17390709423366%;width:15.652181663706097%;"></div>
                         <div class="bar-median" style="left:40.434790541021776%;"></div>
-                        <div class="data-dot" style="left:48.7%;top:28%;"></div><div class="data-dot" style="left:34.8%;top:50%;"></div><div class="data-dot" style="left:31.3%;top:21%;"></div><div class="data-dot" style="left:43.5%;top:78%;"></div><div class="data-dot" style="left:37.4%;top:68%;"></div><div class="data-dot" style="left:79.1%;top:33%;"></div><div class="data-dot" style="left:45.2%;top:41%;"></div><div class="data-dot" style="left:0.0%;top:38%;"></div><div class="data-dot" style="left:51.3%;top:32%;"></div><div class="data-dot" style="left:26.1%;top:46%;"></div>
+                        <div class="data-dot" style="left:48.7%;top:81%;"></div><div class="data-dot" style="left:34.8%;top:58%;"></div><div class="data-dot" style="left:31.3%;top:80%;"></div><div class="data-dot" style="left:43.5%;top:66%;"></div><div class="data-dot" style="left:37.4%;top:63%;"></div><div class="data-dot" style="left:79.1%;top:49%;"></div><div class="data-dot" style="left:45.2%;top:58%;"></div><div class="data-dot" style="left:0.0%;top:80%;"></div><div class="data-dot" style="left:51.3%;top:35%;"></div><div class="data-dot" style="left:26.1%;top:28%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -944,7 +945,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:89.47369411712194%;"></div>
                         <div class="bar-box" style="left:19.07892941272619%;width:41.44736078471743%;"></div>
                         <div class="bar-median" style="left:47.36840784384602%;"></div>
-                        <div class="data-dot" style="left:47.4%;top:61%;"></div><div class="data-dot" style="left:18.4%;top:54%;"></div><div class="data-dot" style="left:21.1%;top:63%;"></div><div class="data-dot" style="left:52.6%;top:55%;"></div><div class="data-dot" style="left:47.4%;top:18%;"></div><div class="data-dot" style="left:63.2%;top:46%;"></div><div class="data-dot" style="left:68.4%;top:40%;"></div><div class="data-dot" style="left:0.0%;top:37%;"></div><div class="data-dot" style="left:89.5%;top:46%;"></div><div class="data-dot" style="left:10.5%;top:20%;"></div>
+                        <div class="data-dot" style="left:47.4%;top:80%;"></div><div class="data-dot" style="left:18.4%;top:68%;"></div><div class="data-dot" style="left:21.1%;top:72%;"></div><div class="data-dot" style="left:52.6%;top:51%;"></div><div class="data-dot" style="left:47.4%;top:44%;"></div><div class="data-dot" style="left:63.2%;top:70%;"></div><div class="data-dot" style="left:68.4%;top:48%;"></div><div class="data-dot" style="left:0.0%;top:54%;"></div><div class="data-dot" style="left:89.5%;top:71%;"></div><div class="data-dot" style="left:10.5%;top:59%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
@@ -1054,7 +1055,7 @@
                     <div class="bar-whisker" style="left:29.03225806451613%;width:19.35483870967742%;"></div>
                     <div class="bar-box" style="left:30.64516129032258%;width:9.67741935483871%;"></div>
                     <div class="bar-median" style="left:32.25806451612903%;"></div>
-                    <div class="data-dot" style="left:29.0%;top:35%;"></div><div class="data-dot" style="left:48.4%;top:36%;"></div><div class="data-dot" style="left:32.3%;top:66%;"></div>
+                    <div class="data-dot" style="left:29.0%;top:81%;"></div><div class="data-dot" style="left:48.4%;top:75%;"></div><div class="data-dot" style="left:32.3%;top:53%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1062,7 +1063,7 @@
                         <div class="bar-whisker" style="left:10.307442546366733%;width:11.713391186228314%;"></div>
                         <div class="bar-box" style="left:14.470227852358194%;width:5.856695593114156%;"></div>
                         <div class="bar-median" style="left:18.633013158349655%;"></div>
-                        <div class="data-dot" style="left:10.3%;top:20%;"></div><div class="data-dot" style="left:22.0%;top:19%;"></div><div class="data-dot" style="left:18.6%;top:21%;"></div>
+                        <div class="data-dot" style="left:10.3%;top:23%;"></div><div class="data-dot" style="left:22.0%;top:77%;"></div><div class="data-dot" style="left:18.6%;top:52%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1070,7 +1071,7 @@
                         <div class="bar-whisker" style="left:8.130082380071398%;width:10.569103508239118%;"></div>
                         <div class="bar-box" style="left:11.38211475075849%;width:5.2845517541195575%;"></div>
                         <div class="bar-median" style="left:14.63414712144558%;"></div>
-                        <div class="data-dot" style="left:8.1%;top:66%;"></div><div class="data-dot" style="left:14.6%;top:46%;"></div><div class="data-dot" style="left:18.7%;top:83%;"></div>
+                        <div class="data-dot" style="left:8.1%;top:78%;"></div><div class="data-dot" style="left:14.6%;top:35%;"></div><div class="data-dot" style="left:18.7%;top:40%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1078,7 +1079,7 @@
                         <div class="bar-whisker" style="left:8.130082380307545%;width:10.569103508429261%;"></div>
                         <div class="bar-box" style="left:11.382114750921826%;width:5.284551754214631%;"></div>
                         <div class="bar-median" style="left:14.634147121536106%;"></div>
-                        <div class="data-dot" style="left:8.1%;top:22%;"></div><div class="data-dot" style="left:14.6%;top:21%;"></div><div class="data-dot" style="left:18.7%;top:84%;"></div>
+                        <div class="data-dot" style="left:8.1%;top:20%;"></div><div class="data-dot" style="left:14.6%;top:43%;"></div><div class="data-dot" style="left:18.7%;top:81%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1086,7 +1087,7 @@
                         <div class="bar-whisker" style="left:15.244228755971188%;width:44.99910442772065%;"></div>
                         <div class="bar-box" style="left:16.541420341318535%;width:22.499552213860326%;"></div>
                         <div class="bar-median" style="left:17.83861192666588%;"></div>
-                        <div class="data-dot" style="left:15.2%;top:69%;"></div><div class="data-dot" style="left:17.8%;top:24%;"></div><div class="data-dot" style="left:60.2%;top:53%;"></div>
+                        <div class="data-dot" style="left:15.2%;top:21%;"></div><div class="data-dot" style="left:17.8%;top:17%;"></div><div class="data-dot" style="left:60.2%;top:58%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1094,7 +1095,7 @@
                         <div class="bar-whisker" style="left:13.098803666852424%;width:79.64072172859403%;"></div>
                         <div class="bar-box" style="left:30.202097598961124%;width:39.82036086429701%;"></div>
                         <div class="bar-median" style="left:47.30539153106982%;"></div>
-                        <div class="data-dot" style="left:13.1%;top:45%;"></div><div class="data-dot" style="left:47.3%;top:19%;"></div><div class="data-dot" style="left:92.7%;top:76%;"></div>
+                        <div class="data-dot" style="left:13.1%;top:43%;"></div><div class="data-dot" style="left:47.3%;top:71%;"></div><div class="data-dot" style="left:92.7%;top:22%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1102,7 +1103,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:50.86580012113203%;"></div>
                         <div class="bar-box" style="left:13.564208778458733%;width:25.432900060566027%;"></div>
                         <div class="bar-median" style="left:27.128417556917466%;"></div>
-                        <div class="data-dot" style="left:27.1%;top:48%;"></div><div class="data-dot" style="left:50.9%;top:75%;"></div><div class="data-dot" style="left:0.0%;top:31%;"></div>
+                        <div class="data-dot" style="left:27.1%;top:33%;"></div><div class="data-dot" style="left:50.9%;top:53%;"></div><div class="data-dot" style="left:0.0%;top:31%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1110,7 +1111,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:28.45304162116511%;"></div>
                         <div class="bar-box" style="left:3.8674058255392474%;width:14.226520810582569%;"></div>
                         <div class="bar-median" style="left:7.73481165107852%;"></div>
-                        <div class="data-dot" style="left:28.5%;top:64%;"></div><div class="data-dot" style="left:7.7%;top:32%;"></div><div class="data-dot" style="left:0.0%;top:29%;"></div>
+                        <div class="data-dot" style="left:28.5%;top:74%;"></div><div class="data-dot" style="left:7.7%;top:65%;"></div><div class="data-dot" style="left:0.0%;top:17%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1118,7 +1119,7 @@
                         <div class="bar-whisker" style="left:66.08696391342247%;width:33.913036086577534%;"></div>
                         <div class="bar-box" style="left:72.6087079983002%;width:16.956518043288774%;"></div>
                         <div class="bar-median" style="left:79.13045208317796%;"></div>
-                        <div class="data-dot" style="left:66.1%;top:19%;"></div><div class="data-dot" style="left:100.0%;top:83%;"></div><div class="data-dot" style="left:79.1%;top:81%;"></div>
+                        <div class="data-dot" style="left:66.1%;top:61%;"></div><div class="data-dot" style="left:100.0%;top:30%;"></div><div class="data-dot" style="left:79.1%;top:39%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1126,7 +1127,7 @@
                         <div class="bar-whisker" style="left:18.421035295049602%;width:81.5789647049504%;"></div>
                         <div class="bar-box" style="left:26.315780392642495%;width:40.789482352475225%;"></div>
                         <div class="bar-median" style="left:34.21052549023544%;"></div>
-                        <div class="data-dot" style="left:34.2%;top:82%;"></div><div class="data-dot" style="left:18.4%;top:83%;"></div><div class="data-dot" style="left:100.0%;top:22%;"></div>
+                        <div class="data-dot" style="left:34.2%;top:72%;"></div><div class="data-dot" style="left:18.4%;top:83%;"></div><div class="data-dot" style="left:100.0%;top:62%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
@@ -1236,7 +1237,7 @@
                     <div class="bar-whisker" style="left:90.32258064516128%;width:9.677419354838719%;"></div>
                     <div class="bar-box" style="left:92.74193548387096%;width:4.838709677419355%;"></div>
                     <div class="bar-median" style="left:95.16129032258065%;"></div>
-                    <div class="data-dot" style="left:100.0%;top:37%;"></div><div class="data-dot" style="left:90.3%;top:83%;"></div>
+                    <div class="data-dot" style="left:100.0%;top:68%;"></div><div class="data-dot" style="left:90.3%;top:18%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1244,7 +1245,7 @@
                         <div class="bar-whisker" style="left:99.09375179667771%;width:1%;"></div>
                         <div class="bar-box" style="left:99.32031384750829%;width:2%;"></div>
                         <div class="bar-median" style="left:99.54687589833885%;"></div>
-                        <div class="data-dot" style="left:100.0%;top:77%;"></div><div class="data-dot" style="left:99.1%;top:72%;"></div>
+                        <div class="data-dot" style="left:100.0%;top:18%;"></div><div class="data-dot" style="left:99.1%;top:74%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1252,7 +1253,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:13.008130451447556%;"></div>
                         <div class="bar-box" style="left:3.252032612861889%;width:6.504065225723778%;"></div>
                         <div class="bar-median" style="left:6.504065225723779%;"></div>
-                        <div class="data-dot" style="left:0.0%;top:73%;"></div><div class="data-dot" style="left:13.0%;top:83%;"></div>
+                        <div class="data-dot" style="left:0.0%;top:74%;"></div><div class="data-dot" style="left:13.0%;top:30%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1260,7 +1261,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:13.008130451638353%;"></div>
                         <div class="bar-box" style="left:3.2520326129095882%;width:6.5040652258191765%;"></div>
                         <div class="bar-median" style="left:6.5040652258191765%;"></div>
-                        <div class="data-dot" style="left:0.0%;top:21%;"></div><div class="data-dot" style="left:13.0%;top:56%;"></div>
+                        <div class="data-dot" style="left:0.0%;top:17%;"></div><div class="data-dot" style="left:13.0%;top:77%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1268,7 +1269,7 @@
                         <div class="bar-whisker" style="left:5.743424616747279%;width:5.850777391182381%;"></div>
                         <div class="bar-box" style="left:7.206118964542874%;width:2.9253886955911925%;"></div>
                         <div class="bar-median" style="left:8.668813312338468%;"></div>
-                        <div class="data-dot" style="left:11.6%;top:73%;"></div><div class="data-dot" style="left:5.7%;top:78%;"></div>
+                        <div class="data-dot" style="left:11.6%;top:16%;"></div><div class="data-dot" style="left:5.7%;top:29%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1276,7 +1277,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:25.673657477450135%;"></div>
                         <div class="bar-box" style="left:6.418414369362527%;width:12.836828738725082%;"></div>
                         <div class="bar-median" style="left:12.836828738725053%;"></div>
-                        <div class="data-dot" style="left:25.7%;top:27%;"></div><div class="data-dot" style="left:0.0%;top:80%;"></div>
+                        <div class="data-dot" style="left:25.7%;top:53%;"></div><div class="data-dot" style="left:0.0%;top:40%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1284,7 +1285,7 @@
                         <div class="bar-whisker" style="left:77.9942314395804%;width:10.966815295831609%;"></div>
                         <div class="bar-box" style="left:80.73593526353828%;width:5.4834076479158345%;"></div>
                         <div class="bar-median" style="left:83.4776390874962%;"></div>
-                        <div class="data-dot" style="left:89.0%;top:68%;"></div><div class="data-dot" style="left:78.0%;top:37%;"></div>
+                        <div class="data-dot" style="left:89.0%;top:43%;"></div><div class="data-dot" style="left:78.0%;top:43%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1292,7 +1293,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:17.40331633785586%;"></div>
                         <div class="bar-box" style="left:4.3508290844639586%;width:8.701658168927942%;"></div>
                         <div class="bar-median" style="left:8.701658168927942%;"></div>
-                        <div class="data-dot" style="left:0.0%;top:20%;"></div><div class="data-dot" style="left:17.4%;top:33%;"></div>
+                        <div class="data-dot" style="left:0.0%;top:70%;"></div><div class="data-dot" style="left:17.4%;top:85%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1300,7 +1301,7 @@
                         <div class="bar-whisker" style="left:59.13044794404699%;width:30.434778097541994%;"></div>
                         <div class="bar-box" style="left:66.7391424684325%;width:15.217389048770974%;"></div>
                         <div class="bar-median" style="left:74.34783699281797%;"></div>
-                        <div class="data-dot" style="left:89.6%;top:36%;"></div><div class="data-dot" style="left:59.1%;top:85%;"></div>
+                        <div class="data-dot" style="left:89.6%;top:64%;"></div><div class="data-dot" style="left:59.1%;top:77%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1308,7 +1309,7 @@
                         <div class="bar-whisker" style="left:31.578949019502755%;width:31.578917648660298%;"></div>
                         <div class="bar-box" style="left:39.473678431667814%;width:15.789458824330177%;"></div>
                         <div class="bar-median" style="left:47.368407843832934%;"></div>
-                        <div class="data-dot" style="left:63.2%;top:83%;"></div><div class="data-dot" style="left:31.6%;top:64%;"></div>
+                        <div class="data-dot" style="left:63.2%;top:24%;"></div><div class="data-dot" style="left:31.6%;top:52%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
@@ -1418,7 +1419,7 @@
                     <div class="bar-whisker" style="left:6.451612903225806%;width:3.225806451612904%;"></div>
                     <div class="bar-box" style="left:7.258064516129033%;width:2%;"></div>
                     <div class="bar-median" style="left:8.064516129032258%;"></div>
-                    <div class="data-dot" style="left:6.5%;top:18%;"></div><div class="data-dot" style="left:9.7%;top:22%;"></div>
+                    <div class="data-dot" style="left:6.5%;top:77%;"></div><div class="data-dot" style="left:9.7%;top:83%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1426,7 +1427,7 @@
                         <div class="bar-whisker" style="left:0.0%;width:20.32692344547235%;"></div>
                         <div class="bar-box" style="left:5.081730861368087%;width:10.163461722736175%;"></div>
                         <div class="bar-median" style="left:10.163461722736175%;"></div>
-                        <div class="data-dot" style="left:20.3%;top:42%;"></div><div class="data-dot" style="left:0.0%;top:45%;"></div>
+                        <div class="data-dot" style="left:20.3%;top:30%;"></div><div class="data-dot" style="left:0.0%;top:58%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1434,7 +1435,7 @@
                         <div class="bar-whisker" style="left:47.96748206738056%;width:1.6260147334126316%;"></div>
                         <div class="bar-box" style="left:48.37398575073371%;width:2%;"></div>
                         <div class="bar-median" style="left:48.780489434086874%;"></div>
-                        <div class="data-dot" style="left:49.6%;top:85%;"></div><div class="data-dot" style="left:48.0%;top:72%;"></div>
+                        <div class="data-dot" style="left:49.6%;top:21%;"></div><div class="data-dot" style="left:48.0%;top:16%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1442,7 +1443,7 @@
                         <div class="bar-whisker" style="left:47.967482070171485%;width:1%;"></div>
                         <div class="bar-box" style="left:48.119920708957615%;width:2%;"></div>
                         <div class="bar-median" style="left:48.27235934774373%;"></div>
-                        <div class="data-dot" style="left:48.6%;top:73%;"></div><div class="data-dot" style="left:48.0%;top:55%;"></div>
+                        <div class="data-dot" style="left:48.6%;top:80%;"></div><div class="data-dot" style="left:48.0%;top:27%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1450,7 +1451,7 @@
                         <div class="bar-whisker" style="left:23.814636497254963%;width:51.994988884697065%;"></div>
                         <div class="bar-box" style="left:36.81338371842923%;width:25.997494442348533%;"></div>
                         <div class="bar-median" style="left:49.81213093960349%;"></div>
-                        <div class="data-dot" style="left:75.8%;top:46%;"></div><div class="data-dot" style="left:23.8%;top:18%;"></div>
+                        <div class="data-dot" style="left:75.8%;top:40%;"></div><div class="data-dot" style="left:23.8%;top:23%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1458,7 +1459,7 @@
                         <div class="bar-whisker" style="left:34.955093790176406%;width:27.694604896699303%;"></div>
                         <div class="bar-box" style="left:41.87874501435124%;width:13.847302448349636%;"></div>
                         <div class="bar-median" style="left:48.80239623852604%;"></div>
-                        <div class="data-dot" style="left:35.0%;top:50%;"></div><div class="data-dot" style="left:62.6%;top:85%;"></div>
+                        <div class="data-dot" style="left:35.0%;top:59%;"></div><div class="data-dot" style="left:62.6%;top:56%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1466,7 +1467,7 @@
                         <div class="bar-whisker" style="left:10.389601453548467%;width:50.72151042209574%;"></div>
                         <div class="bar-box" style="left:23.06997905907241%;width:25.36075521104786%;"></div>
                         <div class="bar-median" style="left:35.75035666459635%;"></div>
-                        <div class="data-dot" style="left:61.1%;top:59%;"></div><div class="data-dot" style="left:10.4%;top:41%;"></div>
+                        <div class="data-dot" style="left:61.1%;top:79%;"></div><div class="data-dot" style="left:10.4%;top:71%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1474,7 +1475,7 @@
                         <div class="bar-whisker" style="left:26.243099198757136%;width:18.50828754767862%;"></div>
                         <div class="bar-box" style="left:30.870171085676784%;width:9.25414377383932%;"></div>
                         <div class="bar-median" style="left:35.49724297259646%;"></div>
-                        <div class="data-dot" style="left:44.8%;top:32%;"></div><div class="data-dot" style="left:26.2%;top:50%;"></div>
+                        <div class="data-dot" style="left:44.8%;top:26%;"></div><div class="data-dot" style="left:26.2%;top:66%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1482,7 +1483,7 @@
                         <div class="bar-whisker" style="left:8.695644959545433%;width:52.17393197467153%;"></div>
                         <div class="bar-box" style="left:21.739127953213337%;width:26.086965987335724%;"></div>
                         <div class="bar-median" style="left:34.7826109468812%;"></div>
-                        <div class="data-dot" style="left:8.7%;top:43%;"></div><div class="data-dot" style="left:60.9%;top:28%;"></div>
+                        <div class="data-dot" style="left:8.7%;top:67%;"></div><div class="data-dot" style="left:60.9%;top:57%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1490,7 +1491,7 @@
                         <div class="bar-whisker" style="left:39.47367843167442%;width:55.2631686268866%;"></div>
                         <div class="bar-box" style="left:53.28947058839613%;width:27.63158431344319%;"></div>
                         <div class="bar-median" style="left:67.10526274511773%;"></div>
-                        <div class="data-dot" style="left:39.5%;top:41%;"></div><div class="data-dot" style="left:94.7%;top:84%;"></div>
+                        <div class="data-dot" style="left:39.5%;top:55%;"></div><div class="data-dot" style="left:94.7%;top:40%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
@@ -1600,7 +1601,7 @@
                     <div class="bar-whisker" style="left:74.19354838709677%;width:1%;"></div>
                     <div class="bar-box" style="left:74.19354838709677%;width:2%;"></div>
                     <div class="bar-median" style="left:74.19354838709677%;"></div>
-                    <div class="data-dot" style="left:74.2%;top:77%;"></div>
+                    <div class="data-dot" style="left:74.2%;top:54%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1608,7 +1609,7 @@
                         <div class="bar-whisker" style="left:75.65850452426311%;width:1%;"></div>
                         <div class="bar-box" style="left:75.65850452426311%;width:2%;"></div>
                         <div class="bar-median" style="left:75.65850452426311%;"></div>
-                        <div class="data-dot" style="left:75.7%;top:32%;"></div>
+                        <div class="data-dot" style="left:75.7%;top:59%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1616,7 +1617,7 @@
                         <div class="bar-whisker" style="left:8.130082380071398%;width:1%;"></div>
                         <div class="bar-box" style="left:8.130082380071398%;width:2%;"></div>
                         <div class="bar-median" style="left:8.130082380071398%;"></div>
-                        <div class="data-dot" style="left:8.1%;top:20%;"></div>
+                        <div class="data-dot" style="left:8.1%;top:85%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1624,7 +1625,7 @@
                         <div class="bar-whisker" style="left:8.130082380307545%;width:1%;"></div>
                         <div class="bar-box" style="left:8.130082380307545%;width:2%;"></div>
                         <div class="bar-median" style="left:8.130082380307545%;"></div>
-                        <div class="data-dot" style="left:8.1%;top:68%;"></div>
+                        <div class="data-dot" style="left:8.1%;top:85%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1632,7 +1633,7 @@
                         <div class="bar-whisker" style="left:24.20826561096019%;width:1%;"></div>
                         <div class="bar-box" style="left:24.20826561096019%;width:2%;"></div>
                         <div class="bar-median" style="left:24.20826561096019%;"></div>
-                        <div class="data-dot" style="left:24.2%;top:67%;"></div>
+                        <div class="data-dot" style="left:24.2%;top:79%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1640,7 +1641,7 @@
                         <div class="bar-whisker" style="left:85.10479068719414%;width:1%;"></div>
                         <div class="bar-box" style="left:85.10479068719414%;width:2%;"></div>
                         <div class="bar-median" style="left:85.10479068719414%;"></div>
-                        <div class="data-dot" style="left:85.1%;top:49%;"></div>
+                        <div class="data-dot" style="left:85.1%;top:79%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1648,7 +1649,7 @@
                         <div class="bar-whisker" style="left:100.0%;width:1%;"></div>
                         <div class="bar-box" style="left:100.0%;width:2%;"></div>
                         <div class="bar-median" style="left:100.0%;"></div>
-                        <div class="data-dot" style="left:100.0%;top:19%;"></div>
+                        <div class="data-dot" style="left:100.0%;top:59%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1656,7 +1657,7 @@
                         <div class="bar-whisker" style="left:100.0%;width:1%;"></div>
                         <div class="bar-box" style="left:100.0%;width:2%;"></div>
                         <div class="bar-median" style="left:100.0%;"></div>
-                        <div class="data-dot" style="left:100.0%;top:51%;"></div>
+                        <div class="data-dot" style="left:100.0%;top:31%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1664,7 +1665,7 @@
                         <div class="bar-whisker" style="left:24.34782662759932%;width:1%;"></div>
                         <div class="bar-box" style="left:24.34782662759932%;width:2%;"></div>
                         <div class="bar-median" style="left:24.34782662759932%;"></div>
-                        <div class="data-dot" style="left:24.3%;top:20%;"></div>
+                        <div class="data-dot" style="left:24.3%;top:48%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1672,7 +1673,7 @@
                         <div class="bar-whisker" style="left:26.315796078063787%;width:1%;"></div>
                         <div class="bar-box" style="left:26.315796078063787%;width:2%;"></div>
                         <div class="bar-median" style="left:26.315796078063787%;"></div>
-                        <div class="data-dot" style="left:26.3%;top:84%;"></div>
+                        <div class="data-dot" style="left:26.3%;top:15%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
@@ -1782,7 +1783,7 @@
                     <div class="bar-whisker" style="left:32.25806451612903%;width:1%;"></div>
                     <div class="bar-box" style="left:32.25806451612903%;width:2%;"></div>
                     <div class="bar-median" style="left:32.25806451612903%;"></div>
-                    <div class="data-dot" style="left:32.3%;top:47%;"></div>
+                    <div class="data-dot" style="left:32.3%;top:48%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1790,7 +1791,7 @@
                         <div class="bar-whisker" style="left:86.19462857673683%;width:1%;"></div>
                         <div class="bar-box" style="left:86.19462857673683%;width:2%;"></div>
                         <div class="bar-median" style="left:86.19462857673683%;"></div>
-                        <div class="data-dot" style="left:86.2%;top:20%;"></div>
+                        <div class="data-dot" style="left:86.2%;top:33%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1798,7 +1799,7 @@
                         <div class="bar-whisker" style="left:7.9268295695939965%;width:1%;"></div>
                         <div class="bar-box" style="left:7.9268295695939965%;width:2%;"></div>
                         <div class="bar-median" style="left:7.9268295695939965%;"></div>
-                        <div class="data-dot" style="left:7.9%;top:41%;"></div>
+                        <div class="data-dot" style="left:7.9%;top:63%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1806,7 +1807,7 @@
                         <div class="bar-whisker" style="left:7.926829569684404%;width:1%;"></div>
                         <div class="bar-box" style="left:7.926829569684404%;width:2%;"></div>
                         <div class="bar-median" style="left:7.926829569684404%;"></div>
-                        <div class="data-dot" style="left:7.9%;top:18%;"></div>
+                        <div class="data-dot" style="left:7.9%;top:25%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1814,7 +1815,7 @@
                         <div class="bar-whisker" style="left:4.1867957392007344%;width:1%;"></div>
                         <div class="bar-box" style="left:4.1867957392007344%;width:2%;"></div>
                         <div class="bar-median" style="left:4.1867957392007344%;"></div>
-                        <div class="data-dot" style="left:4.2%;top:58%;"></div>
+                        <div class="data-dot" style="left:4.2%;top:17%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1822,7 +1823,7 @@
                         <div class="bar-whisker" style="left:35.55389566717086%;width:1%;"></div>
                         <div class="bar-box" style="left:35.55389566717086%;width:2%;"></div>
                         <div class="bar-median" style="left:35.55389566717086%;"></div>
-                        <div class="data-dot" style="left:35.6%;top:49%;"></div>
+                        <div class="data-dot" style="left:35.6%;top:47%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1838,7 +1839,7 @@
                         <div class="bar-whisker" style="left:36.464089490445836%;width:1%;"></div>
                         <div class="bar-box" style="left:36.464089490445836%;width:2%;"></div>
                         <div class="bar-median" style="left:36.464089490445836%;"></div>
-                        <div class="data-dot" style="left:36.5%;top:73%;"></div>
+                        <div class="data-dot" style="left:36.5%;top:75%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1846,7 +1847,7 @@
                         <div class="bar-whisker" style="left:37.39131480605044%;width:1%;"></div>
                         <div class="bar-box" style="left:37.39131480605044%;width:2%;"></div>
                         <div class="bar-median" style="left:37.39131480605044%;"></div>
-                        <div class="data-dot" style="left:37.4%;top:62%;"></div>
+                        <div class="data-dot" style="left:37.4%;top:76%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1854,7 +1855,7 @@
                         <div class="bar-whisker" style="left:36.84210196094179%;width:1%;"></div>
                         <div class="bar-box" style="left:36.84210196094179%;width:2%;"></div>
                         <div class="bar-median" style="left:36.84210196094179%;"></div>
-                        <div class="data-dot" style="left:36.8%;top:21%;"></div>
+                        <div class="data-dot" style="left:36.8%;top:29%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
@@ -1964,7 +1965,7 @@
                     <div class="bar-whisker" style="left:80.64516129032258%;width:1%;"></div>
                     <div class="bar-box" style="left:80.64516129032258%;width:2%;"></div>
                     <div class="bar-median" style="left:80.64516129032258%;"></div>
-                    <div class="data-dot" style="left:80.6%;top:81%;"></div>
+                    <div class="data-dot" style="left:80.6%;top:50%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1972,7 +1973,7 @@
                         <div class="bar-whisker" style="left:96.15481641523456%;width:1%;"></div>
                         <div class="bar-box" style="left:96.15481641523456%;width:2%;"></div>
                         <div class="bar-median" style="left:96.15481641523456%;"></div>
-                        <div class="data-dot" style="left:96.2%;top:58%;"></div>
+                        <div class="data-dot" style="left:96.2%;top:65%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1980,7 +1981,7 @@
                         <div class="bar-whisker" style="left:14.63414712144558%;width:1%;"></div>
                         <div class="bar-box" style="left:14.63414712144558%;width:2%;"></div>
                         <div class="bar-median" style="left:14.63414712144558%;"></div>
-                        <div class="data-dot" style="left:14.6%;top:39%;"></div>
+                        <div class="data-dot" style="left:14.6%;top:56%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1988,7 +1989,7 @@
                         <div class="bar-whisker" style="left:14.634147121536106%;width:1%;"></div>
                         <div class="bar-box" style="left:14.634147121536106%;width:2%;"></div>
                         <div class="bar-median" style="left:14.634147121536106%;"></div>
-                        <div class="data-dot" style="left:14.6%;top:63%;"></div>
+                        <div class="data-dot" style="left:14.6%;top:78%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -1996,7 +1997,7 @@
                         <div class="bar-whisker" style="left:22.973696761854036%;width:1%;"></div>
                         <div class="bar-box" style="left:22.973696761854036%;width:2%;"></div>
                         <div class="bar-median" style="left:22.973696761854036%;"></div>
-                        <div class="data-dot" style="left:23.0%;top:76%;"></div>
+                        <div class="data-dot" style="left:23.0%;top:61%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2004,7 +2005,7 @@
                         <div class="bar-whisker" style="left:36.9760412169106%;width:1%;"></div>
                         <div class="bar-box" style="left:36.9760412169106%;width:2%;"></div>
                         <div class="bar-median" style="left:36.9760412169106%;"></div>
-                        <div class="data-dot" style="left:37.0%;top:64%;"></div>
+                        <div class="data-dot" style="left:37.0%;top:19%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2012,7 +2013,7 @@
                         <div class="bar-whisker" style="left:65.07936071062306%;width:1%;"></div>
                         <div class="bar-box" style="left:65.07936071062306%;width:2%;"></div>
                         <div class="bar-median" style="left:65.07936071062306%;"></div>
-                        <div class="data-dot" style="left:65.1%;top:67%;"></div>
+                        <div class="data-dot" style="left:65.1%;top:37%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2020,7 +2021,7 @@
                         <div class="bar-whisker" style="left:35.91159071150266%;width:1%;"></div>
                         <div class="bar-box" style="left:35.91159071150266%;width:2%;"></div>
                         <div class="bar-median" style="left:35.91159071150266%;"></div>
-                        <div class="data-dot" style="left:35.9%;top:55%;"></div>
+                        <div class="data-dot" style="left:35.9%;top:60%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2028,7 +2029,7 @@
                         <div class="bar-whisker" style="left:24.34782662759932%;width:1%;"></div>
                         <div class="bar-box" style="left:24.34782662759932%;width:2%;"></div>
                         <div class="bar-median" style="left:24.34782662759932%;"></div>
-                        <div class="data-dot" style="left:24.3%;top:75%;"></div>
+                        <div class="data-dot" style="left:24.3%;top:84%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2036,7 +2037,7 @@
                         <div class="bar-whisker" style="left:23.684219607357445%;width:1%;"></div>
                         <div class="bar-box" style="left:23.684219607357445%;width:2%;"></div>
                         <div class="bar-median" style="left:23.684219607357445%;"></div>
-                        <div class="data-dot" style="left:23.7%;top:60%;"></div>
+                        <div class="data-dot" style="left:23.7%;top:80%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#F1C40F;font-size:9px;white-space:nowrap;">G</span></td>
@@ -2146,7 +2147,7 @@
                     <div class="bar-whisker" style="left:96.7741935483871%;width:1%;"></div>
                     <div class="bar-box" style="left:96.7741935483871%;width:2%;"></div>
                     <div class="bar-median" style="left:96.7741935483871%;"></div>
-                    <div class="data-dot" style="left:96.8%;top:62%;"></div>
+                    <div class="data-dot" style="left:96.8%;top:21%;"></div>
                 </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2154,7 +2155,7 @@
                         <div class="bar-whisker" style="left:29.135258234351735%;width:1%;"></div>
                         <div class="bar-box" style="left:29.135258234351735%;width:2%;"></div>
                         <div class="bar-median" style="left:29.135258234351735%;"></div>
-                        <div class="data-dot" style="left:29.1%;top:77%;"></div>
+                        <div class="data-dot" style="left:29.1%;top:82%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2162,7 +2163,7 @@
                         <div class="bar-whisker" style="left:39.02438941775728%;width:1%;"></div>
                         <div class="bar-box" style="left:39.02438941775728%;width:2%;"></div>
                         <div class="bar-median" style="left:39.02438941775728%;"></div>
-                        <div class="data-dot" style="left:39.0%;top:40%;"></div>
+                        <div class="data-dot" style="left:39.0%;top:44%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2170,7 +2171,7 @@
                         <div class="bar-whisker" style="left:39.02438941655259%;width:1%;"></div>
                         <div class="bar-box" style="left:39.02438941655259%;width:2%;"></div>
                         <div class="bar-median" style="left:39.02438941655259%;"></div>
-                        <div class="data-dot" style="left:39.0%;top:81%;"></div>
+                        <div class="data-dot" style="left:39.0%;top:30%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2178,7 +2179,7 @@
                         <div class="bar-whisker" style="left:51.494005289632426%;width:1%;"></div>
                         <div class="bar-box" style="left:51.494005289632426%;width:2%;"></div>
                         <div class="bar-median" style="left:51.494005289632426%;"></div>
-                        <div class="data-dot" style="left:51.5%;top:80%;"></div>
+                        <div class="data-dot" style="left:51.5%;top:71%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2186,7 +2187,7 @@
                         <div class="bar-whisker" style="left:100.0%;width:1%;"></div>
                         <div class="bar-box" style="left:100.0%;width:2%;"></div>
                         <div class="bar-median" style="left:100.0%;"></div>
-                        <div class="data-dot" style="left:100.0%;top:32%;"></div>
+                        <div class="data-dot" style="left:100.0%;top:46%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2194,7 +2195,7 @@
                         <div class="bar-whisker" style="left:61.4718567655349%;width:1%;"></div>
                         <div class="bar-box" style="left:61.4718567655349%;width:2%;"></div>
                         <div class="bar-median" style="left:61.4718567655349%;"></div>
-                        <div class="data-dot" style="left:61.5%;top:56%;"></div>
+                        <div class="data-dot" style="left:61.5%;top:50%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2202,7 +2203,7 @@
                         <div class="bar-whisker" style="left:67.40330975222115%;width:1%;"></div>
                         <div class="bar-box" style="left:67.40330975222115%;width:2%;"></div>
                         <div class="bar-median" style="left:67.40330975222115%;"></div>
-                        <div class="data-dot" style="left:67.4%;top:32%;"></div>
+                        <div class="data-dot" style="left:67.4%;top:54%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2210,7 +2211,7 @@
                         <div class="bar-whisker" style="left:6.956515969375461%;width:1%;"></div>
                         <div class="bar-box" style="left:6.956515969375461%;width:2%;"></div>
                         <div class="bar-median" style="left:6.956515969375461%;"></div>
-                        <div class="data-dot" style="left:7.0%;top:42%;"></div>
+                        <div class="data-dot" style="left:7.0%;top:18%;"></div>
                     </div>
     </td>
     <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">
@@ -2218,7 +2219,7 @@
                         <div class="bar-whisker" style="left:34.21052549023544%;width:1%;"></div>
                         <div class="bar-box" style="left:34.21052549023544%;width:2%;"></div>
                         <div class="bar-median" style="left:34.21052549023544%;"></div>
-                        <div class="data-dot" style="left:34.2%;top:61%;"></div>
+                        <div class="data-dot" style="left:34.2%;top:17%;"></div>
                     </div>
     </td>
 <td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:#9b59b6;font-size:9px;white-space:nowrap;">A</span></td>
@@ -2529,6 +2530,7 @@ var ldR2Matrix = [[1.0, 1.0, 0.006688963210702338, 0.0, 0.006688963210702338, 0.
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
 var manualFilterMode = false;
 var manualBlacklist = new Set();  // 手动过滤的变异位置集合
+var manualFilterHistory = [];  // 记录操作历史 {pos, action: 'add'|'remove'}
 
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
@@ -2633,18 +2635,43 @@ function toggleManualFilter() {
         btn.textContent = 'Manual Filter: ON';
         btn.classList.add('active');
         clearBtn.classList.add('show');
+        updateUndoButton();  // 显示undo按钮（如果有历史记录）
     } else {
         btn.textContent = 'Manual Filter: OFF';
         btn.classList.remove('active');
         clearBtn.classList.remove('show');
+        document.getElementById('manualUndoBtn').style.display = 'none';
     }
     updateManualFilterVisuals();
 }
 
 function clearManualFilter() {
     manualBlacklist.clear();
+    manualFilterHistory = [];
+    updateUndoButton();
     updateManualFilterVisuals();
     applyFilters();
+}
+
+function undoManualFilter() {
+    if (manualFilterHistory.length === 0) return;
+    var last = manualFilterHistory.pop();
+    if (last.action === 'add') {
+        manualBlacklist.delete(last.pos);
+    } else {
+        manualBlacklist.add(last.pos);
+    }
+    updateUndoButton();
+    updateManualFilterVisuals();
+    applyFilters();
+}
+
+function updateUndoButton() {
+    var undoBtn = document.getElementById('manualUndoBtn');
+    if (undoBtn) {
+        undoBtn.style.display = manualFilterHistory.length > 0 ? 'inline-block' : 'none';
+        undoBtn.textContent = 'Undo (' + manualFilterHistory.length + ')';
+    }
 }
 
 function updateManualFilterVisuals() {
@@ -2671,6 +2698,8 @@ function resetFilters() {
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
     // 也清除手动过滤
     manualBlacklist.clear();
+    manualFilterHistory = [];
+    updateUndoButton();
     if (manualFilterMode) { toggleManualFilter(); }
     updateManualFilterVisuals();
     applyFilters();
@@ -3885,9 +3914,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isNaN(pos)) return;
             if (manualBlacklist.has(pos)) {
                 manualBlacklist.delete(pos);  // 取消过滤
+                manualFilterHistory.push({pos: pos, action: 'remove'});
             } else {
                 manualBlacklist.add(pos);     // 添加到黑名单
+                manualFilterHistory.push({pos: pos, action: 'add'});
             }
+            updateUndoButton();
             updateManualFilterVisuals();
             applyFilters();
         });
