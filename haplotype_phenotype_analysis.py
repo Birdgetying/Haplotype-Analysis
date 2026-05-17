@@ -6478,6 +6478,15 @@ class ReportGenerator:
         .bar-median {{ position: absolute; top: 2px; height: 16px; width: 2px; background: #2c3e50; }}
         .data-dot {{ position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(44,62,80,0.55); transform: translateX(-50%); }}
         .n-cell {{ width: auto !important; min-width: 60px !important; overflow: visible !important; font-size: 11px; color: #666; }}
+        /* 手动过滤模式 */
+        .manual-mode-btn {{ padding: 5px 12px; border: 2px solid #e74c3c; border-radius: 4px; cursor: pointer; font-size: 11px; background: white; color: #e74c3c; font-weight: 600; transition: all 0.2s; }}
+        .manual-mode-btn.active {{ background: #e74c3c; color: white; }}
+        .manual-mode-btn:hover {{ opacity: 0.85; }}
+        .manual-clear-btn {{ padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 11px; background: #f8f9fa; color: #555; display: none; }}
+        .manual-clear-btn.show {{ display: inline-block; }}
+        .manual-clear-btn:hover {{ background: #e8e8e8; }}
+        .manual-filtered {{ opacity: 0.15 !important; cursor: pointer; }}
+        .manual-filtering {{ cursor: crosshair; }}
     </style>
 </head>
 <body>
@@ -6531,6 +6540,9 @@ class ReportGenerator:
                 <label><input type="checkbox" class="syn-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
             </span>
         </div>
+        <span style="border-left:1px solid #ddd;padding-left:12px;margin-left:4px;"></span>
+        <button id="manualFilterBtn" class="manual-mode-btn" onclick="toggleManualFilter()" title="Click variants in gene structure to hide them">Manual Filter: OFF</button>
+        <button id="manualClearBtn" class="manual-clear-btn" onclick="clearManualFilter()" title="Clear all manually filtered variants">Clear Manual</button>
         <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
     </div>
     
@@ -7298,6 +7310,8 @@ var ldR2Matrix = __LD_R2_MATRIX__;  // LD r²矩阵（n x n），与displayPosit
 
 // ==================== 过滤功能 ====================
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
+var manualFilterMode = false;
+var manualBlacklist = new Set();  // 手动过滤的变异位置集合
 
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
@@ -7394,6 +7408,40 @@ function updateFilterDisplay(type, value) {
     }
 }
 
+function toggleManualFilter() {
+    manualFilterMode = !manualFilterMode;
+    var btn = document.getElementById('manualFilterBtn');
+    var clearBtn = document.getElementById('manualClearBtn');
+    if (manualFilterMode) {
+        btn.textContent = 'Manual Filter: ON';
+        btn.classList.add('active');
+        clearBtn.classList.add('show');
+    } else {
+        btn.textContent = 'Manual Filter: OFF';
+        btn.classList.remove('active');
+        clearBtn.classList.remove('show');
+    }
+    updateManualFilterVisuals();
+}
+
+function clearManualFilter() {
+    manualBlacklist.clear();
+    updateManualFilterVisuals();
+    applyFilters();
+}
+
+function updateManualFilterVisuals() {
+    // 更新变异圆圈的状态：手动过滤的显示为半透明（仅在手动模式下显示视觉提示）
+    document.querySelectorAll('.var-circle').forEach(function(circle) {
+        var pos = parseInt(circle.getAttribute('data-pos'));
+        if (manualFilterMode && manualBlacklist.has(pos)) {
+            circle.classList.add('manual-filtered');
+        } else {
+            circle.classList.remove('manual-filtered');
+        }
+    });
+}
+
 function resetFilters() {
     // Reset 时恢复默认参数
     document.getElementById('mafSlider').value     = 0.05;
@@ -7404,6 +7452,10 @@ function resetFilters() {
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
+    // 也清除手动过滤
+    manualBlacklist.clear();
+    if (manualFilterMode) { toggleManualFilter(); }
+    updateManualFilterVisuals();
     applyFilters();
 }
 
@@ -7826,6 +7878,11 @@ function applyFilters() {
     // 构建通过过滤的位置集合
     var posSet = {};
     filtered.forEach(function(d){ posSet[d.pos] = true; });
+
+    // 移除手动黑名单中的位点
+    manualBlacklist.forEach(function(pos) {
+        delete posSet[pos];
+    });
     
     // 获取所有变异列的位置（从第4列开始，前3列是Haplotype/Effect/Phenotype）
     var allThs = document.querySelectorAll('.data-table thead th');
@@ -7882,6 +7939,9 @@ function applyFilters() {
         if (table) { void table.offsetHeight; }
         drawLDTriangle();
     }, 60);
+
+    // 更新手动过滤视觉状态
+    updateManualFilterVisuals();
 }
 
 // 同步更新表格列：隐藏被过滤的列，重新排列保留的列
@@ -8596,6 +8656,31 @@ document.addEventListener('DOMContentLoaded', function() {
     applyFilters();
     // 初始化LD倒三角图
     setTimeout(function() { drawLDTriangle(); }, 300);
+
+    // 手动过滤模式：点击变异圆圈过滤/取消过滤
+    var geneSVG = document.getElementById('gene-structure-svg');
+    if (geneSVG) {
+        geneSVG.addEventListener('click', function(e) {
+            if (!manualFilterMode) return;
+            var circle = e.target.closest('.var-circle');
+            if (!circle) return;
+            var pos = parseInt(circle.getAttribute('data-pos'));
+            if (isNaN(pos)) return;
+            if (manualBlacklist.has(pos)) {
+                manualBlacklist.delete(pos);  // 取消过滤
+            } else {
+                manualBlacklist.add(pos);     // 添加到黑名单
+            }
+            updateManualFilterVisuals();
+            applyFilters();
+        });
+        // 手动模式下改变光标
+        geneSVG.addEventListener('mousemove', function(e) {
+            if (!manualFilterMode) return;
+            var circle = e.target.closest('.var-circle');
+            geneSVG.style.cursor = circle ? 'pointer' : '';
+        });
+    }
 
     // 自动水平居中到基因结构区域
     setTimeout(function() {
