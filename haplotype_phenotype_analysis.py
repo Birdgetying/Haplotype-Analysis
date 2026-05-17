@@ -7297,7 +7297,7 @@ var regionEnd    = {region_end};
 var haplotypeScoreData = {haplotype_score_json};
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
-var hasPromoter  = {has_promoter_variants_json};  // 是否有启动子变异
+var hasPromoter  = {has_promoter_variants_json};
 var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
 var geneAreaWidth = {gene_area_width_js};  // 基因区域宽度（与基因结构图完全一致）
 var gwasPlotWidth = {gwas_plot_width};  // GWAS图绘图区域宽度（基因区域+图例）
@@ -7307,13 +7307,13 @@ var leadVariantPos = __LEAD_POS__;
 var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
 var displayPositions = __DISPLAY_POSITIONS__;  // 显示的变异位置列表
-var ldR2Matrix = __LD_R2_MATRIX__;  // LD r²矩阵（n x n），与displayPositions对应
+var ldR2Matrix = __LD_R2_MATRIX__;
 
 // ==================== 过滤功能 ====================
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
 var manualFilterMode = false;
-var manualBlacklist = new Set();  // 手动过滤的变异位置集合
-var manualFilterHistory = [];  // 记录操作历史 {pos, action: 'add'|'remove'}
+var manualBlacklist = new Set();
+var manualFilterHistory = [];
 
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
@@ -7458,7 +7458,6 @@ function updateUndoButton() {
 }
 
 function updateManualFilterVisuals() {
-    // 更新变异圆圈的状态：手动过滤的显示为半透明（仅在手动模式下显示视觉提示）
     document.querySelectorAll('.var-circle').forEach(function(circle) {
         var pos = parseInt(circle.getAttribute('data-pos'));
         if (manualFilterMode && manualBlacklist.has(pos)) {
@@ -7479,12 +7478,10 @@ function resetFilters() {
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
-    // 也清除手动过滤
     manualBlacklist.clear();
     manualFilterHistory = [];
     updateUndoButton();
     if (manualFilterMode) { toggleManualFilter(); }
-    updateManualFilterVisuals();
     applyFilters();
 }
 
@@ -7909,9 +7906,11 @@ function applyFilters() {
     filtered.forEach(function(d){ posSet[d.pos] = true; });
 
     // 移除手动黑名单中的位点
-    manualBlacklist.forEach(function(pos) {
-        delete posSet[pos];
-    });
+    if (manualBlacklist.size > 0) {
+        manualBlacklist.forEach(function(pos) {
+            delete posSet[pos];
+        });
+    }
     
     // 获取所有变异列的位置（从第4列开始，前3列是Haplotype/Effect/Phenotype）
     var allThs = document.querySelectorAll('.data-table thead th');
@@ -7969,8 +7968,8 @@ function applyFilters() {
         drawLDTriangle();
     }, 60);
 
-    // 更新手动过滤视觉状态
-    updateManualFilterVisuals();
+    // 更新手动过滤视觉状态（仅在手动模式下需要）
+    if (manualFilterMode) updateManualFilterVisuals();
 }
 
 // 同步更新表格列：隐藏被过滤的列，重新排列保留的列
@@ -8696,11 +8695,13 @@ document.addEventListener('DOMContentLoaded', function() {
             var pos = parseInt(circle.getAttribute('data-pos'));
             if (isNaN(pos)) return;
             if (manualBlacklist.has(pos)) {
-                manualBlacklist.delete(pos);  // 取消过滤
+                manualBlacklist.delete(pos);
                 manualFilterHistory.push({pos: pos, action: 'remove'});
+                if (manualFilterHistory.length > 100) manualFilterHistory.shift();
             } else {
-                manualBlacklist.add(pos);     // 添加到黑名单
+                manualBlacklist.add(pos);
                 manualFilterHistory.push({pos: pos, action: 'add'});
+                if (manualFilterHistory.length > 100) manualFilterHistory.shift();
             }
             updateUndoButton();
             updateManualFilterVisuals();
@@ -10952,7 +10953,6 @@ document.addEventListener('keydown', (e) => {{
                                       chrom: str = None, gene_id: str = None,
                                       variant_pvalues: dict = None) -> str:
         """生成独立的基因结构图HTML（含变异位点标记和GWAS p值着色）"""
-        import json as _json
 
         if not variant_positions:
             print("[WARNING] 无变异位点数据，跳过基因结构图生成")
@@ -11052,9 +11052,9 @@ document.addEventListener('keydown', (e) => {{
 
         # 变异位点标记
         var_type_colors = {
-            'promoter': '#2ecc71', 'UTR': '#e74c3c', 'intron': '#f39c12',
-            'missense': '#e74c3c', 'synonymous': '#3498db',
-            'INS': '#e74c3c', 'DEL': '#3498db', 'SV': '#8e44ad', 'other': '#999'
+            'promoter': '#2ecc71', 'UTR': '#9b59b6', 'intron': '#607d8b',
+            'missense': '#e74c3c', 'synonymous': '#f39c12',
+            'INS': '#e74c3c', 'DEL': '#3498db', 'SV': '#e91e63', 'other': '#95a5a6'
         }
         for idx, pos in enumerate(variant_positions):
             rel_pct = (pos - region_start) / (region_end - region_start)
@@ -11128,7 +11128,6 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
                                    variant_info: dict = None,
                                    chrom: str = None, gene_id: str = None) -> str:
         """生成独立的LD三角热图HTML（含MAF/缺失率/注释过滤控件）"""
-        import json as _json
 
         if not display_positions:
             positions = self._cached_display_positions if hasattr(self, '_cached_display_positions') else []
@@ -11161,9 +11160,9 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
                 'is_sv': bool(info.get('is_sv', False)),
             })
 
-        pos_json = _json.dumps([int(p) for p in positions])
-        mat_json = _json.dumps(matrix)
-        var_json = _json.dumps(variant_data)
+        pos_json = json.dumps([int(p) for p in positions])
+        mat_json = json.dumps(matrix)
+        var_json = json.dumps(variant_data)
         n = len(positions)
         canvas_w = max(400, n * 22)
         canvas_h = max(300, int(n * 11))
@@ -11442,7 +11441,6 @@ draw();
     def generate_haplotype_score_html(self, score_results: dict = None,
                                        gene_id: str = None, phenotype_col: str = None) -> str:
         """生成独立的单倍型评分散点图HTML（含回归线和统计信息）"""
-        import json as _json
 
         if score_results is None:
             score_results = getattr(self, '_cached_haplotype_score', None)
@@ -11455,7 +11453,7 @@ draw();
             print("[WARNING] 评分数据为空，跳过单倍型评分图生成")
             return ""
 
-        score_json = _json.dumps(score_results, cls=NumpyEncoder)
+        score_json = json.dumps(score_results, cls=NumpyEncoder)
         gene_label = gene_id or "Gene"
 
         html = f'''<!DOCTYPE html>
@@ -11603,7 +11601,6 @@ if (samples.length < 2) {{
                                        phenotype_col: str = None, gene_id: str = None,
                                        chrom: str = None) -> str:
         """生成独立的效应量图和箱线图HTML（所有表型综合页面，D3渲染）"""
-        import json as _json
 
         if hap_sample_df is None or len(hap_sample_df) == 0:
             print("[WARNING] 无数据，跳过效应/箱线图生成")
@@ -11643,8 +11640,8 @@ if (samples.length < 2) {{
             if len(groups) >= 2:
                 box_data[str(pc)] = groups
 
-        box_json = _json.dumps(box_data)
-        effects_json = _json.dumps(effects, cls=NumpyEncoder)
+        box_json = json.dumps(box_data)
+        effects_json = json.dumps(effects, cls=NumpyEncoder)
         gene_label = gene_id or "Gene"
         n_pheno = len(box_data)
 
