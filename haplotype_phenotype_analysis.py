@@ -8656,7 +8656,18 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace("__GENE_LABEL__", _glabel)
         html = html.replace("__DISPLAY_POSITIONS__", _display_pos_json)
         html = html.replace("__LD_R2_MATRIX__", ld_r2_json)
-        
+
+        # 缓存计算数据，供独立组件生成器复用
+        self._cached_display_positions = display_positions
+        self._cached_display_orig_indices = display_orig_indices
+        self._cached_ld_r2_matrix = ld_r2_matrix
+        self._cached_variant_info = variant_info
+        self._cached_snp_effects = snp_effects
+        try:
+            self._cached_haplotype_score = score_results
+        except NameError:
+            self._cached_haplotype_score = None
+
         # 使用基因名作为HTML文件名（如果提供了gene_id）
         if gene_id:
             html_filename = f"{gene_id}.html"
@@ -8995,9 +9006,9 @@ const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
             d.fy = Math.max(r, Math.min(height - r, e.y));
         }})
         .on('end', function(e, d) {{ 
-            if (!e.active) sim.alphaTarget(0); 
-            d.fx = null; 
-            d.fy = null; 
+            if (!e.active) sim.alphaTarget(0);
+            // 不释放fx/fy，节点保持在用户拖动的位置
+            sim.stop();
         }})
     );
 
@@ -10815,6 +10826,900 @@ document.addEventListener('keydown', (e) => {{
         print(f"[INFO] 多图整合面板已保存: {out}")
         return out
 
+    def generate_gene_structure_html(self, variant_positions: list,
+                                      region_start: int, region_end: int,
+                                      gene_start: int = None, gene_end: int = None,
+                                      promoter_start: int = None, promoter_end: int = None,
+                                      strand: str = '+', exons: list = None, cds: list = None,
+                                      variant_info: dict = None, snp_effects: dict = None,
+                                      chrom: str = None, gene_id: str = None,
+                                      variant_pvalues: dict = None) -> str:
+        """生成独立的基因结构图HTML（含变异位点标记和GWAS p值着色）"""
+        import json as _json
+
+        if not variant_positions:
+            print("[WARNING] 无变异位点数据，跳过基因结构图生成")
+            return ""
+
+        g_start = gene_start if gene_start is not None else region_start
+        g_end = gene_end if gene_end is not None else region_end
+        region_len_kb = (region_end - region_start) / 1000
+        n_vars = len(variant_positions)
+        seq_col_w = 20
+        gene_area_start = 450
+        gene_area_width = n_vars * seq_col_w
+        legend_w = 220
+        svg_width = gene_area_start + gene_area_width + legend_w
+        svg_height = 200
+        axis_y = 28
+        gene_y = 48
+        gene_h = 18
+        exon_h = gene_h
+        var_top_y = axis_y - 8
+
+        def pos_to_x(pos):
+            return gene_area_start + ((pos - region_start) / (region_end - region_start)) * gene_area_width
+
+        gene_x1 = pos_to_x(g_start)
+        gene_x2 = pos_to_x(g_end)
+        intron_y = gene_y + gene_h // 2
+
+        svg_parts = []
+        svg_parts.append(f'<svg id="gene-structure-svg" data-gene-start="{gene_area_start}" data-gene-width="{gene_area_width}" width="{svg_width}" height="{svg_height}" style="display:block;margin:0;overflow:visible;">')
+        svg_parts.append('''<defs>
+            <pattern id="utrPattern" patternUnits="userSpaceOnUse" width="6" height="6">
+                <line x1="0" y1="6" x2="6" y2="0" stroke="#9b59b6" stroke-width="1" opacity="0.5"/>
+            </pattern>
+        </defs>''')
+        svg_parts.append(f'<text x="{gene_area_start + gene_area_width/2}" y="13" font-size="11" fill="#2c3e50" text-anchor="middle" font-weight="600">Relative Position (kb)</text>')
+        svg_parts.append(f'<text x="{gene_area_start + gene_area_width/2}" y="8" font-size="10" fill="#3498db" text-anchor="middle" font-weight="500">{gene_id or chrom or "Gene"}</text>')
+        svg_parts.append(f'<line x1="{gene_area_start}" y1="{axis_y}" x2="{gene_area_start + gene_area_width}" y2="{axis_y}" stroke="#333" stroke-width="1.2"/>')
+
+        n_ticks = 9 if region_len_kb >= 4 else max(5, int(region_len_kb * 2) + 1)
+        for i in range(n_ticks):
+            if strand == '+':
+                x = gene_area_start + i * gene_area_width / (n_ticks - 1)
+                kb = i * region_len_kb / (n_ticks - 1)
+            else:
+                x = gene_area_start + (n_ticks - 1 - i) * gene_area_width / (n_ticks - 1)
+                kb = i * region_len_kb / (n_ticks - 1)
+            svg_parts.append(f'<line x1="{x}" y1="{var_top_y-2}" x2="{x}" y2="{gene_y+gene_h}" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>')
+            svg_parts.append(f'<line x1="{x}" y1="{axis_y-2}" x2="{x}" y2="{axis_y+4}" stroke="#555" stroke-width="1.5"/>')
+            svg_parts.append(f'<text x="{x}" y="{var_top_y-5}" font-size="8.5" fill="#555" text-anchor="middle">{kb:.1f}</text>')
+
+        svg_parts.append(f'<line x1="{gene_x1}" y1="{intron_y}" x2="{gene_x2}" y2="{intron_y}" stroke="#2c3e50" stroke-width="2"/>')
+
+        if promoter_start is not None and promoter_end is not None:
+            prom_x1 = pos_to_x(promoter_start)
+            prom_x2 = pos_to_x(promoter_end)
+            prom_w = abs(prom_x2 - prom_x1)
+            if prom_w > 2:
+                svg_parts.append(f'<rect x="{min(prom_x1, prom_x2)}" y="{gene_y}" width="{prom_w}" height="{exon_h}" fill="#f39c12" opacity="0.4" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="3,2" rx="2"/>')
+                if prom_w > 40:
+                    svg_parts.append(f'<text x="{min(prom_x1, prom_x2) + prom_w/2}" y="{gene_y + exon_h/2 + 3}" font-size="7" fill="#d35400" text-anchor="middle" font-weight="600">Promoter</text>')
+
+        if exons:
+            for ex_start, ex_end in exons:
+                ex_x1 = pos_to_x(ex_start)
+                ex_x2 = pos_to_x(ex_end)
+                ex_w = ex_x2 - ex_x1
+                if ex_w < 2:
+                    continue
+                cds_overlaps = []
+                for c_start, c_end in (cds or []):
+                    overlap_start = max(ex_start, c_start)
+                    overlap_end = min(ex_end, c_end)
+                    if overlap_start < overlap_end:
+                        cds_overlaps.append((overlap_start, overlap_end))
+                if not cds_overlaps:
+                    svg_parts.append(f'<rect x="{ex_x1}" y="{gene_y}" width="{ex_w}" height="{exon_h}" fill="white" stroke="#3498db" stroke-width="1.5" rx="1"/>')
+                else:
+                    svg_parts.append(f'<rect x="{ex_x1}" y="{gene_y}" width="{ex_w}" height="{exon_h}" fill="white" stroke="#3498db" stroke-width="1" rx="1"/>')
+                    for cds_s, cds_e in cds_overlaps:
+                        cds_x1 = pos_to_x(cds_s)
+                        cds_x2 = pos_to_x(cds_e)
+                        cds_w = cds_x2 - cds_x1
+                        if cds_w > 1:
+                            svg_parts.append(f'<rect x="{cds_x1}" y="{gene_y}" width="{cds_w}" height="{exon_h}" fill="#3498db" rx="1"/>')
+        else:
+            svg_parts.append(f'<rect x="{gene_x1}" y="{gene_y}" width="{gene_x2-gene_x1}" height="{exon_h}" fill="#3498db" stroke="#2980b9" stroke-width="1" rx="1"/>')
+
+        arrow_size = 10
+        arrow_line = 8
+        if strand == '+':
+            svg_parts.append(f'<line x1="{gene_x2}" y1="{intron_y}" x2="{gene_x2+arrow_line}" y2="{intron_y}" stroke="#2c3e50" stroke-width="2"/>')
+            svg_parts.append(f'<polygon points="{gene_x2+arrow_line+arrow_size},{intron_y} {gene_x2+arrow_line},{intron_y-arrow_size//2} {gene_x2+arrow_line},{intron_y+arrow_size//2}" fill="#2c3e50"/>')
+        else:
+            svg_parts.append(f'<line x1="{gene_x1}" y1="{intron_y}" x2="{gene_x1-arrow_line}" y2="{intron_y}" stroke="#2c3e50" stroke-width="2"/>')
+            svg_parts.append(f'<polygon points="{gene_x1-arrow_line-arrow_size},{intron_y} {gene_x1-arrow_line},{intron_y-arrow_size//2} {gene_x1-arrow_line},{intron_y+arrow_size//2}" fill="#2c3e50"/>')
+
+        # 变异位点标记
+        var_type_colors = {
+            'promoter': '#2ecc71', 'UTR': '#e74c3c', 'intron': '#f39c12',
+            'missense': '#e74c3c', 'synonymous': '#3498db',
+            'INS': '#e74c3c', 'DEL': '#3498db', 'SV': '#8e44ad', 'other': '#999'
+        }
+        for idx, pos in enumerate(variant_positions):
+            rel_pct = (pos - region_start) / (region_end - region_start)
+            gene_x = gene_area_start + rel_pct * gene_area_width
+            table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2
+            ann = (snp_effects or {}).get(pos, 'other')
+            pv = (variant_pvalues or {}).get(pos, None)
+            fill = var_type_colors.get(ann, '#999')
+            r = 3.5
+            if pv is not None:
+                if pv < 0.01:
+                    fill = '#8B0000'
+                elif pv < 0.05:
+                    fill = '#e74c3c'
+            svg_parts.append(f'<circle cx="{gene_x}" cy="20" r="{r}" fill="{fill}" stroke="white" stroke-width="0.5"><title>Pos: {pos}</title></circle>')
+            svg_parts.append(f'<line x1="{gene_x}" y1="{r+20}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{fill}" stroke-width="1.2" opacity="0.7"/>')
+
+        svg_parts.append('</svg>')
+
+        # 图例
+        legend_items = [
+            ('#2ecc71', 'Promoter'), ('#e74c3c', 'UTR/CDS'), ('#f39c12', 'Intron'),
+            ('#3498db', 'Synonymous'), ('#8e44ad', 'SV'), ('#999', 'Other'),
+        ]
+        legend_parts = ['<div style="display:flex;gap:12px;flex-wrap:wrap;padding:10px 20px;font-size:11px;">']
+        for color, label in legend_items:
+            legend_parts.append(f'<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:{color};display:inline-block;"></span>{label}</span>')
+        legend_parts.append('<span style="margin-left:12px;border-left:1px solid #ddd;padding-left:12px;">P&lt;0.05: red | P&lt;0.01: dark red</span>')
+        legend_parts.append('</div>')
+
+        svg_str = '\n'.join(svg_parts)
+        legend_str = '\n'.join(legend_parts)
+        total_w = svg_width + 40
+
+        html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gene Structure — {gene_id or chrom or "Gene"}</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }}
+.container {{ max-width: {total_w + 60}px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
+.header {{ background: linear-gradient(135deg, #2c3e50, #34495e); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }}
+.header h1 {{ font-size: 18px; margin-bottom: 4px; }}
+.header-info {{ font-size: 11px; opacity: 0.85; }}
+.svg-container {{ padding: 20px; overflow-x: auto; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>Gene Structure — {gene_id or chrom or "Gene"}</h1>
+    <div class="header-info">Region: {chrom or "N/A"}:{region_start:,}-{region_end:,} | Length: {region_len_kb:.1f} kb | Variants: {n_vars} | Strand: {strand}</div>
+</div>
+{legend_str}
+<div class="svg-container">
+{svg_str}
+</div>
+</div>
+</body>
+</html>'''
+        out = os.path.join(self.output_dir, "gene_structure.html")
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write(html)
+        print(f"[INFO] 基因结构图已保存: {out}")
+        return out
+
+    def generate_ld_triangle_html(self, display_positions: list = None,
+                                   ld_r2_matrix: list = None,
+                                   variant_info: dict = None,
+                                   chrom: str = None, gene_id: str = None) -> str:
+        """生成独立的LD三角热图HTML（含MAF/缺失率/注释过滤控件）"""
+        import json as _json
+
+        if not display_positions:
+            positions = self._cached_display_positions if hasattr(self, '_cached_display_positions') else []
+        else:
+            positions = list(display_positions)
+        if not positions or len(positions) < 2:
+            print("[WARNING] 显示位点不足，跳过LD三角图生成")
+            return ""
+
+        matrix = ld_r2_matrix
+        if matrix is None:
+            matrix = getattr(self, '_cached_ld_r2_matrix', None)
+        if matrix is None:
+            matrix = []
+
+        vinfo = variant_info or getattr(self, '_cached_variant_info', None) or {}
+
+        # 构建variant_info_for_js
+        variant_data = []
+        for pos in positions:
+            info = vinfo.get(pos, {})
+            variant_data.append({
+                'pos': int(pos),
+                'maf': float(info.get('maf', 0.1)),
+                'missing_rate': float(info.get('missing_rate', 0.0)),
+                'annotation': str(info.get('annotation', 'other') or 'other'),
+                'ref': str(info.get('ref', '')),
+                'alt': str(info.get('alt', '')),
+                'len_diff': int(info.get('len_diff', 0)),
+                'is_sv': bool(info.get('is_sv', False)),
+            })
+
+        pos_json = _json.dumps([int(p) for p in positions])
+        mat_json = _json.dumps(matrix)
+        var_json = _json.dumps(variant_data)
+        n = len(positions)
+        canvas_w = max(400, n * 22)
+        canvas_h = max(300, int(n * 11))
+
+        html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LD Triangle — {gene_id or chrom or "Gene"}</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }}
+.container {{ max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
+.header {{ background: linear-gradient(135deg, #8e44ad, #9b59b6); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }}
+.header h1 {{ font-size: 18px; margin-bottom: 4px; }}
+.header-info {{ font-size: 11px; opacity: 0.85; }}
+.filter-panel {{ display: flex; align-items: center; gap: 18px; padding: 10px 20px; background: #f8f9fa; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }}
+.filter-group {{ display: flex; align-items: center; gap: 6px; font-size: 11px; }}
+.filter-group label {{ color: #555; font-weight: 500; }}
+.filter-group input[type="range"] {{ width: 90px; }}
+.filter-value {{ font-size: 10px; color: #3498db; min-width: 32px; }}
+.filter-btn {{ padding: 4px 10px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 11px; background: white; }}
+.filter-btn:hover {{ background: #e8e8e8; }}
+.filter-reset {{ background: #95a5a6; color: white; border: none; }}
+.filter-reset:hover {{ background: #7f8c8d; }}
+.plot-area {{ padding: 15px; overflow-x: auto; }}
+canvas {{ display: block; }}
+.tooltip {{ position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }}
+.colorbar {{ display: flex; align-items: center; margin-top: 6px; padding-left: 10px; font-size: 10px; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>LD Triangle Heatmap — {gene_id or chrom or "Gene"}</h1>
+    <div class="header-info">Variants: {n} | Region: {chrom or "N/A"}</div>
+</div>
+<div class="filter-panel">
+    <div class="filter-group">
+        <label>MAF ≥</label>
+        <input type="range" id="mafSlider" min="0" max="0.5" step="0.01" value="0.05" oninput="onFilterChange()">
+        <span class="filter-value" id="mafValue">0.05</span>
+    </div>
+    <div class="filter-group">
+        <label>Missing ≤</label>
+        <input type="range" id="missingSlider" min="0" max="1" step="0.05" value="0.2" oninput="onFilterChange()">
+        <span class="filter-value" id="missingValue">0.20</span>
+    </div>
+    <div class="filter-group">
+        <label>Annotation:</label>
+        <label><input type="checkbox" class="ann-cb" value="promoter" checked onchange="onFilterChange()"> Promoter</label>
+        <label><input type="checkbox" class="ann-cb" value="UTR" checked onchange="onFilterChange()"> UTR</label>
+        <label><input type="checkbox" class="ann-cb" value="intron" checked onchange="onFilterChange()"> Intron</label>
+        <label><input type="checkbox" class="ann-cb" value="other" checked onchange="onFilterChange()"> Other</label>
+    </div>
+    <div class="filter-group">
+        <label>Type:</label>
+        <label><input type="checkbox" class="type-cb" value="INS" checked onchange="onFilterChange()"> INS</label>
+        <label><input type="checkbox" class="type-cb" value="DEL" checked onchange="onFilterChange()"> DEL</label>
+        <label><input type="checkbox" class="type-cb" value="SV" checked onchange="onFilterChange()"> SV</label>
+        <label><input type="checkbox" class="type-cb" value="SNP" checked onchange="onFilterChange()"> SNP</label>
+    </div>
+    <button class="filter-btn filter-reset" onclick="resetFilters()">Reset</button>
+</div>
+<div class="plot-area">
+    <canvas id="ld-canvas" width="{canvas_w}" height="{canvas_h}" style="width:{canvas_w}px;height:{canvas_h}px;"></canvas>
+    <div class="colorbar">
+        <span style="margin-right:4px;">r²: </span>
+        <div style="background:linear-gradient(to right,#313695,#4575b4,#74add1,#abd9e9,#e0f3f8,#fee090,#fdae61,#f46d43,#d73027,#a50026);width:100px;height:10px;border-radius:2px;display:inline-block;"></div>
+        <span style="margin:0 4px;">0</span><span>1</span>
+        <span id="ld-info" style="margin-left:12px;color:#555;"></span>
+    </div>
+</div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+var allPositions = {pos_json};
+var ldR2Matrix = {mat_json};
+var variantData = {var_json};
+
+function annNorm(d) {{
+    var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
+    if (a === 'promoter' && d.overlaps_cds) return 'other';
+    if (a.indexOf('missense') !== -1) return 'missense';
+    if (a.indexOf('synonymous') !== -1) return 'synonymous';
+    if (a === 'INS' || a === 'DEL' || a === 'SV' || a === 'indel') {{
+        if (d.functional_ann) {{
+            var fa = String(d.functional_ann).toLowerCase();
+            if (fa.indexOf('utr') !== -1) return 'UTR';
+            if (fa.indexOf('intron') !== -1) return 'intron';
+            if (fa.indexOf('promoter') !== -1) {{
+                if (d.overlaps_cds) return 'other';
+                return 'promoter';
+            }}
+        }}
+        return 'other';
+    }}
+    return a;
+}}
+
+function typeNorm(d) {{
+    var a = String(d.annotation || '');
+    if (a === 'INS') return 'INS';
+    if (a === 'DEL') return 'DEL';
+    if (a === 'SV') return 'SV';
+    if (a === 'indel') return 'INS';
+    return 'SNP';
+}}
+
+function getFilteredIndices() {{
+    var maf = parseFloat(document.getElementById('mafSlider').value);
+    var miss = parseFloat(document.getElementById('missingSlider').value);
+    document.getElementById('mafValue').textContent = maf.toFixed(2);
+    document.getElementById('missingValue').textContent = miss.toFixed(2);
+
+    var annEnabled = {{}};
+    document.querySelectorAll('.ann-cb').forEach(function(cb) {{ annEnabled[cb.value] = cb.checked; }});
+    var typeEnabled = {{}};
+    document.querySelectorAll('.type-cb').forEach(function(cb) {{ typeEnabled[cb.value] = cb.checked; }});
+
+    var indices = [];
+    for (var i = 0; i < variantData.length; i++) {{
+        var d = variantData[i];
+        if (d.maf < maf) continue;
+        if (d.missing_rate > miss) continue;
+        var ann = annNorm(d);
+        if (!annEnabled[ann] && ann !== 'missense' && ann !== 'synonymous') continue;
+        if (ann === 'missense' || ann === 'synonymous') {{
+            if (d.annotation === 'missense' && !annEnabled['missense']) continue;
+            if (d.annotation === 'synonymous' && !annEnabled['synonymous']) continue;
+        }}
+        var t = typeNorm(d);
+        if (!typeEnabled[t]) continue;
+        indices.push(i);
+    }}
+    return indices;
+}}
+
+function draw() {{
+    var canvas = document.getElementById('ld-canvas');
+    if (!canvas) return;
+    var filtered = getFilteredIndices();
+    if (filtered.length < 2) {{
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('ld-info').textContent = 'Too few variants after filtering';
+        return;
+    }}
+
+    var n = filtered.length;
+    var cellW = 20;
+    var cellH = 10;
+    var padTop = 10;
+    var padLeft = 20;
+    var padBot = 10;
+    var w = padLeft + n * cellW;
+    var h = padTop + n * cellH + padBot;
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    var colorScale = [
+        {{v:0.0, r:49, g:54, b:149}}, {{v:0.1, r:69, g:117, b:180}},
+        {{v:0.2, r:116, g:173, b:209}}, {{v:0.3, r:171, g:217, b:233}},
+        {{v:0.4, r:224, g:243, b:248}}, {{v:0.5, r:254, g:224, b:144}},
+        {{v:0.6, r:253, g:174, b:97}}, {{v:0.7, r:244, g:109, b:67}},
+        {{v:0.8, r:215, g:48, b:39}}, {{v:0.9, r:165, g:0, b:38}},
+        {{v:1.0, r:165, g:0, b:38}}
+    ];
+    function getColor(r2) {{
+        r2 = Math.max(0, Math.min(1, r2));
+        for (var ci = 1; ci < colorScale.length; ci++) {{
+            if (r2 <= colorScale[ci].v) {{
+                var c0 = colorScale[ci-1], c1 = colorScale[ci];
+                var t = (r2 - c0.v) / (c1.v - c0.v);
+                var r = Math.round(c0.r + t * (c1.r - c0.r));
+                var g = Math.round(c0.g + t * (c1.g - c0.g));
+                var b = Math.round(c0.b + t * (c1.b - c0.b));
+                return 'rgb(' + r + ',' + g + ',' + b + ')';
+            }}
+        }}
+        return 'rgb(165,0,38)';
+    }}
+
+    for (var i = 0; i < n; i++) {{
+        var fi = filtered[i];
+        for (var j = i + 1; j < n; j++) {{
+            var fj = filtered[j];
+            var r2 = 0;
+            if (fi < ldR2Matrix.length && fj < ldR2Matrix[fi].length) {{
+                r2 = ldR2Matrix[fi][fj];
+            }}
+            var x = padLeft + i * cellW + cellW/2;
+            var y = padTop + j * cellH + cellH/2;
+            ctx.beginPath();
+            ctx.moveTo(x, y - cellH/2);
+            ctx.lineTo(x + cellW/2, y);
+            ctx.lineTo(x, y + cellH/2);
+            ctx.lineTo(x - cellW/2, y);
+            ctx.closePath();
+            ctx.fillStyle = getColor(r2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 0.3;
+            ctx.stroke();
+        }}
+    }}
+
+    // 位置标签
+    ctx.fillStyle = '#555';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center';
+    for (var i = 0; i < n; i += Math.max(1, Math.floor(n / 15))) {{
+        var pos = variantData[filtered[i]].pos;
+        ctx.fillText(pos, padLeft + i * cellW + cellW/2, h - 2);
+    }}
+
+    document.getElementById('ld-info').textContent = n + ' variants, ' + (n*(n-1)/2) + ' pairs';
+}}
+
+function onFilterChange() {{ draw(); }}
+function resetFilters() {{
+    document.getElementById('mafSlider').value = 0.05;
+    document.getElementById('missingSlider').value = 0.2;
+    document.querySelectorAll('.ann-cb').forEach(function(cb) {{ cb.checked = true; }});
+    document.querySelectorAll('.type-cb').forEach(function(cb) {{ cb.checked = true; }});
+    draw();
+}}
+
+// Canvas tooltip
+var canvas = document.getElementById('ld-canvas');
+var tooltip = document.getElementById('tooltip');
+canvas.addEventListener('mousemove', function(e) {{
+    var rect = canvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+    var filtered = getFilteredIndices();
+    var n = filtered.length;
+    var cellW = 20, cellH = 10, padLeft = 20, padTop = 10;
+    var found = false;
+    for (var i = 0; i < n; i++) {{
+        for (var j = i + 1; j < n; j++) {{
+            var cx = padLeft + i * cellW + cellW/2;
+            var cy = padTop + j * cellH + cellH/2;
+            if (Math.abs(mx - cx) < cellW/2 && Math.abs(my - cy) < cellH/2) {{
+                var fi = filtered[i], fj = filtered[j];
+                var r2 = (fi < ldR2Matrix.length && fj < ldR2Matrix[fi].length) ? ldR2Matrix[fi][fj].toFixed(3) : 'N/A';
+                tooltip.style.display = 'block';
+                tooltip.innerHTML = 'Pos ' + variantData[fi].pos + ' — ' + variantData[fj].pos + '<br>r² = ' + r2;
+                tooltip.style.left = (e.clientX + 12) + 'px';
+                tooltip.style.top = (e.clientY - 24) + 'px';
+                found = true;
+                break;
+            }}
+        }}
+        if (found) break;
+    }}
+    if (!found) tooltip.style.display = 'none';
+}});
+canvas.addEventListener('mouseleave', function() {{ tooltip.style.display = 'none'; }});
+
+draw();
+</script>
+</body>
+</html>'''
+        out = os.path.join(self.output_dir, "ld_triangle.html")
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write(html)
+        print(f"[INFO] LD三角热图已保存: {out}")
+        return out
+
+    def generate_haplotype_score_html(self, score_results: dict = None,
+                                       gene_id: str = None, phenotype_col: str = None) -> str:
+        """生成独立的单倍型评分散点图HTML（含回归线和统计信息）"""
+        import json as _json
+
+        if score_results is None:
+            score_results = getattr(self, '_cached_haplotype_score', None)
+        if score_results is None:
+            print("[WARNING] 无评分数据，跳过单倍型评分图生成")
+            return ""
+
+        per_sample = score_results.get('per_sample', [])
+        if not per_sample:
+            print("[WARNING] 评分数据为空，跳过单倍型评分图生成")
+            return ""
+
+        score_json = _json.dumps(score_results, cls=NumpyEncoder)
+        gene_label = gene_id or "Gene"
+
+        html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Haplotype Score — {gene_label}</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }}
+.container {{ max-width: 750px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
+.header {{ background: linear-gradient(135deg, #e67e22, #d35400); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }}
+.header h1 {{ font-size: 18px; margin-bottom: 4px; }}
+.header-info {{ font-size: 11px; opacity: 0.85; }}
+.plot-container {{ padding: 20px; }}
+#score-viz {{ width: 100%; height: 450px; }}
+.legend-area {{ display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 20px 16px; font-size: 10px; }}
+.legend-item {{ display: flex; align-items: center; gap: 4px; }}
+.legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
+.stats-area {{ padding: 8px 20px 16px; font-size: 11px; color: #555; }}
+.tooltip {{ position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 7px 11px; border-radius: 5px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>Haplotype Score vs Phenotype — {gene_label}</h1>
+    <div class="header-info">R² = {score_results.get('r_squared', 'N/A')} | p = {score_results.get('regression_pvalue', 'N/A')}</div>
+</div>
+<div class="plot-container"><div id="score-viz"></div></div>
+<div class="stats-area" id="stats"></div>
+<div class="legend-area" id="legend"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+var scoreData = {score_json};
+
+var container = d3.select('#score-viz');
+var samples = (scoreData.per_sample || []).filter(function(d) {{
+    return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
+}});
+if (samples.length < 2) {{
+    container.append('p').style('color','#999').style('text-align','center').style('padding','60px').text('Not enough data points');
+}} else {{
+    var margin = {{top: 20, right: 30, bottom: 45, left: 55}};
+    var box = container.node().getBoundingClientRect();
+    var width = Math.max(300, box.width - margin.left - margin.right);
+    var height = 400;
+    container.style('height', (height + margin.top + margin.bottom) + 'px');
+
+    var haplotypeColors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+    var haps = Array.from(new Set(samples.map(function(d) {{ return d.haplotype; }})));
+    var hapColor = {{}};
+    haps.forEach(function(h, i) {{ hapColor[h] = haplotypeColors[i % haplotypeColors.length]; }});
+
+    var xExt = d3.extent(samples, function(d) {{ return d.score; }});
+    var xPad = (xExt[1] - xExt[0]) * 0.08 || 0.05;
+    var x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, width]);
+
+    var yExt = d3.extent(samples, function(d) {{ return d.phenotype; }});
+    var yPad = (yExt[1] - yExt[0]) * 0.08 || 0.05;
+    var y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([height, 0]);
+
+    var svg = container.append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    svg.append('g').attr('class','grid').attr('transform','translate(0,' + height + ')')
+        .call(d3.axisBottom(x).ticks(5).tickSize(-height).tickFormat('')).attr('color','#e0e0e0');
+    svg.append('g').attr('class','grid')
+        .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat('')).attr('color','#e0e0e0');
+
+    if (scoreData.slope != null && scoreData.intercept != null) {{
+        var x1 = x.domain()[0], x2 = x.domain()[1];
+        var y1 = scoreData.slope * x1 + scoreData.intercept;
+        var y2 = scoreData.slope * x2 + scoreData.intercept;
+        svg.append('line').attr('x1',x(x1)).attr('y1',y(y1)).attr('x2',x(x2)).attr('y2',y(y2))
+            .attr('stroke','#c0392b').attr('stroke-width',1.8).attr('stroke-dasharray','6,3').attr('opacity',0.8);
+    }}
+
+    var tip = d3.select('#tooltip');
+    svg.selectAll('circle').data(samples).enter().append('circle')
+        .attr('cx', function(d) {{ return x(d.score); }})
+        .attr('cy', function(d) {{ return y(d.phenotype); }})
+        .attr('r', 5)
+        .attr('fill', function(d) {{ return hapColor[d.haplotype] || '#999'; }})
+        .attr('stroke', 'white').attr('stroke-width', 0.5).attr('opacity', 0.85)
+        .on('mouseover', function(event, d) {{
+            tip.style('display','block')
+                .html('<b>' + d.sample_id + '</b><br>Haplotype: ' + d.haplotype + '<br>Score: ' + d.score.toFixed(3) + '<br>Phenotype: ' + d.phenotype.toFixed(3));
+        }})
+        .on('mousemove', function(event) {{
+            tip.style('left',(event.pageX+12)+'px').style('top',(event.pageY-28)+'px');
+        }})
+        .on('mouseout', function() {{ tip.style('display','none'); }});
+
+    svg.append('g').attr('transform','translate(0,' + height + ')').call(d3.axisBottom(x).ticks(5))
+        .selectAll('text').attr('fill','#555').attr('font-size','10px');
+    svg.append('g').call(d3.axisLeft(y).ticks(5))
+        .selectAll('text').attr('fill','#555').attr('font-size','10px');
+
+    svg.append('text').attr('x',width/2).attr('y',height+36).attr('text-anchor','middle')
+        .attr('font-size','10px').attr('fill','#444').text('Haplotype Score');
+    svg.append('text').attr('transform','rotate(-90)').attr('x',-height/2).attr('y',-45)
+        .attr('text-anchor','middle').attr('font-size','10px').attr('fill','#444').text('Phenotype');
+
+    if (scoreData.r_squared != null) {{
+        var t = 'R² = ' + scoreData.r_squared.toFixed(3);
+        if (scoreData.regression_pvalue != null) t += '  p = ' + scoreData.regression_pvalue.toFixed(4);
+        svg.append('text').attr('x',width-6).attr('y',14).attr('text-anchor','end')
+            .attr('font-size','10px').attr('fill','#2c3e50').attr('font-weight','600').text(t);
+    }}
+
+    // Legend
+    var legHtml = '';
+    for (var h in hapColor) {{
+        legHtml += '<div class="legend-item"><span class="legend-dot" style="background:' + hapColor[h] + ';"></span>' + h + '</div>';
+    }}
+    document.getElementById('legend').innerHTML = legHtml;
+
+    // Stats
+    var weights = scoreData.component_weights || {{}};
+    var compNames = {{'variant_effect':'Variant Effect','burden':'Burden','gwas':'GWAS','multi_omics':'Multi-Omics','fine_mapping':'Fine-Map','effect_size':'Effect Size','genetic_distinct':'Gen. Distinct'}};
+    var parts = [];
+    for (var k in compNames) {{ if (weights[k] !== undefined) parts.push(compNames[k] + ': w=' + weights[k].toFixed(1)); }}
+    var statsText = 'Components: ' + parts.join(' | ');
+    if (scoreData.pve != null) statsText += ' | PVE=' + (scoreData.pve * 100).toFixed(1) + '%';
+    if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
+    document.getElementById('stats').textContent = statsText;
+}}
+</script>
+</body>
+</html>'''
+        out = os.path.join(self.output_dir, "haplotype_score.html")
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write(html)
+        print(f"[INFO] 单倍型评分图已保存: {out}")
+        return out
+
+    def generate_effect_boxplot_html(self, hap_sample_df, effect_results: dict = None,
+                                       phenotype_col: str = None, gene_id: str = None,
+                                       chrom: str = None) -> str:
+        """生成独立的效应量图和箱线图HTML（所有表型综合页面，D3渲染）"""
+        import json as _json
+
+        if hap_sample_df is None or len(hap_sample_df) == 0:
+            print("[WARNING] 无数据，跳过效应/箱线图生成")
+            return ""
+
+        effect_data = effect_results or {}
+        effects = effect_data.get('haplotype_effects', []) if effect_data else []
+
+        # 准备箱线图数据（JSON序列化）
+        pheno_cols = [c for c in hap_sample_df.columns if 'pheno' in c.lower()]
+        if not pheno_cols and phenotype_col:
+            pheno_cols = [phenotype_col]
+        if not pheno_cols and 'phenotype' in hap_sample_df.columns:
+            pheno_cols = ['phenotype']
+        hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
+
+        box_data = {}
+        for pc in pheno_cols[:8]:  # 最多前8个表型
+            groups = {}
+            for hap_name in hap_sample_df[hap_col].unique():
+                vals = hap_sample_df[hap_sample_df[hap_col] == hap_name][pc].dropna().tolist()
+                if len(vals) >= 3:
+                    vals_sorted = sorted(vals)
+                    n = len(vals_sorted)
+                    q1 = vals_sorted[int(n * 0.25)]
+                    q2 = vals_sorted[int(n * 0.5)]
+                    q3 = vals_sorted[int(n * 0.75)]
+                    iqr = q3 - q1
+                    whislow = max(min(vals_sorted), q1 - 1.5 * iqr)
+                    whishi = min(max(vals_sorted), q3 + 1.5 * iqr)
+                    groups[str(hap_name)] = {
+                        'n': n, 'mean': sum(vals) / n,
+                        'q1': q1, 'median': q2, 'q3': q3,
+                        'whisker_low': whislow, 'whisker_high': whishi,
+                        'values': [round(v, 4) for v in vals_sorted]
+                    }
+            if len(groups) >= 2:
+                box_data[str(pc)] = groups
+
+        box_json = _json.dumps(box_data)
+        effects_json = _json.dumps(effects, cls=NumpyEncoder)
+        gene_label = gene_id or "Gene"
+        n_pheno = len(box_data)
+
+        html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Effect & Boxplot — {gene_label}</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }}
+.container {{ max-width: 1000px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
+.header {{ background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }}
+.header h1 {{ font-size: 18px; margin-bottom: 4px; }}
+.header-info {{ font-size: 11px; opacity: 0.85; }}
+.section {{ padding: 20px; }}
+.section-title {{ font-size: 14px; font-weight: 600; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #eee; padding-bottom: 6px; }}
+.chart-row {{ display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }}
+.chart-box {{ flex: 0 0 calc(50% - 10px); min-width: 300px; border: 1px solid #eee; border-radius: 6px; padding: 10px; }}
+.chart-box h3 {{ font-size: 12px; color: #555; margin-bottom: 6px; text-align: center; }}
+.chart-box svg {{ width: 100%; }}
+.tooltip {{ position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 7px 11px; border-radius: 5px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>Effect Size & Boxplots — {gene_label}</h1>
+    <div class="header-info">Phenotypes: {n_pheno} | Haplotypes: {hap_sample_df[hap_col].nunique()}</div>
+</div>
+
+<!-- Effect Bar + Forest Plots -->
+<div class="section">
+    <div class="section-title">Effect Size (Bar & Forest Plot)</div>
+    <div id="effect-charts"></div>
+</div>
+
+<!-- Boxplots -->
+<div class="section">
+    <div class="section-title">Boxplots</div>
+    <div id="box-charts"></div>
+</div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+var effectData = {effects_json};
+var boxData = {box_json};
+var tip = d3.select('#tooltip');
+
+// ===== Effect Bar + Forest =====
+function drawEffectCharts() {{
+    var container = d3.select('#effect-charts');
+    container.selectAll('*').remove();
+    if (!effectData || effectData.length === 0) {{
+        container.append('p').style('color','#999').style('padding','20px').text('No effect data');
+        return;
+    }}
+    var nonRef = effectData.filter(function(d) {{ return !d.is_reference; }});
+    if (nonRef.length === 0) {{
+        container.append('p').style('color','#999').style('padding','20px').text('All are reference haplotypes');
+        return;
+    }}
+
+    var w = 900, h = Math.max(180, nonRef.length * 32 + 50);
+    var margin = {{top: 10, right: 200, bottom: 30, left: 120}};
+    var svg = container.append('svg').attr('width', w).attr('height', h)
+        .append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+    var pw = w - margin.left - margin.right, ph = h - margin.top - margin.bottom;
+
+    var maxAbsEff = d3.max(nonRef, function(d) {{ return Math.abs(d.effect); }}) || 0.5;
+    var x = d3.scaleLinear().domain([-maxAbsEff * 1.3, maxAbsEff * 1.3]).range([0, pw]);
+    var y = d3.scaleBand().domain(nonRef.map(function(d) {{ return d.haplotype; }})).range([0, ph]).padding(0.3);
+
+    svg.append('line').attr('x1', x(0)).attr('y1', 0).attr('x2', x(0)).attr('y2', ph)
+        .attr('stroke', '#999').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+
+    svg.append('g').call(d3.axisLeft(y)).selectAll('text').attr('font-size','11px');
+    svg.append('g').attr('transform','translate(0,' + ph + ')').call(d3.axisBottom(x).tickFormat(function(v) {{ return v.toFixed(2); }}))
+        .selectAll('text').attr('font-size','9px');
+
+    nonRef.forEach(function(d) {{
+        var ex = x(d.effect), ey = y(d.haplotype) + y.bandwidth() / 2;
+        var bw = Math.min(y.bandwidth() * 0.8, 18);
+        // bar
+        svg.append('rect')
+            .attr('x', Math.min(ex, x(0))).attr('y', ey - bw/2)
+            .attr('width', Math.abs(ex - x(0))).attr('height', bw)
+            .attr('fill', d.direction === 'positive' ? '#e74c3c' : '#3498db')
+            .attr('rx', 2).attr('opacity', 0.8);
+        // CI line
+        if (d.ci_lower != null && d.ci_upper != null) {{
+            svg.append('line')
+                .attr('x1', x(d.ci_lower)).attr('y1', ey)
+                .attr('x2', x(d.ci_upper)).attr('y2', ey)
+                .attr('stroke', '#2c3e50').attr('stroke-width', 2);
+            svg.append('circle').attr('cx', ex).attr('cy', ey).attr('r', 5)
+                .attr('fill', d.significant ? (d.highly_significant ? '#8B0000' : '#e74c3c') : '#2c3e50')
+                .attr('stroke', 'white').attr('stroke-width', 1);
+        }}
+        // Sig marker
+        if (d.significant) {{
+            var sx = ex > 0 ? ex + 8 : ex - 8;
+            svg.append('text').attr('x', sx).attr('y', ey + 3).attr('font-size','10px')
+                .attr('text-anchor', ex > 0 ? 'start' : 'end')
+                .attr('fill', d.highly_significant ? '#8B0000' : '#e74c3c')
+                .text(d.highly_significant ? '**' : '*');
+        }}
+    }});
+
+    // Legend
+    var legendY = ph + 20;
+    svg.append('text').attr('x', 0).attr('y', legendY).attr('font-size','10px').attr('fill','#555')
+        .text('● = effect estimate (point size)  |  line = 95% CI  |  * P<0.05  ** P<0.01  |  red bar = positive  blue bar = negative');
+}}
+
+// ===== Boxplots =====
+function drawBoxCharts() {{
+    var container = d3.select('#box-charts');
+    container.selectAll('*').remove();
+    var phenoNames = Object.keys(boxData);
+    if (phenoNames.length === 0) {{
+        container.append('p').style('color','#999').style('padding','20px').text('No boxplot data');
+        return;
+    }}
+
+    phenoNames.forEach(function(pheno, pi) {{
+        var groups = boxData[pheno];
+        var hapNames = Object.keys(groups).sort();
+        var n = hapNames.length;
+        var w = 900, h = Math.max(160, n * 50 + 60);
+        var margin = {{top: 8, right: 30, bottom: 30, left: 80}};
+
+        var row = container.append('div').attr('class','chart-row');
+        var box = row.append('div').attr('class','chart-box');
+        box.append('h3').text(pheno);
+
+        var svg = box.append('svg').attr('width', w).attr('height', h)
+            .append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+        var pw = w - margin.left - margin.right, ph = h - margin.top - margin.bottom;
+
+        var allVals = [];
+        hapNames.forEach(function(h) {{ allVals = allVals.concat(groups[h].values); }});
+        var yExt = d3.extent(allVals);
+        var yPad = (yExt[1] - yExt[0]) * 0.1 || 0.5;
+        var y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([ph, 0]);
+        var x = d3.scaleBand().domain(hapNames).range([0, pw]).padding(0.3);
+
+        svg.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('font-size','9px');
+        svg.append('g').attr('transform','translate(0,' + ph + ')').call(d3.axisBottom(x))
+            .selectAll('text').attr('font-size','10px');
+
+        hapNames.forEach(function(h) {{
+            var g = groups[h];
+            var bx = x(h), bw = Math.min(x.bandwidth(), 40);
+            var cx = bx + x.bandwidth() / 2;
+            // box
+            svg.append('rect')
+                .attr('x', cx - bw/2).attr('y', y(g.q3)).attr('width', bw).attr('height', Math.max(1, y(g.q1) - y(g.q3)))
+                .attr('fill', '#3498db').attr('fill-opacity', 0.25).attr('stroke', '#3498db').attr('stroke-width', 1.5);
+            // median
+            svg.append('line').attr('x1', cx - bw/2).attr('y1', y(g.median)).attr('x2', cx + bw/2).attr('y2', y(g.median))
+                .attr('stroke', '#2c3e50').attr('stroke-width', 2);
+            // whiskers
+            svg.append('line').attr('x1', cx).attr('y1', y(g.whisker_low)).attr('x2', cx).attr('y2', y(g.q1))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            svg.append('line').attr('x1', cx).attr('y1', y(g.whisker_high)).attr('x2', cx).attr('y2', y(g.q3))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            svg.append('line').attr('x1', cx - bw/4).attr('y1', y(g.whisker_low)).attr('x2', cx + bw/4).attr('y2', y(g.whisker_low))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            svg.append('line').attr('x1', cx - bw/4).attr('y1', y(g.whisker_high)).attr('x2', cx + bw/4).attr('y2', y(g.whisker_high))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            // n label
+            svg.append('text').attr('x', cx).attr('y', y(g.whisker_high) - 4)
+                .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', '#555')
+                .text('n=' + g.n);
+        }});
+    }});
+}}
+
+drawEffectCharts();
+drawBoxCharts();
+</script>
+</body>
+</html>'''
+        out = os.path.join(self.output_dir, "effect_boxplot.html")
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write(html)
+        print(f"[INFO] 效应量/箱线图已保存: {out}")
+        return out
+
 
 # ============================================================================
 # 主流程整合
@@ -12168,6 +13073,65 @@ class HaplotypePhenotypeAnalyzer:
                 logger.info("  - 多图整合面板生成成功")
             except Exception as e:
                 logger.warning(f"  - 多图整合面板生成失败: {e}")
+
+            # 生成各独立组件HTML文件
+            logger.info("[Step 5.3] 生成独立组件HTML...")
+
+            # 基因结构图
+            try:
+                self.reporter.generate_gene_structure_html(
+                    variant_positions=self.positions,
+                    region_start=plot_region_start,
+                    region_end=plot_region_end,
+                    gene_start=gene_body_start,
+                    gene_end=gene_body_end,
+                    promoter_start=promoter_start_pos,
+                    promoter_end=promoter_end_pos,
+                    strand=strand,
+                    exons=exons_list,
+                    cds=cds_list,
+                    variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info) else (self.variant_info if self.variant_info else {}),
+                    snp_effects=snp_effects,
+                    chrom=chrom,
+                    gene_id=gene_id,
+                    variant_pvalues=variant_pvalues,
+                )
+                logger.info("  - 基因结构图生成成功")
+            except Exception as e:
+                logger.warning(f"  - 基因结构图生成失败: {e}")
+
+            # LD三角热图（使用缓存数据）
+            try:
+                self.reporter.generate_ld_triangle_html(
+                    chrom=chrom,
+                    gene_id=gene_id,
+                )
+                logger.info("  - LD三角热图生成成功")
+            except Exception as e:
+                logger.warning(f"  - LD三角热图生成失败: {e}")
+
+            # 单倍型评分散点图（使用缓存数据）
+            try:
+                self.reporter.generate_haplotype_score_html(
+                    gene_id=gene_id,
+                    phenotype_col=first_pheno,
+                )
+                logger.info("  - 单倍型评分图生成成功")
+            except Exception as e:
+                logger.warning(f"  - 单倍型评分图生成失败: {e}")
+
+            # 效应量图 + 箱线图
+            try:
+                self.reporter.generate_effect_boxplot_html(
+                    hap_sample_df=assoc_module.merged_df,
+                    effect_results=first_effect,
+                    phenotype_col=first_pheno,
+                    gene_id=gene_id,
+                    chrom=chrom,
+                )
+                logger.info("  - 效应量/箱线图生成成功")
+            except Exception as e:
+                logger.warning(f"  - 效应量/箱线图生成失败: {e}")
         except Exception as e:
             import traceback
             logger.warning(f"综合HTML生成失败: {e}")

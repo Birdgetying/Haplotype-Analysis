@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gene Structure — GW7</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+.container { max-width: 5850px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.header { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }
+.header h1 { font-size: 18px; margin-bottom: 4px; }
+.header-info { font-size: 11px; opacity: 0.85; }
+.svg-container { padding: 20px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>Gene Structure — GW7</h1>
+    <div class="header-info">Region: chr07:24,657,182-24,674,279 | Length: 17.1 kb | Variants: 254 | Strand: +</div>
+</div>
+<div style="display:flex;gap:12px;flex-wrap:wrap;padding:10px 20px;font-size:11px;">
+<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#2ecc71;display:inline-block;"></span>Promoter</span>
+<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#e74c3c;display:inline-block;"></span>UTR/CDS</span>
+<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f39c12;display:inline-block;"></span>Intron</span>
+<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#3498db;display:inline-block;"></span>Synonymous</span>
+<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#8e44ad;display:inline-block;"></span>SV</span>
+<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#999;display:inline-block;"></span>Other</span>
+<span style="margin-left:12px;border-left:1px solid #ddd;padding-left:12px;">P&lt;0.05: red | P&lt;0.01: dark red</span>
+</div>
+<div class="svg-container">
+<svg id="gene-structure-svg" data-gene-start="450" data-gene-width="5080" width="5750" height="200" style="display:block;margin:0;overflow:visible;">
+<defs>
+            <pattern id="utrPattern" patternUnits="userSpaceOnUse" width="6" height="6">
+                <line x1="0" y1="6" x2="6" y2="0" stroke="#9b59b6" stroke-width="1" opacity="0.5"/>
+            </pattern>
+        </defs>
+<text x="2990.0" y="13" font-size="11" fill="#2c3e50" text-anchor="middle" font-weight="600">Relative Position (kb)</text>
+<text x="2990.0" y="8" font-size="10" fill="#3498db" text-anchor="middle" font-weight="500">GW7</text>
+<line x1="450" y1="28" x2="5530" y2="28" stroke="#333" stroke-width="1.2"/>
+<line x1="450.0" y1="18" x2="450.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="450.0" y1="26" x2="450.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="450.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">0.0</text>
+<line x1="1085.0" y1="18" x2="1085.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="1085.0" y1="26" x2="1085.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="1085.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">2.1</text>
+<line x1="1720.0" y1="18" x2="1720.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="1720.0" y1="26" x2="1720.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="1720.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">4.3</text>
+<line x1="2355.0" y1="18" x2="2355.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="2355.0" y1="26" x2="2355.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="2355.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">6.4</text>
+<line x1="2990.0" y1="18" x2="2990.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="2990.0" y1="26" x2="2990.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="2990.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">8.5</text>
+<line x1="3625.0" y1="18" x2="3625.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="3625.0" y1="26" x2="3625.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="3625.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">10.7</text>
+<line x1="4260.0" y1="18" x2="4260.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="4260.0" y1="26" x2="4260.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="4260.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">12.8</text>
+<line x1="4895.0" y1="18" x2="4895.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="4895.0" y1="26" x2="4895.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="4895.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">15.0</text>
+<line x1="5530.0" y1="18" x2="5530.0" y2="66" stroke="#aaa" stroke-width="0.7" stroke-dasharray="2,2"/>
+<line x1="5530.0" y1="26" x2="5530.0" y2="32" stroke="#555" stroke-width="1.5"/>
+<text x="5530.0" y="15" font-size="8.5" fill="#555" text-anchor="middle">17.1</text>
+<line x1="1044.256302275253" y1="57" x2="5530.0" y2="57" stroke="#2c3e50" stroke-width="2"/>
+<rect x="450.0" y="48" width="593.9591741241154" height="18" fill="#f39c12" opacity="0.4" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="3,2" rx="2"/>
+<text x="746.9795870620577" y="60.0" font-size="7" fill="#d35400" text-anchor="middle" font-weight="600">Promoter</text>
+<rect x="2630.3263730479034" y="48" width="1315.3863250862719" height="18" fill="white" stroke="#3498db" stroke-width="1" rx="1"/>
+<rect x="2630.3263730479034" y="48" width="996.5678189155988" height="18" fill="#3498db" rx="1"/>
+<line x1="5530.0" y1="57" x2="5538.0" y2="57" stroke="#2c3e50" stroke-width="2"/>
+<polygon points="5548.0,57 5538.0,52 5538.0,62" fill="#2c3e50"/>
+<circle cx="495.4606071240569" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24657335</title></circle>
+<line x1="495.4606071240569" y1="23.5" x2="495.4606071240569" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="519.8251155173423" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24657417</title></circle>
+<line x1="519.8251155173423" y1="23.5" x2="519.8251155173423" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="633.0309411007779" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24657798</title></circle>
+<line x1="633.0309411007779" y1="23.5" x2="633.0309411007779" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="723.655027197754" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24658103</title></circle>
+<line x1="723.655027197754" y1="23.5" x2="723.655027197754" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="759.3104053342691" cy="20" r="3.5" fill="#3498db" stroke="white" stroke-width="0.5"><title>Pos: 24658223</title></circle>
+<line x1="759.3104053342691" y1="23.5" x2="759.3104053342691" y2="66" stroke="#3498db" stroke-width="1.2" opacity="0.7"/>
+<circle cx="783.6749137275546" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658305</title></circle>
+<line x1="783.6749137275546" y1="23.5" x2="783.6749137275546" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="808.3365502719776" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658388</title></circle>
+<line x1="808.3365502719776" y1="23.5" x2="808.3365502719776" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="811.902088085629" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24658400</title></circle>
+<line x1="811.902088085629" y1="23.5" x2="811.902088085629" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="820.8159326197579" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658430</title></circle>
+<line x1="820.8159326197579" y1="23.5" x2="820.8159326197579" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="862.4138737790256" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24658570</title></circle>
+<line x1="862.4138737790256" y1="23.5" x2="862.4138737790256" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="920.6509914020003" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24658766</title></circle>
+<line x1="920.6509914020003" y1="23.5" x2="920.6509914020003" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="931.0504766918173" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658801</title></circle>
+<line x1="931.0504766918173" y1="23.5" x2="931.0504766918173" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="934.0217582031935" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658811</title></circle>
+<line x1="934.0217582031935" y1="23.5" x2="934.0217582031935" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="937.5872960168451" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24658823</title></circle>
+<line x1="937.5872960168451" y1="23.5" x2="937.5872960168451" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="956.0092413873779" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658885</title></circle>
+<line x1="956.0092413873779" y1="23.5" x2="956.0092413873779" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="956.3063695385156" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24658886</title></circle>
+<line x1="956.3063695385156" y1="23.5" x2="956.3063695385156" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="960.7632918055799" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24658901</title></circle>
+<line x1="960.7632918055799" y1="23.5" x2="960.7632918055799" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="993.1502602795813" cy="20" r="3.5" fill="#2ecc71" stroke="white" stroke-width="0.5"><title>Pos: 24659010</title></circle>
+<line x1="993.1502602795813" y1="23.5" x2="993.1502602795813" y2="66" stroke="#2ecc71" stroke-width="1.2" opacity="0.7"/>
+<circle cx="995.2301573375446" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24659017</title></circle>
+<line x1="995.2301573375446" y1="23.5" x2="995.2301573375446" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1013.3549745569397" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24659078</title></circle>
+<line x1="1013.3549745569397" y1="23.5" x2="1013.3549745569397" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1044.256302275253" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659182</title></circle>
+<line x1="1044.256302275253" y1="23.5" x2="1044.256302275253" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1060.0040942855471" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659235</title></circle>
+<line x1="1060.0040942855471" y1="23.5" x2="1060.0040942855471" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1101.3049072936774" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659374</title></circle>
+<line x1="1101.3049072936774" y1="23.5" x2="1101.3049072936774" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1168.1587412996432" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24659599</title></circle>
+<line x1="1168.1587412996432" y1="23.5" x2="1168.1587412996432" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1193.4146341463415" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24659684</title></circle>
+<line x1="1193.4146341463415" y1="23.5" x2="1193.4146341463415" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1194.0088904486165" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24659686</title></circle>
+<line x1="1194.0088904486165" y1="23.5" x2="1194.0088904486165" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1204.7055038895712" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659722</title></circle>
+<line x1="1204.7055038895712" y1="23.5" x2="1204.7055038895712" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1220.7504240510032" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659776</title></circle>
+<line x1="1220.7504240510032" y1="23.5" x2="1220.7504240510032" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1238.5781131192607" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659836</title></circle>
+<line x1="1238.5781131192607" y1="23.5" x2="1238.5781131192607" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1251.6517517693162" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24659880</title></circle>
+<line x1="1251.6517517693162" y1="23.5" x2="1251.6517517693162" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1282.5530794876295" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24659984</title></circle>
+<line x1="1282.5530794876295" y1="23.5" x2="1282.5530794876295" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1308.4032286366028" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24660071</title></circle>
+<line x1="1308.4032286366028" y1="23.5" x2="1308.4032286366028" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1310.1859975434286" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660077</title></circle>
+<line x1="1310.1859975434286" y1="23.5" x2="1310.1859975434286" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1311.6716382991167" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660082</title></circle>
+<line x1="1311.6716382991167" y1="23.5" x2="1311.6716382991167" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1313.1572790548048" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660087</title></circle>
+<line x1="1313.1572790548048" y1="23.5" x2="1313.1572790548048" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1358.0236298765867" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660238</title></circle>
+<line x1="1358.0236298765867" y1="23.5" x2="1358.0236298765867" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1375.5541907937063" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660297</title></circle>
+<line x1="1375.5541907937063" y1="23.5" x2="1375.5541907937063" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1434.088436567819" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660494</title></circle>
+<line x1="1434.088436567819" y1="23.5" x2="1434.088436567819" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1444.7850500087734" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660530</title></circle>
+<line x1="1444.7850500087734" y1="23.5" x2="1444.7850500087734" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1464.395507983857" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660596</title></circle>
+<line x1="1464.395507983857" y1="23.5" x2="1464.395507983857" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1466.7725331929578" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660604</title></circle>
+<line x1="1466.7725331929578" y1="23.5" x2="1466.7725331929578" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1469.1495584020588" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660612</title></circle>
+<line x1="1469.1495584020588" y1="23.5" x2="1469.1495584020588" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1469.4466865531965" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660613</title></circle>
+<line x1="1469.4466865531965" y1="23.5" x2="1469.4466865531965" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1544.3229806398783" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660865</title></circle>
+<line x1="1544.3229806398783" y1="23.5" x2="1544.3229806398783" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1559.4765163478974" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24660916</title></circle>
+<line x1="1559.4765163478974" y1="23.5" x2="1559.4765163478974" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1600.1830730537522" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24661053</title></circle>
+<line x1="1600.1830730537522" y1="23.5" x2="1600.1830730537522" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1659.905831432415" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24661254</title></circle>
+<line x1="1659.905831432415" y1="23.5" x2="1659.905831432415" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1693.4813125109667" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24661367</title></circle>
+<line x1="1693.4813125109667" y1="23.5" x2="1693.4813125109667" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1728.8395624963443" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24661486</title></circle>
+<line x1="1728.8395624963443" y1="23.5" x2="1728.8395624963443" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1868.7869216821664" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24661957</title></circle>
+<line x1="1868.7869216821664" y1="23.5" x2="1868.7869216821664" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="1947.2287535824998" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24662221</title></circle>
+<line x1="1947.2287535824998" y1="23.5" x2="1947.2287535824998" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2017.6481254021173" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24662458</title></circle>
+<line x1="2017.6481254021173" y1="23.5" x2="2017.6481254021173" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2062.514476223899" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24662609</title></circle>
+<line x1="2062.514476223899" y1="23.5" x2="2062.514476223899" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2077.37088378078" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24662659</title></circle>
+<line x1="2077.37088378078" y1="23.5" x2="2077.37088378078" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2089.553137977423" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24662700</title></circle>
+<line x1="2089.553137977423" y1="23.5" x2="2089.553137977423" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2164.1323039129675" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24662951</title></circle>
+<line x1="2164.1323039129675" y1="23.5" x2="2164.1323039129675" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2199.490553898345" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24663070</title></circle>
+<line x1="2199.490553898345" y1="23.5" x2="2199.490553898345" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2200.0848102006203" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663072</title></circle>
+<line x1="2200.0848102006203" y1="23.5" x2="2200.0848102006203" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2205.13598876996" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663089</title></circle>
+<line x1="2205.13598876996" y1="23.5" x2="2205.13598876996" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2250.0023395917415" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663240</title></circle>
+<line x1="2250.0023395917415" y1="23.5" x2="2250.0023395917415" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2278.5266421009533" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663336</title></circle>
+<line x1="2278.5266421009533" y1="23.5" x2="2278.5266421009533" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2333.1982219102765" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663520</title></circle>
+<line x1="2333.1982219102765" y1="23.5" x2="2333.1982219102765" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2336.1695034216527" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663530</title></circle>
+<line x1="2336.1695034216527" y1="23.5" x2="2336.1695034216527" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2343.5977072000937" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663555</title></circle>
+<line x1="2343.5977072000937" y1="23.5" x2="2343.5977072000937" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2351.025910978534" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663580</title></circle>
+<line x1="2351.025910978534" y1="23.5" x2="2351.025910978534" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2470.1742995847226" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24663981</title></circle>
+<line x1="2470.1742995847226" y1="23.5" x2="2470.1742995847226" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2472.848452944961" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24663990</title></circle>
+<line x1="2472.848452944961" y1="23.5" x2="2472.848452944961" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2552.478797449845" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24664258</title></circle>
+<line x1="2552.478797449845" y1="23.5" x2="2552.478797449845" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2552.7759256009826" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24664259</title></circle>
+<line x1="2552.7759256009826" y1="23.5" x2="2552.7759256009826" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2630.3263730479034" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24664520</title></circle>
+<line x1="2630.3263730479034" y1="23.5" x2="2630.3263730479034" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="2859.1150494238755" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24665290</title></circle>
+<line x1="2859.1150494238755" y1="23.5" x2="2859.1150494238755" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3043.6316312803415" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24665911</title></circle>
+<line x1="3043.6316312803415" y1="23.5" x2="3043.6316312803415" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3062.0535766508747" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24665973</title></circle>
+<line x1="3062.0535766508747" y1="23.5" x2="3062.0535766508747" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3097.4118266362516" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24666092</title></circle>
+<line x1="3097.4118266362516" y1="23.5" x2="3097.4118266362516" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3110.18833713517" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24666135</title></circle>
+<line x1="3110.18833713517" y1="23.5" x2="3110.18833713517" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3188.3330408843653" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24666398</title></circle>
+<line x1="3188.3330408843653" y1="23.5" x2="3188.3330408843653" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3238.250570275487" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24666566</title></circle>
+<line x1="3238.250570275487" y1="23.5" x2="3238.250570275487" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3327.98327191905" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24666868</title></circle>
+<line x1="3327.98327191905" y1="23.5" x2="3327.98327191905" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3328.280400070188" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24666869</title></circle>
+<line x1="3328.280400070188" y1="23.5" x2="3328.280400070188" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3387.4089021465757" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24667068</title></circle>
+<line x1="3387.4089021465757" y1="23.5" x2="3387.4089021465757" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3419.2016143183014" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24667175</title></circle>
+<line x1="3419.2016143183014" y1="23.5" x2="3419.2016143183014" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3481.0042697549275" cy="20" r="3.5" fill="#3498db" stroke="white" stroke-width="0.5"><title>Pos: 24667383</title></circle>
+<line x1="3481.0042697549275" y1="23.5" x2="3481.0042697549275" y2="66" stroke="#3498db" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3602.8268117213547" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24667793</title></circle>
+<line x1="3602.8268117213547" y1="23.5" x2="3602.8268117213547" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3606.986605837282" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24667807</title></circle>
+<line x1="3606.986605837282" y1="23.5" x2="3606.986605837282" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3626.894191963502" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24667874</title></circle>
+<line x1="3626.894191963502" y1="23.5" x2="3626.894191963502" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3657.2012633795403" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24667976</title></circle>
+<line x1="3657.2012633795403" y1="23.5" x2="3657.2012633795403" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3749.3109902322044" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668286</title></circle>
+<line x1="3749.3109902322044" y1="23.5" x2="3749.3109902322044" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3756.14493770837" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668309</title></circle>
+<line x1="3756.14493770837" y1="23.5" x2="3756.14493770837" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3783.183599461894" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668400</title></circle>
+<line x1="3783.183599461894" y1="23.5" x2="3783.183599461894" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3803.9825700415277" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668470</title></circle>
+<line x1="3803.9825700415277" y1="23.5" x2="3803.9825700415277" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3812.599286424519" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668499</title></circle>
+<line x1="3812.599286424519" y1="23.5" x2="3812.599286424519" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3814.382055331345" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668505</title></circle>
+<line x1="3814.382055331345" y1="23.5" x2="3814.382055331345" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3814.679183482482" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668506</title></circle>
+<line x1="3814.679183482482" y1="23.5" x2="3814.679183482482" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3814.97631163362" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668507</title></circle>
+<line x1="3814.97631163362" y1="23.5" x2="3814.97631163362" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3816.461952389308" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668512</title></circle>
+<line x1="3816.461952389308" y1="23.5" x2="3816.461952389308" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3831.021231795052" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668561</title></circle>
+<line x1="3831.021231795052" y1="23.5" x2="3831.021231795052" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3875.590454465696" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668711</title></circle>
+<line x1="3875.590454465696" y1="23.5" x2="3875.590454465696" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3875.8875826168332" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668712</title></circle>
+<line x1="3875.8875826168332" y1="23.5" x2="3875.8875826168332" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3876.184710767971" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668713</title></circle>
+<line x1="3876.184710767971" y1="23.5" x2="3876.184710767971" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3876.4818389191087" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668714</title></circle>
+<line x1="3876.4818389191087" y1="23.5" x2="3876.4818389191087" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3876.778967070246" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668715</title></circle>
+<line x1="3876.778967070246" y1="23.5" x2="3876.778967070246" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3877.0760952213836" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668716</title></circle>
+<line x1="3877.0760952213836" y1="23.5" x2="3877.0760952213836" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3877.373223372522" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668717</title></circle>
+<line x1="3877.373223372522" y1="23.5" x2="3877.373223372522" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3877.670351523659" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668718</title></circle>
+<line x1="3877.670351523659" y1="23.5" x2="3877.670351523659" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3878.2646078259345" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668720</title></circle>
+<line x1="3878.2646078259345" y1="23.5" x2="3878.2646078259345" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3879.155992279347" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668723</title></circle>
+<line x1="3879.155992279347" y1="23.5" x2="3879.155992279347" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3879.453120430485" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668724</title></circle>
+<line x1="3879.453120430485" y1="23.5" x2="3879.453120430485" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3879.7502485816226" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668725</title></circle>
+<line x1="3879.7502485816226" y1="23.5" x2="3879.7502485816226" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3880.3445048838976" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668727</title></circle>
+<line x1="3880.3445048838976" y1="23.5" x2="3880.3445048838976" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3880.938761186173" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668729</title></circle>
+<line x1="3880.938761186173" y1="23.5" x2="3880.938761186173" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3881.5330174884484" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668731</title></circle>
+<line x1="3881.5330174884484" y1="23.5" x2="3881.5330174884484" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3882.4244019418607" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668734</title></circle>
+<line x1="3882.4244019418607" y1="23.5" x2="3882.4244019418607" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3883.6129145464115" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668738</title></circle>
+<line x1="3883.6129145464115" y1="23.5" x2="3883.6129145464115" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3883.9100426975497" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668739</title></circle>
+<line x1="3883.9100426975497" y1="23.5" x2="3883.9100426975497" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3884.8014271509624" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24668742</title></circle>
+<line x1="3884.8014271509624" y1="23.5" x2="3884.8014271509624" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3888.6640931157513" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668755</title></circle>
+<line x1="3888.6640931157513" y1="23.5" x2="3888.6640931157513" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3922.2395741943033" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668868</title></circle>
+<line x1="3922.2395741943033" y1="23.5" x2="3922.2395741943033" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3927.885009065918" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668887</title></circle>
+<line x1="3927.885009065918" y1="23.5" x2="3927.885009065918" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3940.0672632625606" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668928</title></circle>
+<line x1="3940.0672632625606" y1="23.5" x2="3940.0672632625606" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3944.5241855296254" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668943</title></circle>
+<line x1="3944.5241855296254" y1="23.5" x2="3944.5241855296254" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="3945.7126981341753" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24668947</title></circle>
+<line x1="3945.7126981341753" y1="23.5" x2="3945.7126981341753" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4008.1096098730773" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24669157</title></circle>
+<line x1="4008.1096098730773" y1="23.5" x2="4008.1096098730773" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4020.8861203719953" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24669200</title></circle>
+<line x1="4020.8861203719953" y1="23.5" x2="4020.8861203719953" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4028.3143241504354" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24669225</title></circle>
+<line x1="4028.3143241504354" y1="23.5" x2="4028.3143241504354" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4030.691349359537" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669233</title></circle>
+<line x1="4030.691349359537" y1="23.5" x2="4030.691349359537" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4042.8736035561797" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24669274</title></circle>
+<line x1="4042.8736035561797" y1="23.5" x2="4042.8736035561797" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4065.455343042639" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669350</title></circle>
+<line x1="4065.455343042639" y1="23.5" x2="4065.455343042639" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4070.5065216119788" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669367</title></circle>
+<line x1="4070.5065216119788" y1="23.5" x2="4070.5065216119788" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4075.260572030181" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669383</title></circle>
+<line x1="4075.260572030181" y1="23.5" x2="4075.260572030181" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4077.9347253904193" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669392</title></circle>
+<line x1="4077.9347253904193" y1="23.5" x2="4077.9347253904193" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4094.871030005264" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669449</title></circle>
+<line x1="4094.871030005264" y1="23.5" x2="4094.871030005264" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4095.762414458677" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669452</title></circle>
+<line x1="4095.762414458677" y1="23.5" x2="4095.762414458677" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4107.94466865532" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669493</title></circle>
+<line x1="4107.94466865532" y1="23.5" x2="4107.94466865532" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4117.155641340586" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669524</title></circle>
+<line x1="4117.155641340586" y1="23.5" x2="4117.155641340586" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4124.583845119027" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669549</title></circle>
+<line x1="4124.583845119027" y1="23.5" x2="4124.583845119027" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4138.548868222495" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669596</title></circle>
+<line x1="4138.548868222495" y1="23.5" x2="4138.548868222495" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4142.114406036148" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669608</title></circle>
+<line x1="4142.114406036148" y1="23.5" x2="4142.114406036148" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4142.708662338422" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669610</title></circle>
+<line x1="4142.708662338422" y1="23.5" x2="4142.708662338422" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4158.456454348716" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669663</title></circle>
+<line x1="4158.456454348716" y1="23.5" x2="4158.456454348716" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4170.044452243084" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669702</title></circle>
+<line x1="4170.044452243084" y1="23.5" x2="4170.044452243084" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4181.038193835176" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669739</title></circle>
+<line x1="4181.038193835176" y1="23.5" x2="4181.038193835176" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4181.929578288589" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669742</title></circle>
+<line x1="4181.929578288589" y1="23.5" x2="4181.929578288589" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4185.792244253378" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669755</title></circle>
+<line x1="4185.792244253378" y1="23.5" x2="4185.792244253378" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4186.980756857929" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669759</title></circle>
+<line x1="4186.980756857929" y1="23.5" x2="4186.980756857929" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4194.706088787507" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669785</title></circle>
+<line x1="4194.706088787507" y1="23.5" x2="4194.706088787507" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4200.945779961397" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669806</title></circle>
+<line x1="4200.945779961397" y1="23.5" x2="4200.945779961397" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4205.402702228461" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24669821</title></circle>
+<line x1="4205.402702228461" y1="23.5" x2="4205.402702228461" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4214.910803064866" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669853</title></circle>
+<line x1="4214.910803064866" y1="23.5" x2="4214.910803064866" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4216.396443820553" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669858</title></circle>
+<line x1="4216.396443820553" y1="23.5" x2="4216.396443820553" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4220.55623793648" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669872</title></circle>
+<line x1="4220.55623793648" y1="23.5" x2="4220.55623793648" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4228.578698017196" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669899</title></circle>
+<line x1="4228.578698017196" y1="23.5" x2="4228.578698017196" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4233.332748435398" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669915</title></circle>
+<line x1="4233.332748435398" y1="23.5" x2="4233.332748435398" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4242.5437211206645" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669946</title></circle>
+<line x1="4242.5437211206645" y1="23.5" x2="4242.5437211206645" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4245.812130783179" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669957</title></circle>
+<line x1="4245.812130783179" y1="23.5" x2="4245.812130783179" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4256.508744224133" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24669993</title></circle>
+<line x1="4256.508744224133" y1="23.5" x2="4256.508744224133" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4266.611101362812" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670027</title></circle>
+<line x1="4266.611101362812" y1="23.5" x2="4266.611101362812" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4272.256536234427" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670046</title></circle>
+<line x1="4272.256536234427" y1="23.5" x2="4272.256536234427" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4293.05550681406" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670116</title></circle>
+<line x1="4293.05550681406" y1="23.5" x2="4293.05550681406" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4304.940632859566" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670156</title></circle>
+<line x1="4304.940632859566" y1="23.5" x2="4304.940632859566" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4311.180324033456" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670177</title></circle>
+<line x1="4311.180324033456" y1="23.5" x2="4311.180324033456" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4318.014271509622" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670200</title></circle>
+<line x1="4318.014271509622" y1="23.5" x2="4318.014271509622" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4318.905655963034" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670203</title></circle>
+<line x1="4318.905655963034" y1="23.5" x2="4318.905655963034" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4327.819500497163" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670233</title></circle>
+<line x1="4327.819500497163" y1="23.5" x2="4327.819500497163" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4333.464935368778" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670252</title></circle>
+<line x1="4333.464935368778" y1="23.5" x2="4333.464935368778" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4334.356319822191" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24670255</title></circle>
+<line x1="4334.356319822191" y1="23.5" x2="4334.356319822191" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4335.841960577879" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670260</title></circle>
+<line x1="4335.841960577879" y1="23.5" x2="4335.841960577879" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4336.733345031293" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670263</title></circle>
+<line x1="4336.733345031293" y1="23.5" x2="4336.733345031293" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4337.03047318243" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24670264</title></circle>
+<line x1="4337.03047318243" y1="23.5" x2="4337.03047318243" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4338.21898578698" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670268</title></circle>
+<line x1="4338.21898578698" y1="23.5" x2="4338.21898578698" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4339.704626542668" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670273</title></circle>
+<line x1="4339.704626542668" y1="23.5" x2="4339.704626542668" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4340.001754693805" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670274</title></circle>
+<line x1="4340.001754693805" y1="23.5" x2="4340.001754693805" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4341.190267298356" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670278</title></circle>
+<line x1="4341.190267298356" y1="23.5" x2="4341.190267298356" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4347.727086623385" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670300</title></circle>
+<line x1="4347.727086623385" y1="23.5" x2="4347.727086623385" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4355.452418552963" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670326</title></circle>
+<line x1="4355.452418552963" y1="23.5" x2="4355.452418552963" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4357.829443762063" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670334</title></circle>
+<line x1="4357.829443762063" y1="23.5" x2="4357.829443762063" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4367.040416447329" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24670365</title></circle>
+<line x1="4367.040416447329" y1="23.5" x2="4367.040416447329" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4367.3375445984675" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670366</title></circle>
+<line x1="4367.3375445984675" y1="23.5" x2="4367.3375445984675" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4375.657132830322" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24670394</title></circle>
+<line x1="4375.657132830322" y1="23.5" x2="4375.657132830322" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4388.433643329239" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670437</title></circle>
+<line x1="4388.433643329239" y1="23.5" x2="4388.433643329239" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4388.730771480377" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670438</title></circle>
+<line x1="4388.730771480377" y1="23.5" x2="4388.730771480377" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4400.318769374744" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670477</title></circle>
+<line x1="4400.318769374744" y1="23.5" x2="4400.318769374744" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4414.878048780488" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670526</title></circle>
+<line x1="4414.878048780488" y1="23.5" x2="4414.878048780488" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4437.756916418085" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670603</title></circle>
+<line x1="4437.756916418085" y1="23.5" x2="4437.756916418085" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4520.655670585484" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670882</title></circle>
+<line x1="4520.655670585484" y1="23.5" x2="4520.655670585484" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4521.249926887758" cy="20" r="3.5" fill="#e74c3c" stroke="white" stroke-width="0.5"><title>Pos: 24670884</title></circle>
+<line x1="4521.249926887758" y1="23.5" x2="4521.249926887758" y2="66" stroke="#e74c3c" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4521.547055038896" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670885</title></circle>
+<line x1="4521.547055038896" y1="23.5" x2="4521.547055038896" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4522.141311341171" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24670887</title></circle>
+<line x1="4522.141311341171" y1="23.5" x2="4522.141311341171" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4572.058840732292" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24671055</title></circle>
+<line x1="4572.058840732292" y1="23.5" x2="4572.058840732292" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4586.0238638357605" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671102</title></circle>
+<line x1="4586.0238638357605" y1="23.5" x2="4586.0238638357605" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4624.650523483652" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671232</title></circle>
+<line x1="4624.650523483652" y1="23.5" x2="4624.650523483652" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4627.324676843891" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671241</title></circle>
+<line x1="4627.324676843891" y1="23.5" x2="4627.324676843891" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4663.277183131544" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24671362</title></circle>
+<line x1="4663.277183131544" y1="23.5" x2="4663.277183131544" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4665.059952038369" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671368</title></circle>
+<line x1="4665.059952038369" y1="23.5" x2="4665.059952038369" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4665.357080189507" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671369</title></circle>
+<line x1="4665.357080189507" y1="23.5" x2="4665.357080189507" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4673.379540270223" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671396</title></circle>
+<line x1="4673.379540270223" y1="23.5" x2="4673.379540270223" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4708.7377902556" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671515</title></circle>
+<line x1="4708.7377902556" y1="23.5" x2="4708.7377902556" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4717.651634789729" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671545</title></circle>
+<line x1="4717.651634789729" y1="23.5" x2="4717.651634789729" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4728.051120079546" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671580</title></circle>
+<line x1="4728.051120079546" y1="23.5" x2="4728.051120079546" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4730.725273439784" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671589</title></circle>
+<line x1="4730.725273439784" y1="23.5" x2="4730.725273439784" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4743.79891208984" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671633</title></circle>
+<line x1="4743.79891208984" y1="23.5" x2="4743.79891208984" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4744.3931683921155" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671635</title></circle>
+<line x1="4744.3931683921155" y1="23.5" x2="4744.3931683921155" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4744.987424694391" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671637</title></circle>
+<line x1="4744.987424694391" y1="23.5" x2="4744.987424694391" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4755.981166286483" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671674</title></circle>
+<line x1="4755.981166286483" y1="23.5" x2="4755.981166286483" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4835.314382640229" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24671941</title></circle>
+<line x1="4835.314382640229" y1="23.5" x2="4835.314382640229" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4885.826168333626" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672111</title></circle>
+<line x1="4885.826168333626" y1="23.5" x2="4885.826168333626" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4918.213136807627" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672220</title></circle>
+<line x1="4918.213136807627" y1="23.5" x2="4918.213136807627" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4935.149441422472" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672277</title></circle>
+<line x1="4935.149441422472" y1="23.5" x2="4935.149441422472" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4939.012107387261" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672290</title></circle>
+<line x1="4939.012107387261" y1="23.5" x2="4939.012107387261" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4943.469029654326" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672305</title></circle>
+<line x1="4943.469029654326" y1="23.5" x2="4943.469029654326" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4943.766157805463" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672306</title></circle>
+<line x1="4943.766157805463" y1="23.5" x2="4943.766157805463" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4945.846054863427" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672313</title></circle>
+<line x1="4945.846054863427" y1="23.5" x2="4945.846054863427" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4948.817336374803" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672323</title></circle>
+<line x1="4948.817336374803" y1="23.5" x2="4948.817336374803" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4949.11446452594" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672324</title></circle>
+<line x1="4949.11446452594" y1="23.5" x2="4949.11446452594" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4952.3828741884545" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672335</title></circle>
+<line x1="4952.3828741884545" y1="23.5" x2="4952.3828741884545" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4952.680002339592" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672336</title></circle>
+<line x1="4952.680002339592" y1="23.5" x2="4952.680002339592" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4957.136924606656" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672351</title></circle>
+<line x1="4957.136924606656" y1="23.5" x2="4957.136924606656" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4968.724922501024" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672390</title></circle>
+<line x1="4968.724922501024" y1="23.5" x2="4968.724922501024" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4969.616306954436" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672393</title></circle>
+<line x1="4969.616306954436" y1="23.5" x2="4969.616306954436" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4971.993332163537" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672401</title></circle>
+<line x1="4971.993332163537" y1="23.5" x2="4971.993332163537" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4980.907176697666" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672431</title></circle>
+<line x1="4980.907176697666" y1="23.5" x2="4980.907176697666" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4998.437737614787" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672490</title></circle>
+<line x1="4998.437737614787" y1="23.5" x2="4998.437737614787" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="4999.3291220681995" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672493</title></circle>
+<line x1="4999.3291220681995" y1="23.5" x2="4999.3291220681995" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5014.185529625081" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672543</title></circle>
+<line x1="5014.185529625081" y1="23.5" x2="5014.185529625081" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5043.6012165877055" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672642</title></circle>
+<line x1="5043.6012165877055" y1="23.5" x2="5043.6012165877055" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5046.572498099082" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672652</title></circle>
+<line x1="5046.572498099082" y1="23.5" x2="5046.572498099082" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5051.029420366146" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672667</title></circle>
+<line x1="5051.029420366146" y1="23.5" x2="5051.029420366146" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5098.5699245481665" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672827</title></circle>
+<line x1="5098.5699245481665" y1="23.5" x2="5098.5699245481665" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5134.522430835819" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24672948</title></circle>
+<line x1="5134.522430835819" y1="23.5" x2="5134.522430835819" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5139.573609405159" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672965</title></circle>
+<line x1="5139.573609405159" y1="23.5" x2="5139.573609405159" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5144.624787974498" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24672982</title></circle>
+<line x1="5144.624787974498" y1="23.5" x2="5144.624787974498" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5150.864479148388" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673003</title></circle>
+<line x1="5150.864479148388" y1="23.5" x2="5150.864479148388" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5183.548575773528" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24673113</title></circle>
+<line x1="5183.548575773528" y1="23.5" x2="5183.548575773528" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5184.142832075803" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24673115</title></circle>
+<line x1="5184.142832075803" y1="23.5" x2="5184.142832075803" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5184.737088378078" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673117</title></circle>
+<line x1="5184.737088378078" y1="23.5" x2="5184.737088378078" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5186.519857284904" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24673123</title></circle>
+<line x1="5186.519857284904" y1="23.5" x2="5186.519857284904" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5206.724571562262" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24673191</title></circle>
+<line x1="5206.724571562262" y1="23.5" x2="5206.724571562262" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5221.878107270281" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673242</title></circle>
+<line x1="5221.878107270281" y1="23.5" x2="5221.878107270281" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5222.472363572557" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673244</title></circle>
+<line x1="5222.472363572557" y1="23.5" x2="5222.472363572557" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5224.255132479382" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673250</title></circle>
+<line x1="5224.255132479382" y1="23.5" x2="5224.255132479382" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5233.763233315786" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673282</title></circle>
+<line x1="5233.763233315786" y1="23.5" x2="5233.763233315786" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5237.328771129438" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673294</title></circle>
+<line x1="5237.328771129438" y1="23.5" x2="5237.328771129438" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5292.000350938761" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673478</title></circle>
+<line x1="5292.000350938761" y1="23.5" x2="5292.000350938761" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5321.118909750248" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673576</title></circle>
+<line x1="5321.118909750248" y1="23.5" x2="5321.118909750248" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5322.010294203662" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673579</title></circle>
+<line x1="5322.010294203662" y1="23.5" x2="5322.010294203662" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5325.872960168451" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24673592</title></circle>
+<line x1="5325.872960168451" y1="23.5" x2="5325.872960168451" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5513.063695385155" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24674222</title></circle>
+<line x1="5513.063695385155" y1="23.5" x2="5513.063695385155" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5516.926361349944" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24674235</title></circle>
+<line x1="5516.926361349944" y1="23.5" x2="5516.926361349944" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5517.817745803357" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24674238</title></circle>
+<line x1="5517.817745803357" y1="23.5" x2="5517.817745803357" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5518.114873954495" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24674239</title></circle>
+<line x1="5518.114873954495" y1="23.5" x2="5518.114873954495" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5519.600514710183" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24674244</title></circle>
+<line x1="5519.600514710183" y1="23.5" x2="5519.600514710183" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5523.463180674972" cy="20" r="3.5" fill="#8B0000" stroke="white" stroke-width="0.5"><title>Pos: 24674257</title></circle>
+<line x1="5523.463180674972" y1="23.5" x2="5523.463180674972" y2="66" stroke="#8B0000" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5529.108615546587" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24674276</title></circle>
+<line x1="5529.108615546587" y1="23.5" x2="5529.108615546587" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5529.405743697725" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24674277</title></circle>
+<line x1="5529.405743697725" y1="23.5" x2="5529.405743697725" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+<circle cx="5530.0" cy="20" r="3.5" fill="#f39c12" stroke="white" stroke-width="0.5"><title>Pos: 24674279</title></circle>
+<line x1="5530.0" y1="23.5" x2="5530.0" y2="66" stroke="#f39c12" stroke-width="1.2" opacity="0.7"/>
+</svg>
+</div>
+</div>
+</body>
+</html>

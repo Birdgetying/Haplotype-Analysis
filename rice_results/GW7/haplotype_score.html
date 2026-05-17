@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Haplotype Score — GW7</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+.container { max-width: 750px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.header { background: linear-gradient(135deg, #e67e22, #d35400); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }
+.header h1 { font-size: 18px; margin-bottom: 4px; }
+.header-info { font-size: 11px; opacity: 0.85; }
+.plot-container { padding: 20px; }
+#score-viz { width: 100%; height: 450px; }
+.legend-area { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 20px 16px; font-size: 10px; }
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+.stats-area { padding: 8px 20px 16px; font-size: 11px; color: #555; }
+.tooltip { position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 7px 11px; border-radius: 5px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>Haplotype Score vs Phenotype — GW7</h1>
+    <div class="header-info">R² = 0.2504 | p = 0.007855893383603539</div>
+</div>
+<div class="plot-container"><div id="score-viz"></div></div>
+<div class="stats-area" id="stats"></div>
+<div class="legend-area" id="legend"></div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+var scoreData = {"per_sample": [{"sample_id": "C005", "haplotype": "Hap5", "score": 3.2389, "phenotype": 102.0}, {"sample_id": "C047", "haplotype": "Hap1", "score": 1.8681, "phenotype": 97.0}, {"sample_id": "C101", "haplotype": "Hap3", "score": 2.0189, "phenotype": 110.0}, {"sample_id": "C106", "haplotype": "Hap3", "score": 2.0189, "phenotype": 107.0}, {"sample_id": "C109", "haplotype": "Hap1", "score": 1.8681, "phenotype": 88.0}, {"sample_id": "C119", "haplotype": "Hap2", "score": 1.9228, "phenotype": 88.0}, {"sample_id": "C131", "haplotype": "Hap1", "score": 1.8681, "phenotype": 84.0}, {"sample_id": "C152", "haplotype": "Hap2", "score": 1.9228, "phenotype": 94.0}, {"sample_id": "C173", "haplotype": "Hap1", "score": 1.8681, "phenotype": 89.0}, {"sample_id": "C197", "haplotype": "Hap6", "score": 2.0239, "phenotype": 89.0}, {"sample_id": "C199", "haplotype": "Hap7", "score": 2.6042, "phenotype": 104.0}, {"sample_id": "C202", "haplotype": "Hap1", "score": 1.8681, "phenotype": 89.0}, {"sample_id": "W001", "haplotype": "Hap1", "score": 1.8681, "phenotype": 87.0}, {"sample_id": "W039", "haplotype": "Hap1", "score": 1.8681, "phenotype": 91.0}, {"sample_id": "W040", "haplotype": "Hap8", "score": 3.1452, "phenotype": 109.0}, {"sample_id": "W068", "haplotype": "Hap9", "score": 2.7088, "phenotype": 90.0}, {"sample_id": "W138", "haplotype": "Hap1", "score": 1.8681, "phenotype": 79.0}, {"sample_id": "W151", "haplotype": "Hap4", "score": 1.8772, "phenotype": 81.0}, {"sample_id": "W160", "haplotype": "Hap2", "score": 1.9228, "phenotype": 89.0}, {"sample_id": "W191", "haplotype": "Hap10", "score": 3.206, "phenotype": 114.0}, {"sample_id": "W192", "haplotype": "Hap11", "score": 3.2878, "phenotype": 112.0}, {"sample_id": "W198", "haplotype": "Hap1", "score": 1.8681, "phenotype": 108.0}, {"sample_id": "W204", "haplotype": "Hap1", "score": 1.8681, "phenotype": 93.0}, {"sample_id": "W207", "haplotype": "Hap12", "score": 2.1153, "phenotype": 99.0}, {"sample_id": "W217", "haplotype": "Hap13", "score": 1.6333, "phenotype": 114.0}, {"sample_id": "W219", "haplotype": "Hap14", "score": 2.3713, "phenotype": 87.0}, {"sample_id": "W305", "haplotype": "Hap4", "score": 1.8772, "phenotype": 82.0}], "per_haplotype": {"Hap1": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.1361, "multi_omics": 0.0, "variant_effect": 0.0, "total": 1.8681}, "Hap10": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 0.6926, "genetic_distinct": 0.6545, "multi_omics": 0.4058, "variant_effect": 1.0, "total": 3.206}, "Hap11": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 0.6926, "genetic_distinct": 0.8491, "multi_omics": 0.3864, "variant_effect": 1.0, "total": 3.2878}, "Hap12": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.2259, "multi_omics": 0.2529, "variant_effect": 0.0, "total": 2.1153}, "Hap13": {"burden": 0.0, "effect_size": 0.0, "fine_mapping": 0.0, "genetic_distinct": 1.0, "multi_omics": 1.0, "variant_effect": 0.3333, "total": 1.6333}, "Hap14": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.1179, "multi_omics": 0.6405, "variant_effect": 0.0, "total": 2.3713}, "Hap2": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.0336, "multi_omics": 0.1325, "variant_effect": 0.0, "total": 1.9228}, "Hap3": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.0041, "multi_omics": 0.271, "variant_effect": 0.0, "total": 2.0189}, "Hap4": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.0041, "multi_omics": 0.0939, "variant_effect": 0.0, "total": 1.8772}, "Hap5": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 0.6926, "genetic_distinct": 0.6545, "multi_omics": 0.4469, "variant_effect": 1.0, "total": 3.2389}, "Hap6": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 1.0, "genetic_distinct": 0.0, "multi_omics": 0.2798, "variant_effect": 0.0, "total": 2.0239}, "Hap7": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 0.9961, "genetic_distinct": 0.1645, "multi_omics": 0.9064, "variant_effect": 0.0, "total": 2.6042}, "Hap8": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 0.6926, "genetic_distinct": 0.6739, "multi_omics": 0.3176, "variant_effect": 1.0, "total": 3.1452}, "Hap9": {"burden": 1.0, "effect_size": 0.0, "fine_mapping": 0.8557, "genetic_distinct": 0.4616, "multi_omics": 0.9918, "variant_effect": 0.0, "total": 2.7088}}, "r_squared": 0.2504, "regression_pvalue": 0.007855893383603539, "slope": 10.786926, "intercept": 72.005443, "component_weights": {"variant_effect": 1.0, "burden": 1.0, "multi_omics": 0.8, "fine_mapping": 0.8, "effect_size": 0.9, "genetic_distinct": 0.5}, "confidence_level": "high", "low_confidence": false, "pve": 0.5647013570316911, "circularity_warning": false};
+
+var container = d3.select('#score-viz');
+var samples = (scoreData.per_sample || []).filter(function(d) {
+    return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
+});
+if (samples.length < 2) {
+    container.append('p').style('color','#999').style('text-align','center').style('padding','60px').text('Not enough data points');
+} else {
+    var margin = {top: 20, right: 30, bottom: 45, left: 55};
+    var box = container.node().getBoundingClientRect();
+    var width = Math.max(300, box.width - margin.left - margin.right);
+    var height = 400;
+    container.style('height', (height + margin.top + margin.bottom) + 'px');
+
+    var haplotypeColors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+    var haps = Array.from(new Set(samples.map(function(d) { return d.haplotype; })));
+    var hapColor = {};
+    haps.forEach(function(h, i) { hapColor[h] = haplotypeColors[i % haplotypeColors.length]; });
+
+    var xExt = d3.extent(samples, function(d) { return d.score; });
+    var xPad = (xExt[1] - xExt[0]) * 0.08 || 0.05;
+    var x = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, width]);
+
+    var yExt = d3.extent(samples, function(d) { return d.phenotype; });
+    var yPad = (yExt[1] - yExt[0]) * 0.08 || 0.05;
+    var y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([height, 0]);
+
+    var svg = container.append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    svg.append('g').attr('class','grid').attr('transform','translate(0,' + height + ')')
+        .call(d3.axisBottom(x).ticks(5).tickSize(-height).tickFormat('')).attr('color','#e0e0e0');
+    svg.append('g').attr('class','grid')
+        .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat('')).attr('color','#e0e0e0');
+
+    if (scoreData.slope != null && scoreData.intercept != null) {
+        var x1 = x.domain()[0], x2 = x.domain()[1];
+        var y1 = scoreData.slope * x1 + scoreData.intercept;
+        var y2 = scoreData.slope * x2 + scoreData.intercept;
+        svg.append('line').attr('x1',x(x1)).attr('y1',y(y1)).attr('x2',x(x2)).attr('y2',y(y2))
+            .attr('stroke','#c0392b').attr('stroke-width',1.8).attr('stroke-dasharray','6,3').attr('opacity',0.8);
+    }
+
+    var tip = d3.select('#tooltip');
+    svg.selectAll('circle').data(samples).enter().append('circle')
+        .attr('cx', function(d) { return x(d.score); })
+        .attr('cy', function(d) { return y(d.phenotype); })
+        .attr('r', 5)
+        .attr('fill', function(d) { return hapColor[d.haplotype] || '#999'; })
+        .attr('stroke', 'white').attr('stroke-width', 0.5).attr('opacity', 0.85)
+        .on('mouseover', function(event, d) {
+            tip.style('display','block')
+                .html('<b>' + d.sample_id + '</b><br>Haplotype: ' + d.haplotype + '<br>Score: ' + d.score.toFixed(3) + '<br>Phenotype: ' + d.phenotype.toFixed(3));
+        })
+        .on('mousemove', function(event) {
+            tip.style('left',(event.pageX+12)+'px').style('top',(event.pageY-28)+'px');
+        })
+        .on('mouseout', function() { tip.style('display','none'); });
+
+    svg.append('g').attr('transform','translate(0,' + height + ')').call(d3.axisBottom(x).ticks(5))
+        .selectAll('text').attr('fill','#555').attr('font-size','10px');
+    svg.append('g').call(d3.axisLeft(y).ticks(5))
+        .selectAll('text').attr('fill','#555').attr('font-size','10px');
+
+    svg.append('text').attr('x',width/2).attr('y',height+36).attr('text-anchor','middle')
+        .attr('font-size','10px').attr('fill','#444').text('Haplotype Score');
+    svg.append('text').attr('transform','rotate(-90)').attr('x',-height/2).attr('y',-45)
+        .attr('text-anchor','middle').attr('font-size','10px').attr('fill','#444').text('Phenotype');
+
+    if (scoreData.r_squared != null) {
+        var t = 'R² = ' + scoreData.r_squared.toFixed(3);
+        if (scoreData.regression_pvalue != null) t += '  p = ' + scoreData.regression_pvalue.toFixed(4);
+        svg.append('text').attr('x',width-6).attr('y',14).attr('text-anchor','end')
+            .attr('font-size','10px').attr('fill','#2c3e50').attr('font-weight','600').text(t);
+    }
+
+    // Legend
+    var legHtml = '';
+    for (var h in hapColor) {
+        legHtml += '<div class="legend-item"><span class="legend-dot" style="background:' + hapColor[h] + ';"></span>' + h + '</div>';
+    }
+    document.getElementById('legend').innerHTML = legHtml;
+
+    // Stats
+    var weights = scoreData.component_weights || {};
+    var compNames = {'variant_effect':'Variant Effect','burden':'Burden','gwas':'GWAS','multi_omics':'Multi-Omics','fine_mapping':'Fine-Map','effect_size':'Effect Size','genetic_distinct':'Gen. Distinct'};
+    var parts = [];
+    for (var k in compNames) { if (weights[k] !== undefined) parts.push(compNames[k] + ': w=' + weights[k].toFixed(1)); }
+    var statsText = 'Components: ' + parts.join(' | ');
+    if (scoreData.pve != null) statsText += ' | PVE=' + (scoreData.pve * 100).toFixed(1) + '%';
+    if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
+    document.getElementById('stats').textContent = statsText;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Effect & Boxplot — OsMADS25</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 20px; }
+.container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.header { background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; padding: 16px 24px; border-radius: 10px 10px 0 0; }
+.header h1 { font-size: 18px; margin-bottom: 4px; }
+.header-info { font-size: 11px; opacity: 0.85; }
+.section { padding: 20px; }
+.section-title { font-size: 14px; font-weight: 600; color: #2c3e50; margin-bottom: 12px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+.chart-row { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
+.chart-box { flex: 0 0 calc(50% - 10px); min-width: 300px; border: 1px solid #eee; border-radius: 6px; padding: 10px; }
+.chart-box h3 { font-size: 12px; color: #555; margin-bottom: 6px; text-align: center; }
+.chart-box svg { width: 100%; }
+.tooltip { position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 7px 11px; border-radius: 5px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+    <h1>Effect Size & Boxplots — OsMADS25</h1>
+    <div class="header-info">Phenotypes: 0 | Haplotypes: 3</div>
+</div>
+
+<!-- Effect Bar + Forest Plots -->
+<div class="section">
+    <div class="section-title">Effect Size (Bar & Forest Plot)</div>
+    <div id="effect-charts"></div>
+</div>
+
+<!-- Boxplots -->
+<div class="section">
+    <div class="section-title">Boxplots</div>
+    <div id="box-charts"></div>
+</div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+var effectData = [];
+var boxData = {};
+var tip = d3.select('#tooltip');
+
+// ===== Effect Bar + Forest =====
+function drawEffectCharts() {
+    var container = d3.select('#effect-charts');
+    container.selectAll('*').remove();
+    if (!effectData || effectData.length === 0) {
+        container.append('p').style('color','#999').style('padding','20px').text('No effect data');
+        return;
+    }
+    var nonRef = effectData.filter(function(d) { return !d.is_reference; });
+    if (nonRef.length === 0) {
+        container.append('p').style('color','#999').style('padding','20px').text('All are reference haplotypes');
+        return;
+    }
+
+    var w = 900, h = Math.max(180, nonRef.length * 32 + 50);
+    var margin = {top: 10, right: 200, bottom: 30, left: 120};
+    var svg = container.append('svg').attr('width', w).attr('height', h)
+        .append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+    var pw = w - margin.left - margin.right, ph = h - margin.top - margin.bottom;
+
+    var maxAbsEff = d3.max(nonRef, function(d) { return Math.abs(d.effect); }) || 0.5;
+    var x = d3.scaleLinear().domain([-maxAbsEff * 1.3, maxAbsEff * 1.3]).range([0, pw]);
+    var y = d3.scaleBand().domain(nonRef.map(function(d) { return d.haplotype; })).range([0, ph]).padding(0.3);
+
+    svg.append('line').attr('x1', x(0)).attr('y1', 0).attr('x2', x(0)).attr('y2', ph)
+        .attr('stroke', '#999').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+
+    svg.append('g').call(d3.axisLeft(y)).selectAll('text').attr('font-size','11px');
+    svg.append('g').attr('transform','translate(0,' + ph + ')').call(d3.axisBottom(x).tickFormat(function(v) { return v.toFixed(2); }))
+        .selectAll('text').attr('font-size','9px');
+
+    nonRef.forEach(function(d) {
+        var ex = x(d.effect), ey = y(d.haplotype) + y.bandwidth() / 2;
+        var bw = Math.min(y.bandwidth() * 0.8, 18);
+        // bar
+        svg.append('rect')
+            .attr('x', Math.min(ex, x(0))).attr('y', ey - bw/2)
+            .attr('width', Math.abs(ex - x(0))).attr('height', bw)
+            .attr('fill', d.direction === 'positive' ? '#e74c3c' : '#3498db')
+            .attr('rx', 2).attr('opacity', 0.8);
+        // CI line
+        if (d.ci_lower != null && d.ci_upper != null) {
+            svg.append('line')
+                .attr('x1', x(d.ci_lower)).attr('y1', ey)
+                .attr('x2', x(d.ci_upper)).attr('y2', ey)
+                .attr('stroke', '#2c3e50').attr('stroke-width', 2);
+            svg.append('circle').attr('cx', ex).attr('cy', ey).attr('r', 5)
+                .attr('fill', d.significant ? (d.highly_significant ? '#8B0000' : '#e74c3c') : '#2c3e50')
+                .attr('stroke', 'white').attr('stroke-width', 1);
+        }
+        // Sig marker
+        if (d.significant) {
+            var sx = ex > 0 ? ex + 8 : ex - 8;
+            svg.append('text').attr('x', sx).attr('y', ey + 3).attr('font-size','10px')
+                .attr('text-anchor', ex > 0 ? 'start' : 'end')
+                .attr('fill', d.highly_significant ? '#8B0000' : '#e74c3c')
+                .text(d.highly_significant ? '**' : '*');
+        }
+    });
+
+    // Legend
+    var legendY = ph + 20;
+    svg.append('text').attr('x', 0).attr('y', legendY).attr('font-size','10px').attr('fill','#555')
+        .text('● = effect estimate (point size)  |  line = 95% CI  |  * P<0.05  ** P<0.01  |  red bar = positive  blue bar = negative');
+}
+
+// ===== Boxplots =====
+function drawBoxCharts() {
+    var container = d3.select('#box-charts');
+    container.selectAll('*').remove();
+    var phenoNames = Object.keys(boxData);
+    if (phenoNames.length === 0) {
+        container.append('p').style('color','#999').style('padding','20px').text('No boxplot data');
+        return;
+    }
+
+    phenoNames.forEach(function(pheno, pi) {
+        var groups = boxData[pheno];
+        var hapNames = Object.keys(groups).sort();
+        var n = hapNames.length;
+        var w = 900, h = Math.max(160, n * 50 + 60);
+        var margin = {top: 8, right: 30, bottom: 30, left: 80};
+
+        var row = container.append('div').attr('class','chart-row');
+        var box = row.append('div').attr('class','chart-box');
+        box.append('h3').text(pheno);
+
+        var svg = box.append('svg').attr('width', w).attr('height', h)
+            .append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+        var pw = w - margin.left - margin.right, ph = h - margin.top - margin.bottom;
+
+        var allVals = [];
+        hapNames.forEach(function(h) { allVals = allVals.concat(groups[h].values); });
+        var yExt = d3.extent(allVals);
+        var yPad = (yExt[1] - yExt[0]) * 0.1 || 0.5;
+        var y = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([ph, 0]);
+        var x = d3.scaleBand().domain(hapNames).range([0, pw]).padding(0.3);
+
+        svg.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('font-size','9px');
+        svg.append('g').attr('transform','translate(0,' + ph + ')').call(d3.axisBottom(x))
+            .selectAll('text').attr('font-size','10px');
+
+        hapNames.forEach(function(h) {
+            var g = groups[h];
+            var bx = x(h), bw = Math.min(x.bandwidth(), 40);
+            var cx = bx + x.bandwidth() / 2;
+            // box
+            svg.append('rect')
+                .attr('x', cx - bw/2).attr('y', y(g.q3)).attr('width', bw).attr('height', Math.max(1, y(g.q1) - y(g.q3)))
+                .attr('fill', '#3498db').attr('fill-opacity', 0.25).attr('stroke', '#3498db').attr('stroke-width', 1.5);
+            // median
+            svg.append('line').attr('x1', cx - bw/2).attr('y1', y(g.median)).attr('x2', cx + bw/2).attr('y2', y(g.median))
+                .attr('stroke', '#2c3e50').attr('stroke-width', 2);
+            // whiskers
+            svg.append('line').attr('x1', cx).attr('y1', y(g.whisker_low)).attr('x2', cx).attr('y2', y(g.q1))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            svg.append('line').attr('x1', cx).attr('y1', y(g.whisker_high)).attr('x2', cx).attr('y2', y(g.q3))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            svg.append('line').attr('x1', cx - bw/4).attr('y1', y(g.whisker_low)).attr('x2', cx + bw/4).attr('y2', y(g.whisker_low))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            svg.append('line').attr('x1', cx - bw/4).attr('y1', y(g.whisker_high)).attr('x2', cx + bw/4).attr('y2', y(g.whisker_high))
+                .attr('stroke', '#7f8c8d').attr('stroke-width', 1);
+            // n label
+            svg.append('text').attr('x', cx).attr('y', y(g.whisker_high) - 4)
+                .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', '#555')
+                .text('n=' + g.n);
+        });
+    });
+}
+
+drawEffectCharts();
+drawBoxCharts();
+</script>
+</body>
+</html>

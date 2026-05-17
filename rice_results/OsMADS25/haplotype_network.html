@@ -163,9 +163,9 @@ const nodeG = zoomG.append('g').selectAll('g').data(simNodes).join('g')
             d.fy = Math.max(r, Math.min(height - r, e.y));
         })
         .on('end', function(e, d) { 
-            if (!e.active) sim.alphaTarget(0); 
-            d.fx = null; 
-            d.fy = null; 
+            if (!e.active) sim.alphaTarget(0);
+            // 不释放fx/fy，节点保持在用户拖动的位置
+            sim.stop();
         })
     );
 
