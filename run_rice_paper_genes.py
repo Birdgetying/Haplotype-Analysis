@@ -25,6 +25,7 @@ OUT_DB = r'D:\Desktop\project1\rice_database'
 OUT_RESULTS = r'D:\Desktop\project1\rice_results'
 
 PROMOTER_LENGTH = 2000
+MIN_HAP_COUNT = 2  # 单倍型最少样本数，低于此数量的不参与打分
 
 GENES = [
     {'gene_id': 'DEP1', 'msu_id': 'LOC_Os09g26999', 'chrom': 'chr09',
@@ -213,19 +214,36 @@ def build_haplotype_for_gene(gene_info, pheno_df):
         hap_seqs[sample] = '|'.join(sample_alleles[sample])
 
     seq_counts = Counter(hap_seqs.values())
+    # 过滤数量极少的单倍型（不参与打分）
+    valid_seqs = {seq for seq, count in seq_counts.items() if count >= MIN_HAP_COUNT}
+    n_filtered = len(seq_counts) - len(valid_seqs)
+    if n_filtered > 0:
+        filtered_info = [(seq, count) for seq, count in seq_counts.most_common()
+                         if count < MIN_HAP_COUNT]
+        print(f"[INFO] {gene_id}: 过滤 {n_filtered} 个低样本数单倍型 (min_count={MIN_HAP_COUNT}): "
+              f"{', '.join(f'{s.split(chr(124))[0][:8]}...({c})' for s, c in filtered_info)}")
+
     seq_to_name = {}
     for i, (seq, count) in enumerate(seq_counts.most_common()):
+        if seq not in valid_seqs:
+            continue
         seq_to_name[seq] = f'Hap{i+1}'
 
     sample_haps = []
+    filtered_samples = []
     for sample in valid_samples:
         seq = hap_seqs[sample]
+        if seq not in valid_seqs:
+            filtered_samples.append(sample)
+            continue
         sample_haps.append({
             'SampleID': sample,
             'Haplotype_Seq': seq,
             'Hap_Name': seq_to_name.get(seq, 'Other')
         })
     hap_sample_df = pd.DataFrame(sample_haps)
+    if filtered_samples:
+        print(f"[INFO] {gene_id}: 因单倍型过滤跳过的样本: {len(filtered_samples)}")
 
     hap_list = []
     for seq, name in seq_to_name.items():
@@ -403,7 +421,11 @@ def save_database(data, out_dir, h5_info=None):
 
 def merge_phenotype(data, pheno_df, out_dir):
     gene_id = data['gene_id']
-    merged = pd.merge(data['hap_sample_df'], pheno_df, on='SampleID', how='inner')
+    hap_sample_df = data['hap_sample_df']
+    if hap_sample_df is None or len(hap_sample_df) == 0:
+        print(f"[WARNING] {gene_id}: 过滤后无有效单倍型，跳过表型合并")
+        return None, None
+    merged = pd.merge(hap_sample_df, pheno_df, on='SampleID', how='inner')
     merged.to_csv(os.path.join(out_dir, gene_id, 'phenotype_data.csv'), index=False)
 
     hap_col = 'Hap_Name'
@@ -516,6 +538,9 @@ if __name__ == '__main__':
 
         # Merge phenotype
         merged, pheno_cols = merge_phenotype(data, pheno_df, OUT_DB)
+        if merged is None:
+            print(f"[SKIP] {gene_id}: 过滤后无可用样本，跳过后续分析")
+            continue
         print(f"[INFO] Merged: {len(merged)} samples, haplotypes: {dict(merged['Hap_Name'].value_counts())}")
 
         # Update gene_info.json with H5 annotation data

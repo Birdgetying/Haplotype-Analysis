@@ -31,6 +31,7 @@ GENES = [
 ]
 
 PROMOTER_LENGTH = 2000
+MIN_HAP_COUNT = 2  # 单倍型最少样本数，低于此数量的不参与打分
 
 from rice_common import SNPEFF_TO_CATEGORY, load_h5_annotations, classify_variant
 
@@ -171,23 +172,36 @@ def build_haplotype_for_gene(gene_info, pheno_df):
         seq = '|'.join(sample_alleles[sample])
         hap_seqs[sample] = seq
 
-    # 命名单倍型
+    # 命名单倍型（过滤数量极少的）
     seq_counts = Counter(hap_seqs.values())
+    valid_seqs = {seq for seq, count in seq_counts.items() if count >= MIN_HAP_COUNT}
+    n_filtered = len(seq_counts) - len(valid_seqs)
+    if n_filtered > 0:
+        print(f"[INFO] {gene_id}: 过滤 {n_filtered} 个低样本数单倍型 (min_count={MIN_HAP_COUNT})")
+
     sorted_seqs = seq_counts.most_common()
     seq_to_name = {}
     for i, (seq, count) in enumerate(sorted_seqs):
+        if seq not in valid_seqs:
+            continue
         seq_to_name[seq] = f'Hap{i+1}'
 
     # 构建 hap_sample_df
     sample_haps = []
+    filtered_samples = []
     for sample in valid_samples:
         hap_seq = hap_seqs[sample]
+        if hap_seq not in valid_seqs:
+            filtered_samples.append(sample)
+            continue
         sample_haps.append({
             'SampleID': sample,
             'Haplotype_Seq': hap_seq,
             'Hap_Name': seq_to_name.get(hap_seq, 'Other')
         })
     hap_sample_df = pd.DataFrame(sample_haps)
+    if filtered_samples:
+        print(f"[INFO] {gene_id}: 因单倍型过滤跳过的样本: {len(filtered_samples)}")
 
     # 构建 hap_df
     hap_list = []

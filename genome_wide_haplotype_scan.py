@@ -586,7 +586,7 @@ class ScanConfig:
     
     # 过滤参数
     MIN_VARIANTS = 1  # 最小变异数
-    MIN_SAMPLES = 1   # 最小样本数（保留所有单倍型，不过滤）
+    MIN_SAMPLES = 2   # 单倍型最少样本数，低于此数量的不参与打分
     
     # 分析参数
     PVALUE_THRESHOLD = 0.05  # P值显著性阈值

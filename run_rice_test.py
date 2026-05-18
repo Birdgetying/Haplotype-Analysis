@@ -46,7 +46,7 @@ ScanConfig.RESULTS_DIR = r'D:\Desktop\project1\rice_results'
 ScanConfig.PROMOTER_LENGTH = 2000
 ScanConfig.PROMOTER_EXTENDED_LENGTH = 5000
 ScanConfig.SNP_ONLY = False
-ScanConfig.MIN_SAMPLES = 1
+ScanConfig.MIN_SAMPLES = 2
 ScanConfig.PVALUE_THRESHOLD = 0.05
 ScanConfig.TEST_REGION_LENGTH = 0
 
