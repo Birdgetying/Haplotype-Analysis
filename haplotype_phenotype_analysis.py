@@ -5671,7 +5671,7 @@ class ReportGenerator:
         print(f"[INFO] 分析报告已生成: {filepath}")
         return filepath
     
-    def generate_integrated_html(self, hap_sample_df: pd.DataFrame, 
+    def generate_integrated_html(self, hap_sample_df: pd.DataFrame,
                                   effect_results: dict,
                                   variant_positions: list,
                                   region_start: int, region_end: int,
@@ -5688,7 +5688,8 @@ class ReportGenerator:
                                   variant_pvalues: dict = None,
                                   network_data: dict = None,
                                   has_promoter_variants: bool = False,
-                                  promoter_actual_length: int = 2000) -> str:
+                                  promoter_actual_length: int = 2000,
+                                  all_phenotype_results: dict = None) -> str:
         """生成综合HTML大图（整合基因结构、GWAS P值、网络图、效应图、箱线图、单倍型序列）
         
         布局设计：
@@ -6022,47 +6023,83 @@ class ReportGenerator:
         grand_mean = effect_results.get('grand_mean', 0) if effect_results else 0
         region_len_kb = (region_end - region_start) / 1000
         
-        # 箱线图数据 - 检查所有可能的表型列
-        box_data = {}
-        pheno_cols = [c for c in hap_sample_df.columns if 'pheno' in c.lower() or c == phenotype_col]
-        actual_pheno_col = pheno_cols[0] if pheno_cols else phenotype_col
-        pass  # phenotype column selected
-        
-        for hap in top_haps:
-            hap_df = hap_sample_df[hap_sample_df[hap_col] == hap]
-            if actual_pheno_col in hap_df.columns:
-                values = hap_df[actual_pheno_col].dropna().tolist()
-                if values:
-                    box_data[hap] = {
-                        'mean': np.mean(values), 'median': np.median(values),
-                        'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
-                        'min': min(values), 'max': max(values), 'n': len(values),
-                        'values': values  # 保存原始值用于数据点绘制
+        # 收集所有可用表型列（从hap_sample_df和all_phenotype_results）
+        all_pheno_names = []
+        if all_phenotype_results:
+            all_pheno_names = [p for p in all_phenotype_results.keys()
+                             if p in hap_sample_df.columns]
+        if not all_pheno_names:
+            all_pheno_names = [c for c in hap_sample_df.columns
+                             if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']
+                             and not c.startswith('PC')]
+        actual_pheno_col = phenotype_col if phenotype_col in all_pheno_names else (all_pheno_names[0] if all_pheno_names else phenotype_col)
+
+        # 为所有表型预计算箱线图数据和效应数据
+        all_boxplot_data = {}  # {pheno: {hap: {stats}}}
+        all_effect_data = {}   # {pheno: {hap: {effect}}}
+        all_global_ranges = {} # {pheno: {'box': (min,max,range), 'eff': (min,max,range)}}
+
+        for pheno in all_pheno_names:
+            # 箱线图数据
+            bd = {}
+            for hap in top_haps:
+                hap_df = hap_sample_df[hap_sample_df[hap_col] == hap]
+                if pheno in hap_df.columns:
+                    values = hap_df[pheno].dropna().tolist()
+                    if values:
+                        bd[hap] = {
+                            'mean': round(np.mean(values), 4),
+                            'median': round(np.median(values), 4),
+                            'q1': round(np.percentile(values, 25), 4),
+                            'q3': round(np.percentile(values, 75), 4),
+                            'min': round(min(values), 4),
+                            'max': round(max(values), 4),
+                            'n': len(values),
+                            'values': [round(float(v), 4) for v in values]
+                        }
+            all_boxplot_data[pheno] = bd
+
+            # 效应数据：从all_phenotype_results提取
+            ed = {}
+            if all_phenotype_results and pheno in all_phenotype_results:
+                pheno_effect = all_phenotype_results[pheno].get('effect', {})
+                hap_effects = pheno_effect.get('haplotype_effects', [])
+                for e in hap_effects:
+                    ed[e.get('haplotype', '')] = {
+                        'effect': e.get('effect', 0),
+                        'ci_lower': e.get('ci_lower', 0),
+                        'ci_upper': e.get('ci_upper', 0),
+                        'p_value': e.get('p_value', 1.0),
+                        'is_reference': e.get('is_reference', False)
                     }
-        pass  # boxplot data prepared
-        
-        # 效应图数据
-        effect_data = {}
-        for e in effects:
-            effect_data[e['haplotype']] = e
-        
-        # 计算全局数据范围
-        if box_data:
-            all_vals = [v for d in box_data.values() for v in [d['min'], d['max']]]
-            global_min, global_max = min(all_vals), max(all_vals)
-            global_range = global_max - global_min if global_max > global_min else 1
-        else:
-            global_min, global_max, global_range = 0, 1, 1
-        
-        # 效应值范围
-        if effect_data:
-            eff_vals = [e.get('effect', 0) for e in effect_data.values()]
-            eff_min, eff_max = min(eff_vals), max(eff_vals)
-            eff_range = max(abs(eff_min), abs(eff_max)) if eff_vals else 1
-        else:
-            eff_vals = []
-            eff_min, eff_max = -1, 1
-            eff_range = 1
+            all_effect_data[pheno] = ed
+
+            # 全局范围
+            if bd:
+                all_vals = [v for d in bd.values() for v in [d['min'], d['max']]]
+                gmin, gmax = min(all_vals), max(all_vals)
+                grange = gmax - gmin if gmax > gmin else 1
+            else:
+                gmin, gmax, grange = 0, 1, 1
+            if ed:
+                evals = [e.get('effect', 0) for e in ed.values()]
+                emin, emax = min(evals), max(evals)
+                erange = max(abs(emin), abs(emax)) if evals else 1
+            else:
+                emin, emax, erange = -1, 1, 1
+            all_global_ranges[pheno] = {'box_min': gmin, 'box_max': gmax, 'box_range': grange,
+                                         'eff_min': emin, 'eff_max': emax, 'eff_range': erange}
+
+        # 当前选中表型的数据（默认用actual_pheno_col）
+        box_data = all_boxplot_data.get(actual_pheno_col, {})
+        effect_data = all_effect_data.get(actual_pheno_col, {})
+        global_min = all_global_ranges.get(actual_pheno_col, {}).get('box_min', 0)
+        global_max = all_global_ranges.get(actual_pheno_col, {}).get('box_max', 1)
+        global_range = all_global_ranges.get(actual_pheno_col, {}).get('box_range', 1)
+        eff_min = all_global_ranges.get(actual_pheno_col, {}).get('eff_min', -1)
+        eff_max = all_global_ranges.get(actual_pheno_col, {}).get('eff_max', 1)
+        eff_range = all_global_ranges.get(actual_pheno_col, {}).get('eff_range', 1)
+        eff_vals = [e.get('effect', 0) for e in effect_data.values()] if effect_data else []
         
         # 颜色方案：DEL蓝色、INS红色、A紫色
         base_colors = {'A': '#9b59b6', 'T': '#27AE60', 'C': '#3498DB', 'G': '#F1C40F',
@@ -6194,39 +6231,52 @@ class ReportGenerator:
         # 为评分构建FDR过滤后的GWAS数据
         gwas_data_fdr = [d for d in gwas_data if d['pos'] in fdr_sig_positions]
 
-        try:
-            scorer = HaplotypeScorer(
-                hap_sample_df=hap_sample_df,
-                variant_positions=display_positions,
-                variant_info=variant_info,
-                snp_effects=snp_effects,
-                gwas_data=gwas_data_fdr,
-                exons=exons if exons else [],
-                cds=cds if cds else [],
-                gene_start=g_start, gene_end=g_end,
-                phenotype_col=phenotype_col,
-                maf_threshold=0.05,
-                ld_r2_matrix=ld_r2_matrix,
-                effect_results=effect_results,
-                promoter_start=promoter_start, promoter_end=promoter_end,
-                strand=strand,
-                pve=self.results.get('pve', {}).get('eta_squared', None) if 'pve' in self.results else None
-            )
-            score_results = scorer.score_all()
-            haplotype_score_json = json.dumps(score_results, cls=NumpyEncoder)
-            print(f"[INFO] Haplotype scoring done: R^2={score_results.get('r_squared','N/A')}, "
-                  f"p={score_results.get('regression_pvalue','N/A')}")
-        except Exception as e:
-            print(f"[WARNING] Haplotype scoring failed: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-            haplotype_score_json = json.dumps({
-                'per_sample': [], 'per_haplotype': {},
-                'r_squared': None, 'regression_pvalue': None,
-                'slope': 0, 'intercept': 0,
-                'confidence_level': 'unknown', 'low_confidence': False,
-                'pve': None, 'circularity_warning': False
-            })
+        # 为每个表型分别计算单倍型打分
+        all_score_data = {}  # {pheno: score_results}
+        for score_pheno in all_pheno_names:
+            try:
+                pheno_effect = all_phenotype_results.get(score_pheno, {}).get('effect', {}) if all_phenotype_results else {}
+                pheno_pve = None
+                if all_phenotype_results and score_pheno in all_phenotype_results:
+                    pheno_pve = all_phenotype_results[score_pheno].get('pve', {}).get('eta_squared', None)
+                scorer = HaplotypeScorer(
+                    hap_sample_df=hap_sample_df,
+                    variant_positions=display_positions,
+                    variant_info=variant_info,
+                    snp_effects=snp_effects,
+                    gwas_data=gwas_data_fdr,
+                    exons=exons if exons else [],
+                    cds=cds if cds else [],
+                    gene_start=g_start, gene_end=g_end,
+                    phenotype_col=score_pheno,
+                    maf_threshold=0.05,
+                    ld_r2_matrix=ld_r2_matrix,
+                    effect_results=pheno_effect if pheno_effect else effect_results,
+                    promoter_start=promoter_start, promoter_end=promoter_end,
+                    strand=strand,
+                    pve=pheno_pve
+                )
+                score_results = scorer.score_all()
+                all_score_data[score_pheno] = score_results
+            except Exception as e:
+                all_score_data[score_pheno] = {
+                    'per_sample': [], 'per_haplotype': {},
+                    'r_squared': None, 'regression_pvalue': None,
+                    'slope': 0, 'intercept': 0,
+                    'confidence_level': 'unknown', 'low_confidence': False,
+                    'pve': None, 'circularity_warning': False
+                }
+
+        # 默认使用第一个表型的打分（兼容旧代码引用）
+        score_results = all_score_data.get(actual_pheno_col, list(all_score_data.values())[0] if all_score_data else {})
+        haplotype_score_json = json.dumps(all_score_data, cls=NumpyEncoder)
+        # 单个表型JSON（兼容旧JS引用）
+        haplotype_score_single_json = json.dumps(score_results, cls=NumpyEncoder)
+
+        if all_score_data:
+            first_sc = list(all_score_data.values())[0]
+            print(f"[INFO] Haplotype scoring done ({len(all_score_data)} phenotypes): "
+                  f"R^2={first_sc.get('r_squared','N/A')}, p={first_sc.get('regression_pvalue','N/A')}")
         # ==================== 评分模型计算结束 ====================
 
         # 准备网络图数据
@@ -6327,18 +6377,13 @@ class ReportGenerator:
         # 计算SVG宽度（与基因结构图对齐，使用相同的变量体系）
         n_vars = len(display_positions)
 
-        # 协变量列数（基因结构SVG的gene_area_start必须与表格序列列起始对齐）
-        # 排除非展示列：元数据列 + 当前表型列 + PCA协变量列（PC1,PC2,...）
-        covariate_cols = [c for c in hap_sample_df.columns
-                          if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq', phenotype_col]
-                          and not c.startswith('PC')]
-        n_cov_cols = len(covariate_cols)
+        # 协变量列已移除——所有表型通过下拉框切换，仅显示当前选中表型的一列箱线图
+        n_cov_cols = 0
 
         hap_col_w_for_min = 90
         eff_col_w_for_min = 180
         box_col_w_for_min = 180
-        # gene_area_start必须包含协变量列宽度，否则基因结构X轴与表格序列列错位
-        gene_area_start = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min + n_cov_cols * box_col_w_for_min
+        gene_area_start = hap_col_w_for_min + eff_col_w_for_min + box_col_w_for_min
         gene_area_width = n_vars * 20  # 基因区域宽度（变异列总宽度）
         legend_w_for_min = 220
         svg_total_width = gene_area_start + gene_area_width + legend_w_for_min  # 与基因结构图完全相同的总宽度
@@ -6366,7 +6411,25 @@ class ReportGenerator:
         network_edges_json = json.dumps(network_edges, cls=NumpyEncoder)
         has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
         promoter_actual_length_json = str(promoter_actual_length)
-        
+
+        # 表型下拉框选项HTML
+        pheno_options_html = ''
+        for pn in all_pheno_names:
+            sel = ' selected' if pn == actual_pheno_col else ''
+            pheno_options_html += f'<option value="{pn}"{sel}>{pn}</option>\n'
+        all_pheno_names_json = json.dumps(all_pheno_names)
+        pheno_first_for_js = actual_pheno_col
+        # 所有表型的箱线图/效应/全局范围数据，供JS切换用
+        all_pheno_data_for_js = json.dumps({
+            'boxplot': all_boxplot_data,
+            'effect': all_effect_data,
+            'ranges': {p: {'box_min': float(v['box_min']), 'box_max': float(v['box_max']),
+                           'box_range': float(v['box_range']),
+                           'eff_min': float(v['eff_min']), 'eff_max': float(v['eff_max']),
+                           'eff_range': float(v['eff_range'])}
+                      for p, v in all_global_ranges.items()}
+        }, cls=NumpyEncoder)
+
         html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6487,6 +6550,11 @@ class ReportGenerator:
         .manual-clear-btn:hover {{ background: #e8e8e8; }}
         .manual-filtered {{ opacity: 0.15 !important; cursor: pointer; }}
         .manual-filtering {{ cursor: crosshair; }}
+        /* 表型下拉框 */
+        .pheno-selector {{ display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #f0f7ff; border: 1px solid #bdd7ee; border-radius: 6px; margin: 8px 0; }}
+        .pheno-selector label {{ font-size: 12px; font-weight: 600; color: #2c3e50; }}
+        .pheno-selector select {{ padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background: white; cursor: pointer; }}
+        .pheno-selector select:focus {{ outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52,152,219,0.2); }}
     </style>
 </head>
 <body>
@@ -6502,7 +6570,15 @@ class ReportGenerator:
             <span>Grand Mean: {grand_mean:.3f}</span>
         </div>
     </div>
-    
+
+    <!-- 表型选择器 -->
+    <div class="pheno-selector">
+        <label>Phenotype:</label>
+        <select id="phenoSelect" onchange="switchPhenotype(this.value)">
+            {pheno_options_html}
+        </select>
+    </div>
+
     <!-- 过滤控制面板 -->
     <div class="filter-panel">
         <div class="filter-group">
@@ -6836,10 +6912,6 @@ class ReportGenerator:
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Effect
         html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # Phenotype
         
-        # 协变量箱线图列 - 复用上方已计算的 covariate_cols（避免重复计算）
-        for cov_col in covariate_cols:
-            html += f'<col style="width:180px;min-width:180px;max-width:180px;">\n'  # 协变量列
-        
         for _ in display_positions:
             html += f'<col style="width:20px;min-width:20px;max-width:20px;">\n'  # 序列列
         
@@ -6850,11 +6922,6 @@ class ReportGenerator:
         html += '    <th style="text-align:left;padding-left:10px;vertical-align:middle;cursor:pointer;" title="点击复制所有样本" onclick="copyAllHaplotypes()">Haplotype</th>\n'
         html += '    <th class="effect-cell" style="vertical-align:middle;">Effect (vs Grand Mean)</th>\n'
         html += '    <th class="box-cell" style="vertical-align:middle;">Phenotype</th>\n'
-        
-        # 协变量表头（序列列之前）
-        for cov_col in covariate_cols:
-            html += f'    <th class="box-cell" style="vertical-align:middle;">{cov_col}</th>\n'
-        
         for pos in display_positions:
             # 物理坐标竖排，千分位逗号分隔，宽度与序列列 td 严格一致
             pos_str = f'{pos:,}'  # 千分位逗号
@@ -6942,59 +7009,6 @@ class ReportGenerator:
     <td class="box-cell">
         {box_html}
     </td>\n'''
-            
-            # 协变量箱线图列（序列列之前）
-            for cov_col in covariate_cols:
-                # 计算该协变量的箱线图数据
-                cov_box_data = {}
-                for h in top_haps:
-                    hap_rows = hap_sample_df[hap_sample_df[hap_col] == h]
-                    if cov_col in hap_rows.columns:
-                        values = hap_rows[cov_col].dropna().tolist()
-                        if values:
-                            cov_box_data[h] = {
-                                'mean': np.mean(values), 'median': np.median(values),
-                                'q1': np.percentile(values, 25), 'q3': np.percentile(values, 75),
-                                'min': min(values), 'max': max(values), 'n': len(values),
-                                'values': values
-                            }
-                
-                # 计算全局范围
-                if cov_box_data:
-                    cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
-                    cov_global_min = min(cov_all_vals)
-                    cov_global_max = max(cov_all_vals)
-                    cov_global_range = cov_global_max - cov_global_min if cov_global_max > cov_global_min else 1
-                else:
-                    cov_global_min, cov_global_max, cov_global_range = 0, 1, 1
-                
-                # 生成箱线图 HTML（含散点）
-                cov_bd = cov_box_data.get(hap, {})
-                if cov_bd:
-                    cov_w_left = ((cov_bd['min'] - cov_global_min) / cov_global_range) * 100
-                    cov_w_right = ((cov_bd['max'] - cov_global_min) / cov_global_range) * 100
-                    cov_b_left = ((cov_bd['q1'] - cov_global_min) / cov_global_range) * 100
-                    cov_b_width = ((cov_bd['q3'] - cov_bd['q1']) / cov_global_range) * 100
-                    cov_m_pos = ((cov_bd['median'] - cov_global_min) / cov_global_range) * 100
-                    # 散点
-                    import random
-                    random.seed(hash(hap + cov_col) % 9999)
-                    cov_dots_html = ''
-                    for val in cov_bd.get('values', []):
-                        x_pct = ((val - cov_global_min) / cov_global_range) * 100
-                        top_pct = random.randint(15, 85)
-                        cov_dots_html += f'<div class="data-dot" style="left:{x_pct:.1f}%;top:{top_pct}%;"></div>'
-                    cov_box_html = f'''<div class="bar-container">
-                        <div class="bar-whisker" style="left:{cov_w_left}%;width:{max(cov_w_right-cov_w_left,1)}%;"></div>
-                        <div class="bar-box" style="left:{cov_b_left}%;width:{max(cov_b_width,2)}%;"></div>
-                        <div class="bar-median" style="left:{cov_m_pos}%;"></div>
-                        {cov_dots_html}
-                    </div>'''
-                else:
-                    cov_box_html = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>'
-                
-                html += f'    <td class="box-cell" style="width:180px;min-width:180px;max-width:180px;">\n        {cov_box_html}\n    </td>\n'
-            
             # 序列列 — 按|分隔等位基因，保留多字符indel边界
             if 'Haplotype_Seq' in row.index:
                 alleles = str(row['Haplotype_Seq']).split('|')
@@ -7068,40 +7082,6 @@ class ReportGenerator:
                 html += f'<span style="position:absolute;bottom:-4px;left:{tick_pct}%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">{tick_label}</span>'
             html += '</div>'
         html += '</td>\n'
-        
-        # 协变量列坐标轴（序列列之前）
-        for cov_col in covariate_cols:
-            # 计算该协变量的箱线图数据
-            cov_box_data = {}
-            for h in top_haps:
-                hap_rows = hap_sample_df[hap_sample_df[hap_col] == h]
-                if cov_col in hap_rows.columns:
-                    values = hap_rows[cov_col].dropna().tolist()
-                    if values:
-                        cov_box_data[h] = {
-                            'min': min(values), 'max': max(values)
-                        }
-            
-            html += '<td class="box-cell" style="border:none;position:relative;">'
-            if cov_box_data:
-                cov_all_vals = [v for d in cov_box_data.values() for v in [d['min'], d['max']]]
-                cov_global_min = min(cov_all_vals)
-                cov_global_max = max(cov_all_vals)
-                cov_global_range = cov_global_max - cov_global_min if cov_global_max > cov_global_min else 1
-                
-                cov_axis_ticks = []
-                for i in range(3):
-                    tick_val = cov_global_min + i * cov_global_range / 2
-                    tick_pct = ((tick_val - cov_global_min) / cov_global_range) * 100 if cov_global_range > 0 else 50
-                    cov_axis_ticks.append((tick_pct, f'{tick_val:.2f}'))
-                
-                html += '<div style="position:relative;height:25px;">'
-                html += '<div style="position:absolute;bottom:10px;left:0;right:0;height:1px;background:#bdc3c7;"></div>'
-                for tick_pct, tick_label in cov_axis_ticks:
-                    html += f'<div style="position:absolute;bottom:6px;left:{tick_pct}%;transform:translateX(-50%);width:1px;height:9px;background:#bdc3c7;"></div>'
-                    html += f'<span style="position:absolute;bottom:-4px;left:{tick_pct}%;transform:translateX(-50%);font-size:9px;color:#7f8c8d;white-space:nowrap;">{tick_label}</span>'
-                html += '</div>'
-            html += '</td>\n'
         
         # 序列列（逐个输出空td，与数据行一一对应，确保列对齐）
         for _ in display_positions:
@@ -7294,7 +7274,8 @@ var networkNodes = {network_nodes_json};
 var networkEdges = {network_edges_json};
 var regionStart  = {region_start};
 var regionEnd    = {region_end};
-var haplotypeScoreData = {haplotype_score_json};
+var allHaplotypeScoreData = {haplotype_score_json};
+var haplotypeScoreData = allHaplotypeScoreData['{pheno_first_for_js}'];
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
 var hasPromoter  = {has_promoter_variants_json};
@@ -7308,6 +7289,95 @@ var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
 var displayPositions = __DISPLAY_POSITIONS__;  // 显示的变异位置列表
 var ldR2Matrix = __LD_R2_MATRIX__;
+var allPhenotypeData = {all_pheno_data_for_js};
+var allPhenoNames = {all_pheno_names_json};
+
+// ==================== 表型切换功能 ====================
+function switchPhenotype(pheno) {{
+    // 更新score数据引用
+    if (allHaplotypeScoreData && allHaplotypeScoreData[pheno]) {{
+        haplotypeScoreData = allHaplotypeScoreData[pheno];
+    }}
+    // 重绘评分图
+    if (typeof drawHaplotypeScorePlot === 'function') {{
+        drawHaplotypeScorePlot(haplotypeScoreData);
+    }}
+    // 重绘表型列（效应+箱线图）
+    renderPhenotypeColumn(pheno);
+}}
+
+function renderPhenotypeColumn(pheno) {{
+    var data = allPhenotypeData;
+    if (!data || !data.boxplot || !data.boxplot[pheno]) return;
+    var boxData = data.boxplot[pheno];
+    var effData = data.effect[pheno] || {{}};
+    var ranges = data.ranges[pheno] || {{box_min:0, box_max:1, box_range:1, eff_min:-1, eff_max:1, eff_range:1}};
+    // 更新表格行中的效应和箱线图列
+    var rows = document.querySelectorAll('.data-table tbody tr[data-hap]');
+    rows.forEach(function(row) {{
+        var hap = row.getAttribute('data-hap');
+        var cells = row.querySelectorAll('td');
+        if (cells.length < 3) return;
+        // cells[0] = Haplotype, cells[1] = Effect, cells[2] = Phenotype
+        var effCell = cells[1];
+        var boxCell = cells[2];
+        // 更新效应列
+        var eff = effData[hap];
+        if (eff) {{
+            var effVal = eff.effect || 0;
+            var ciLow = eff.ci_lower || 0;
+            var ciUp = eff.ci_upper || 0;
+            var pVal = eff.p_value || 1.0;
+            var isRef = eff.is_reference || false;
+            var effRange = ranges.eff_range || 1;
+            var effCenter = 50 + (effVal / effRange * 45);
+            var ciLeft = 50 + (ciLow / effRange * 45);
+            var ciRight = 50 + (ciUp / effRange * 45);
+            var ciWidth = ciRight - ciLeft;
+            var pointColor = isRef ? '#95a5a6' : (pVal < 0.01 ? '#8B0000' : (pVal < 0.05 ? '#e74c3c' : '#3498db'));
+            effCell.innerHTML = '<div class="bar-container">' +
+                '<div class="bar-center"></div>' +
+                '<div class="forest-ci" style="left:' + ciLeft + '%;width:' + Math.max(ciWidth,1) + '%;background:' + pointColor + ';"></div>' +
+                '<div class="forest-point" style="left:' + effCenter + '%;background:' + pointColor + ';"></div>' +
+            '</div>';
+        }} else {{
+            effCell.innerHTML = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">N/A</span></div>';
+        }}
+        // 更新箱线图列
+        var bd = boxData[hap];
+        if (bd) {{
+            var gmin = ranges.box_min || 0;
+            var grange = ranges.box_range || 1;
+            var wLeft = ((bd.min - gmin) / grange) * 100;
+            var wRight = ((bd.max - gmin) / grange) * 100;
+            var bLeft = ((bd.q1 - gmin) / grange) * 100;
+            var bWidth = ((bd.q3 - bd.q1) / grange) * 100;
+            var mPos = ((bd.median - gmin) / grange) * 100;
+            var dotsHtml = '';
+            if (bd.values) {{
+                var seed = (hap + pheno).split('').reduce(function(a,b){{return a+b.charCodeAt(0);}},0) % 9999;
+                var rng = seed/9999;
+                bd.values.forEach(function(val) {{
+                    var xPct = ((val - gmin) / grange) * 100;
+                    rng = (rng * 16807) % 2147483647;
+                    var topPct = 15 + (rng/2147483647) * 70;
+                    dotsHtml += '<div class="data-dot" style="left:' + xPct.toFixed(1) + '%;top:' + topPct.toFixed(0) + '%;"></div>';
+                }});
+            }}
+            boxCell.innerHTML = '<div class="bar-container">' +
+                '<div class="bar-whisker" style="left:' + wLeft + '%;width:' + Math.max(wRight-wLeft,1) + '%;"></div>' +
+                '<div class="bar-box" style="left:' + bLeft + '%;width:' + Math.max(bWidth,2) + '%;"></div>' +
+                '<div class="bar-median" style="left:' + mPos + '%;"></div>' +
+                dotsHtml +
+            '</div>';
+        }} else {{
+            boxCell.innerHTML = '<div class="bar-container" style="background:#f5f5f5;"><span style="font-size:9px;color:#999;position:absolute;left:50%;transform:translateX(-50%);top:3px;">No data</span></div>';
+        }}
+    }});
+    // 更新表头中的表型名称
+    var phenoHeader = document.querySelector('.data-table thead th.box-cell');
+    if (phenoHeader) phenoHeader.textContent = pheno;
+}}
 
 // ==================== 过滤功能 ====================
 var currentFilter = { maf: 0.05, missingRate: 0.2 };
@@ -8752,6 +8822,9 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{hap_order_cluster}', hap_order_cluster_json)
         html = html.replace('{gwas_data_json}',     gwas_data_json)
         html = html.replace('{haplotype_score_json}', haplotype_score_json)
+        html = html.replace('{all_pheno_data_for_js}', all_pheno_data_for_js)
+        html = html.replace('{all_pheno_names_json}', all_pheno_names_json)
+        html = html.replace('{pheno_first_for_js}', pheno_first_for_js)
         html = html.replace('{network_nodes_json}', network_nodes_json)
         html = html.replace('{network_edges_json}', network_edges_json)
         html = html.replace('{has_promoter_variants_json}', has_promoter_variants_json)
@@ -13110,6 +13183,7 @@ class HaplotypePhenotypeAnalyzer:
                 variant_pvalues=variant_pvalues,
                 has_promoter_variants=has_promoter_variants,
                 promoter_actual_length=promoter_actual_length,
+                all_phenotype_results=all_results.get('phenotype_results', {}),
             )
             
             # 5.2 生成新可视化功能

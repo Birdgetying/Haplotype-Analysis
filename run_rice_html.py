@@ -31,7 +31,7 @@ GFF_FILE = r'D:\Desktop\data\水稻\rice_test_genes.gff3'
 def update_gene_info(gene_dir):
     """更新gene_info.json，补充HTML生成需要的字段"""
     info_path = os.path.join(gene_dir, 'gene_info.json')
-    with open(info_path, 'r') as f:
+    with open(info_path, 'r', encoding='utf-8') as f:
         info = json.load(f)
 
     # 确保有必要的字段
@@ -49,7 +49,7 @@ def update_gene_info(gene_dir):
             info['promoter_start'] = info['gene_end'] + 1
             info['promoter_end'] = info['gene_end'] + 2000
 
-    with open(info_path, 'w') as f:
+    with open(info_path, 'w', encoding='utf-8') as f:
         json.dump(info, f, indent=2)
     return info
 
@@ -66,7 +66,7 @@ def generate_html(gene_id):
 
     # 读取表型数据
     pheno_path = os.path.join(gene_dir, 'phenotype_data.csv')
-    pheno_data = pd.read_csv(pheno_path)
+    pheno_data = pd.read_csv(pheno_path, encoding='utf-8')
     print(f"[INFO] {gene_id}: {len(pheno_data)} 个样本有表型数据")
 
     # 获取表型列
