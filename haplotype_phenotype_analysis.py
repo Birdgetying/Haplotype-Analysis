@@ -6039,11 +6039,14 @@ class ReportGenerator:
         all_effect_data = {}   # {pheno: {hap: {effect}}}
         all_global_ranges = {} # {pheno: {'box': (min,max,range), 'eff': (min,max,range)}}
 
+        # 按单倍型预分组DataFrame，避免O(P×H)次重复筛选
+        hap_groups = {hap: hap_sample_df[hap_sample_df[hap_col] == hap] for hap in top_haps}
+
         for pheno in all_pheno_names:
             # 箱线图数据
             bd = {}
             for hap in top_haps:
-                hap_df = hap_sample_df[hap_sample_df[hap_col] == hap]
+                hap_df = hap_groups[hap]
                 if pheno in hap_df.columns:
                     values = hap_df[pheno].dropna().tolist()
                     if values:
@@ -6270,8 +6273,6 @@ class ReportGenerator:
         # 默认使用第一个表型的打分（兼容旧代码引用）
         score_results = all_score_data.get(actual_pheno_col, list(all_score_data.values())[0] if all_score_data else {})
         haplotype_score_json = json.dumps(all_score_data, cls=NumpyEncoder)
-        # 单个表型JSON（兼容旧JS引用）
-        haplotype_score_single_json = json.dumps(score_results, cls=NumpyEncoder)
 
         if all_score_data:
             first_sc = list(all_score_data.values())[0]
@@ -6412,7 +6413,6 @@ class ReportGenerator:
         has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
         promoter_actual_length_json = str(promoter_actual_length)
 
-        # 表型下拉框选项HTML
         pheno_options_html = ''
         for pn in all_pheno_names:
             sel = ' selected' if pn == actual_pheno_col else ''
