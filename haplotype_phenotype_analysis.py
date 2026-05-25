@@ -4355,15 +4355,21 @@ class PromoterAnnotator:
 
 class HaplotypeScorer:
     """
-    多组分单倍型打分模型 (v2)
+    多组分单倍型打分模型 (v3)
 
-    综合六个维度计算每个单倍型的得分：
+    综合七个维度计算每个单倍型的得分：
     1. VariantEffectScore  — LD剪枝后的变异功能严重度 (避免计数连锁位点)
     2. BurdenScore         — LD剪枝后的稀有变异(MAF<0.05)负荷
-    3. MultiOmicsScore     — 多组学协变量标准化偏差
-    4. FineMappingScore    — 近似贝叶斯因子 + LD剪枝 (已整合GWAS信号)
-    5. EffectSizeScore     — 贝叶斯收缩后的标准化效应量
-    6. GeneticDistinctScore — 功能加权的Hamming距离
+    3. EBEffectScore       — GeneBayes EB收缩 + LD软加权 (功能单倍型识别)
+    4. MultiOmicsScore     — 多组学协变量标准化偏差
+    5. FineMappingScore    — 近似贝叶斯因子 + LD剪枝 (已整合GWAS信号)
+    6. EffectSizeScore     — 贝叶斯收缩后的标准化效应量
+    7. GeneticDistinctScore — 功能加权的Hamming距离
+
+    v3改进:
+    - 新增EBEffectScore: 回收单变量效应→EB收缩抑制低MAF噪声→LD软加权(替代硬剪枝)
+    - LD软加权: 连锁标记用√(1-r²)惩罚而非直接归零，保留弱独立信号
+    - EB收缩: 稀有变异效应向同MAF组均值收缩(data_noise/(data_noise+group_signal))
 
     v2改进:
     - GWASScore合并入FineMappingScore (去冗余)
@@ -4377,6 +4383,8 @@ class HaplotypeScorer:
     - Gene-based haplotype GWAS: Lo et al. 2023, Hamazaki & Iwata 2020
     - Combined multi-omics burden + GWAS fine-mapping framework
     - Wakefield (2009) ABF for fine-mapping
+    - GeneBayes: EB shrinkage (s41588-024-01820-9)
+    - LD prior sharing (s41467-025-59983-w)
     """
 
     # 协变量识别时排除的非表型列
@@ -4402,6 +4410,7 @@ class HaplotypeScorer:
     DEFAULT_COMPONENT_WEIGHTS = {
         'variant_effect': 1.0,
         'burden': 1.0,
+        'eb_effect': 0.9,         # GeneBayes EB收缩 + LD软加权
         'multi_omics': 0.8,
         'fine_mapping': 0.8,        # 整合GWAS信号，无需单独的gwas组件
         'effect_size': 0.9,
@@ -4652,6 +4661,231 @@ class HaplotypeScorer:
         if ref:
             return allele.upper() != ref
         return True  # 无参考信息时，非N即视为变异（保守）
+
+    # ========== GeneBayes 增强: EB收缩 + LD软加权 ==========
+
+    def _reconstruct_genotype_matrix(self):
+        """从单倍型数据重建基因型矩阵 X (n_samples, n_all_variants)
+
+        使用 variant_info 中所有位点对齐单倍型序列，而非仅 display_positions。
+        每个位点的基因型 = 样本携带的ALT等位基因数 (0/1)。
+
+        Returns:
+            X: (n_samples, n_all_variants) genotype matrix
+            y: (n_samples,) phenotype vector
+            all_positions: sorted list of all genomic positions in X columns
+        """
+        seq_map = self._get_hap_seq_map()
+        if not seq_map:
+            return None, None, None, None
+
+        # 使用 variant_info 的完整位点列表，确保与单倍型序列索引对齐
+        all_positions = sorted(self.variant_info.keys()) if self.variant_info else list(self.variant_positions)
+        p = len(all_positions)
+
+        samples = []
+        genotypes = []
+        phenotypes = []
+        for _, row in self.hap_sample_df.iterrows():
+            hap = row[self.hap_col]
+            seq = seq_map.get(hap, '')
+            if not seq:
+                continue
+            pheno = row.get(self.phenotype_col)
+            if pd.isna(pheno):
+                continue
+
+            gt = np.zeros(p, dtype=np.float64)
+            for i, pos in enumerate(all_positions):
+                if i < len(seq) and self._is_alt_allele(pos, seq[i]):
+                    gt[i] = 1.0
+
+            samples.append(str(row.get('SampleID', '')))
+            genotypes.append(gt)
+            phenotypes.append(float(pheno))
+
+        if len(samples) < 3:
+            return None, None, None, None
+
+        X = np.array(genotypes, dtype=np.float64)
+        y = np.array(phenotypes, dtype=np.float64)
+        return X, y, all_positions
+
+    def _compute_univariate_effects(self, X, y):
+        """快速单变量效应量扫描
+
+        对于二值基因型 (0/1) 或 (0/1/2), 效应量 = cov(x_j, y) / var(x_j)
+        等价于单变量线性回归的斜率。
+
+        Returns:
+            effects: (p,) array of |β| per marker
+        """
+        if X is None or y is None or X.shape[0] < 3:
+            return np.zeros(len(self.variant_positions))
+        y_c = y - y.mean()
+        X_c = X - X.mean(axis=0, keepdims=True)
+        var_x = X_c.var(axis=0)
+        var_x = np.maximum(var_x, 1e-8)
+        cov_xy = X_c.T @ y_c / len(y_c)
+        return np.abs(cov_xy / var_x)
+
+    def _eb_shrink_marker_effects(self, effects, maf=None, n_bins=20):
+        """经验贝叶斯效应收缩 (GeneBayes 启发): 稀有变异效应向同MAF组均值收缩
+
+        收缩量 = data_noise / (data_noise + group_signal)
+        - 高MAF → 效应可靠 → 几乎不收缩
+        - 低MAF → 效应噪声大 → 向组均值收缩
+
+        Args:
+            effects: (p,) |β| per marker
+            maf: (p,) minor allele frequency, None则从pos_maf获取
+            n_bins: MAF分箱数
+
+        Returns:
+            shrunk: (p,) EB-shrunk |β|
+        """
+        p = len(effects)
+        effects = np.asarray(effects, dtype=np.float64)
+        if maf is None:
+            maf = np.array([self.pos_maf.get(pos, 0.5) for pos in self.variant_positions], dtype=np.float64)
+        else:
+            maf = np.asarray(maf, dtype=np.float64)
+        if len(maf) != p:
+            maf = np.full(p, 0.5)
+
+        MIN_MAF = 1e-4
+
+        # Log-scale binning: 更多 bin 在低 MAF 区间
+        log_maf = np.log10(np.maximum(maf, MIN_MAF))
+        bins = np.percentile(log_maf, np.linspace(0, 100, n_bins + 1))
+        bins[0] = log_maf.min() - 1e-8
+        bins[-1] = log_maf.max() + 1e-8
+        bin_idx = np.digitize(log_maf, bins) - 1
+        bin_idx = np.clip(bin_idx, 0, n_bins - 1)
+
+        shrunk = np.zeros(p)
+        for b in range(n_bins):
+            mask = bin_idx == b
+            n_b = mask.sum()
+            if n_b < 5:
+                shrunk[mask] = effects[mask]
+                continue
+
+            group_mean = np.mean(effects[mask])
+            group_var = np.var(effects[mask])
+            if group_var < 1e-12:
+                shrunk[mask] = group_mean
+                continue
+
+            data_precision = maf[mask] * (1.0 - maf[mask]) + 1e-8
+            data_noise = 1.0 / data_precision
+            avg_noise = np.mean(data_noise)
+            signal_var = max(group_var - avg_noise, 0.0)
+
+            noise = data_noise
+            total = noise + signal_var + 1e-12
+            lam = noise / total
+
+            shrunk[mask] = (1.0 - lam) * effects[mask] + lam * group_mean
+
+        return np.abs(shrunk)
+
+    def _ld_soft_weighted_contrib(self, pos, raw_contrib, lead_key_func, r2_thresh=0.6):
+        """LD软加权: 用 r² 惩罚替代硬归零
+
+        与 _ld_block_single_contrib 的硬剪枝不同，
+        当位点与更高贡献位点存在LD时，不直接归零，而是:
+          adjusted = raw × max(1 - sqrt(r²), 0.01)
+
+        这保留了连锁位点的微弱信号，而非彻底丢弃。
+        """
+        if self.ld_r2_matrix is None:
+            return raw_contrib
+
+        pos_idx = {p: i for i, p in enumerate(self.variant_positions)}
+        idx = pos_idx.get(pos)
+        if idx is None:
+            return raw_contrib
+
+        row = self.ld_r2_matrix[idx] if idx < len(self.ld_r2_matrix) else None
+        if not isinstance(row, list):
+            return raw_contrib
+
+        own_contrib = lead_key_func(pos)
+        for j in range(len(row)):
+            if j == idx:
+                continue
+            r2 = row[j]
+            if isinstance(r2, (int, float)) and r2 > r2_thresh:
+                other_pos = self.variant_positions[j] if j < len(self.variant_positions) else None
+                if other_pos is not None:
+                    other_contrib = lead_key_func(other_pos)
+                    if other_contrib > own_contrib:
+                        penalty = max(1.0 - np.sqrt(r2), 0.01)
+                        return raw_contrib * penalty
+
+        return raw_contrib
+
+    @staticmethod
+    def variant_type_enrichment(selected_positions, variant_info, snp_effects=None):
+        """后验富集分析: 选中位点 vs 全区域的变异类型分布
+
+        Args:
+            selected_positions: 被选中的位置列表
+            variant_info: {pos: {annotation, ...}} 全区域变异信息
+            snp_effects: {pos: 'missense'/...} 效应注释（可选）
+
+        Returns:
+            dict with 'background', 'selected', 'enrichment', 'summary'
+        """
+        VT_NAMES = {0: 'SNP', 1: 'INDEL', 2: 'SV'}
+        all_types = {}
+        for pos, info in variant_info.items():
+            if info.get('is_sv', False):
+                t = 2
+            elif snp_effects and pos in snp_effects:
+                eff = snp_effects[pos]
+                t = 1 if eff in ('frameshift', 'stop_gain') and 'missense' not in eff else 0
+            else:
+                ref, alt = str(info.get('ref', '')), str(info.get('alt', ''))
+                len_diff = abs(len(ref) - len(alt)) if ref and alt else 0
+                t = 2 if len_diff >= 50 else (1 if len_diff > 0 else 0)
+            all_types[pos] = t
+
+        total_bg = len(all_types)
+        bg_counts = {t: 0 for t in VT_NAMES}
+        for t in all_types.values():
+            bg_counts[t] = bg_counts.get(t, 0) + 1
+
+        sel_counts = {t: 0 for t in VT_NAMES}
+        for pos in selected_positions:
+            t = all_types.get(pos, 0)
+            sel_counts[t] = sel_counts.get(t, 0) + 1
+        total_sel = len(selected_positions)
+
+        enrichment = {}
+        summary_parts = []
+        for t, tname in VT_NAMES.items():
+            bg_frac = bg_counts[t] / total_bg if total_bg > 0 else 0
+            sel_frac = sel_counts[t] / total_sel if total_sel > 0 else 0
+            fold = sel_frac / bg_frac if bg_frac > 0 else float('inf')
+            enrichment[tname] = round(fold, 2)
+            if sel_counts[t] > 0:
+                summary_parts.append(
+                    f"{tname}: {sel_counts[t]}/{total_sel} ({sel_frac:.1%}) "
+                    f"vs {bg_counts[t]}/{total_bg} ({bg_frac:.1%}), "
+                    f"{fold:.1f}x"
+                )
+
+        summary = ("变异类型富集:\n  " + "\n  ".join(summary_parts)
+                   if summary_parts else "(仅SNP)")
+
+        return {
+            'background': {VT_NAMES[t]: (bg_counts[t], bg_counts[t]/total_bg) for t in VT_NAMES},
+            'selected': {VT_NAMES[t]: (sel_counts[t], sel_counts[t]/total_sel) for t in VT_NAMES},
+            'enrichment': enrichment,
+            'summary': summary,
+        }
 
     def _compute_ld_pruned_haplotype_score(self, per_pos_contrib, allele_filter=None):
         """通用LD剪枝单倍型评分循环
@@ -5078,6 +5312,63 @@ class HaplotypeScorer:
 
         return distances
 
+    def compute_eb_effect_score(self):
+        """EB效应得分: 稀有变异加权 + 经验贝叶斯收缩 + LD软加权
+
+        两步GeneBayes增强:
+        1. 从基因型回收单变量效应，经EB收缩(eb_shrink_effects)抑制低MAF噪声
+        2. 给高位点建立LD软加权，r²>0.6的高连锁标记被√(1-r²)压缩而非归零
+
+        在单倍型水平汇总: sum(位点贡献 × 稀有度权重) per haplotype
+        """
+        n_pos = len(self.variant_positions)
+        if n_pos == 0 or len(self.unique_haps) == 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # Step 1: 回收基因型并计算单变量效应
+        X, y, all_positions = self._reconstruct_genotype_matrix()
+        if X is None or X.shape[0] < 3:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        effects_raw = self._compute_univariate_effects(X, y)
+        if effects_raw.sum() == 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        # Step 2: EB收缩 (对所有位点)
+        maf_arr = np.array([self.pos_maf.get(pos, 0.5) for pos in all_positions])
+        effects_shrunk = self._eb_shrink_marker_effects(effects_raw, maf_arr)
+
+        # Step 3: 位点贡献 = rarity_weight × (1 + |β_shrunk|)
+        rarity_w = np.maximum(-np.log10(np.maximum(maf_arr, 1e-4)), 1.0)
+        pos_contrib = dict(zip(all_positions,
+                               rarity_w * (1.0 + effects_shrunk)))
+
+        # Step 4: LD软加权 — 对display_positions中可用的位点施加r²惩罚
+        display_set = set(self.variant_positions)
+        lead_key = lambda p: pos_contrib.get(p, 0)
+        for pos in self.variant_positions:
+            contrib = pos_contrib.get(pos, 0)
+            if contrib > 0:
+                pos_contrib[pos] = self._ld_soft_weighted_contrib(
+                    pos, contrib, lead_key, r2_thresh=0.6)
+
+        # Step 5: 汇总所有位点贡献到单倍型
+        seq_map = self._get_hap_seq_map()
+        scores = {}
+        for hap in self.unique_haps:
+            seq = seq_map.get(hap, '')
+            total = 0.0
+            for i, pos in enumerate(all_positions):
+                if i >= len(seq):
+                    continue
+                allele = seq[i]
+                if not self._is_alt_allele(pos, allele):
+                    continue
+                total += pos_contrib.get(pos, 0.0)
+            scores[hap] = total
+
+        return scores
+
     def _get_ld_r2(self, pos_i, pos_j):
         """查询两个位点之间的LD r²值"""
         if self.ld_r2_matrix is None:
@@ -5226,13 +5517,14 @@ class HaplotypeScorer:
         """
         主入口：计算所有单倍型的综合得分 + 每个样本的得分 + 回归统计
 
-        六个评分组件 (v2):
+        七个评分组件 (v3):
         1. variant_effect      — LD剪枝后的变异功能严重度
         2. burden              — LD剪枝后的稀有变异负荷
-        3. multi_omics         — 多组学协变量标准化偏差
-        4. fine_mapping        — 近似贝叶斯因子 + LD剪枝 (整合GWAS信号)
-        5. effect_size         — 贝叶斯收缩后的效应量
-        6. genetic_distinct    — 功能加权的遗传分化距离
+        3. eb_effect           — GeneBayes EB收缩 + LD软加权 (功能单倍型识别)
+        4. multi_omics         — 多组学协变量标准化偏差
+        5. fine_mapping        — 近似贝叶斯因子 + LD剪枝 (整合GWAS信号)
+        6. effect_size         — 贝叶斯收缩后的效应量
+        7. genetic_distinct    — 功能加权的遗传分化距离
 
         归一化策略:
         - 每个组件 Winsorize(2.5%/97.5%) + MinMax → [0,1]
@@ -5249,6 +5541,7 @@ class HaplotypeScorer:
         raw_components = {
             'variant_effect': self.compute_variant_effect_score(),
             'burden': self.compute_burden_score(),
+            'eb_effect': self.compute_eb_effect_score(),
             'multi_omics': self.compute_multi_omics_score(),
             'fine_mapping': self.compute_fine_mapping_score(),
             'effect_size': self.compute_effect_size_score(),
