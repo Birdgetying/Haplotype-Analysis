@@ -4407,6 +4407,14 @@ class HaplotypeScorer:
 
     LD_BLOCK_R2 = 0.5  # LD剪枝阈值，归一化时共享
 
+    # EB/LD 软加权参数
+    EB_N_BINS = 20           # EB收缩 MAF分箱数
+    LD_SOFT_R2_THRESH = 0.6  # LD软加权 r² 阈值
+    LD_SOFT_MIN_PENALTY = 0.01  # 最大惩罚因子下限
+
+    # 变异类型后验富集标签
+    VT_NAMES = {0: 'SNP', 1: 'INDEL', 2: 'SV'}
+
     DEFAULT_COMPONENT_WEIGHTS = {
         'variant_effect': 1.0,
         'burden': 1.0,
@@ -4569,12 +4577,15 @@ class HaplotypeScorer:
         return gwas_map
 
     def _get_hap_seq_map(self):
-        """构建 {hap_name: haplotype_sequence_string} 映射"""
+        """构建 {hap_name: haplotype_sequence_string} 映射（带缓存）"""
+        if hasattr(self, '_cached_seq_map'):
+            return self._cached_seq_map
         seq_map = {}
         for hap in self.unique_haps:
             rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
             if len(rows) > 0 and 'Haplotype_Seq' in rows.columns:
                 seq_map[hap] = rows['Haplotype_Seq'].iloc[0].replace('|', '')
+        self._cached_seq_map = seq_map
         return seq_map
 
     def _build_ld_blocks(self):
@@ -4729,7 +4740,7 @@ class HaplotypeScorer:
         cov_xy = X_c.T @ y_c / len(y_c)
         return np.abs(cov_xy / var_x)
 
-    def _eb_shrink_marker_effects(self, effects, maf=None, n_bins=20):
+    def _eb_shrink_marker_effects(self, effects, maf=None):
         """经验贝叶斯效应收缩 (GeneBayes 启发): 稀有变异效应向同MAF组均值收缩
 
         收缩量 = data_noise / (data_noise + group_signal)
@@ -4739,7 +4750,6 @@ class HaplotypeScorer:
         Args:
             effects: (p,) |β| per marker
             maf: (p,) minor allele frequency, None则从pos_maf获取
-            n_bins: MAF分箱数
 
         Returns:
             shrunk: (p,) EB-shrunk |β|
@@ -4754,6 +4764,7 @@ class HaplotypeScorer:
             maf = np.full(p, 0.5)
 
         MIN_MAF = 1e-4
+        n_bins = self.EB_N_BINS
 
         # Log-scale binning: 更多 bin 在低 MAF 区间
         log_maf = np.log10(np.maximum(maf, MIN_MAF))
@@ -4790,19 +4801,17 @@ class HaplotypeScorer:
 
         return np.abs(shrunk)
 
-    def _ld_soft_weighted_contrib(self, pos, raw_contrib, lead_key_func, r2_thresh=0.6):
+    def _ld_soft_weighted_contrib(self, pos, raw_contrib, lead_key_func, pos_idx=None):
         """LD软加权: 用 r² 惩罚替代硬归零
 
-        与 _ld_block_single_contrib 的硬剪枝不同，
-        当位点与更高贡献位点存在LD时，不直接归零，而是:
-          adjusted = raw × max(1 - sqrt(r²), 0.01)
-
-        这保留了连锁位点的微弱信号，而非彻底丢弃。
+        与 _ld_block_single_contrib 的硬剪枝不同，使用 sqrt(1-r²) 软惩罚。
         """
         if self.ld_r2_matrix is None:
             return raw_contrib
 
-        pos_idx = {p: i for i, p in enumerate(self.variant_positions)}
+        if pos_idx is None:
+            pos_idx = {p: i for i, p in enumerate(self.variant_positions)}
+            self._cached_pos_idx = pos_idx  # 缓存避免每次调用重建
         idx = pos_idx.get(pos)
         if idx is None:
             return raw_contrib
@@ -4812,17 +4821,20 @@ class HaplotypeScorer:
             return raw_contrib
 
         own_contrib = lead_key_func(pos)
+        r2_thresh = self.LD_SOFT_R2_THRESH
         for j in range(len(row)):
             if j == idx:
                 continue
             r2 = row[j]
-            if isinstance(r2, (int, float)) and r2 > r2_thresh:
-                other_pos = self.variant_positions[j] if j < len(self.variant_positions) else None
-                if other_pos is not None:
-                    other_contrib = lead_key_func(other_pos)
-                    if other_contrib > own_contrib:
-                        penalty = max(1.0 - np.sqrt(r2), 0.01)
-                        return raw_contrib * penalty
+            if not (isinstance(r2, (int, float)) and r2 > r2_thresh):
+                continue
+            other_pos = self.variant_positions[j] if j < len(self.variant_positions) else None
+            if other_pos is None:
+                continue
+            other_contrib = lead_key_func(other_pos)
+            if other_contrib > own_contrib:
+                penalty = max(1.0 - np.sqrt(r2), self.LD_SOFT_MIN_PENALTY)
+                return raw_contrib * penalty
 
         return raw_contrib
 
@@ -4838,7 +4850,7 @@ class HaplotypeScorer:
         Returns:
             dict with 'background', 'selected', 'enrichment', 'summary'
         """
-        VT_NAMES = {0: 'SNP', 1: 'INDEL', 2: 'SV'}
+        VT_NAMES = HaplotypeScorer.VT_NAMES
         all_types = {}
         for pos, info in variant_info.items():
             if info.get('is_sv', False):
@@ -5313,19 +5325,14 @@ class HaplotypeScorer:
         return distances
 
     def compute_eb_effect_score(self):
-        """EB效应得分: 稀有变异加权 + 经验贝叶斯收缩 + LD软加权
+        """EB效应得分: EB收缩 + LD软加权，识别携带稀有高效应变异的单倍型
 
-        两步GeneBayes增强:
-        1. 从基因型回收单变量效应，经EB收缩(eb_shrink_effects)抑制低MAF噪声
-        2. 给高位点建立LD软加权，r²>0.6的高连锁标记被√(1-r²)压缩而非归零
-
-        在单倍型水平汇总: sum(位点贡献 × 稀有度权重) per haplotype
+        从基因型矩阵回收单变量效应 → EB收缩抑制低MAF噪声 →
+        LD软加权(√(1-r²)惩罚) → 按单倍型汇总位点贡献
         """
-        n_pos = len(self.variant_positions)
-        if n_pos == 0 or len(self.unique_haps) == 0:
+        if len(self.variant_positions) == 0 or len(self.unique_haps) == 0:
             return {hap: 0.0 for hap in self.unique_haps}
 
-        # Step 1: 回收基因型并计算单变量效应
         X, y, all_positions = self._reconstruct_genotype_matrix()
         if X is None or X.shape[0] < 3:
             return {hap: 0.0 for hap in self.unique_haps}
@@ -5334,35 +5341,32 @@ class HaplotypeScorer:
         if effects_raw.sum() == 0:
             return {hap: 0.0 for hap in self.unique_haps}
 
-        # Step 2: EB收缩 (对所有位点)
         maf_arr = np.array([self.pos_maf.get(pos, 0.5) for pos in all_positions])
         effects_shrunk = self._eb_shrink_marker_effects(effects_raw, maf_arr)
 
-        # Step 3: 位点贡献 = rarity_weight × (1 + |β_shrunk|)
         rarity_w = np.maximum(-np.log10(np.maximum(maf_arr, 1e-4)), 1.0)
         pos_contrib = dict(zip(all_positions,
                                rarity_w * (1.0 + effects_shrunk)))
 
-        # Step 4: LD软加权 — 对display_positions中可用的位点施加r²惩罚
-        display_set = set(self.variant_positions)
         lead_key = lambda p: pos_contrib.get(p, 0)
+        pos_idx = {p: i for i, p in enumerate(self.variant_positions)}
         for pos in self.variant_positions:
             contrib = pos_contrib.get(pos, 0)
             if contrib > 0:
                 pos_contrib[pos] = self._ld_soft_weighted_contrib(
-                    pos, contrib, lead_key, r2_thresh=0.6)
+                    pos, contrib, lead_key, pos_idx=pos_idx)
 
-        # Step 5: 汇总所有位点贡献到单倍型
+        # 复用 _get_hap_seq_map 缓存：从X重构时已调用一次，此处直接用
         seq_map = self._get_hap_seq_map()
+        all_pos_set = set(all_positions)
         scores = {}
         for hap in self.unique_haps:
             seq = seq_map.get(hap, '')
             total = 0.0
             for i, pos in enumerate(all_positions):
                 if i >= len(seq):
-                    continue
-                allele = seq[i]
-                if not self._is_alt_allele(pos, allele):
+                    break
+                if not self._is_alt_allele(pos, seq[i]):
                     continue
                 total += pos_contrib.get(pos, 0.0)
             scores[hap] = total
