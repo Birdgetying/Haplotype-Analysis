@@ -73,6 +73,24 @@ class NumpyEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+def _json_safe(obj):
+    """递归清理JSON对象，将NaN/Inf转为None，确保输出为严格JSON。"""
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, np.ndarray):
+        return _json_safe(obj.tolist())
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        val = float(obj)
+        return val if np.isfinite(val) else None
+    return obj
+
+
 def _safe_str(val, default=''):
     """Convert a potentially NaN (float) value from CSV loading to string."""
     if not isinstance(val, str):
@@ -5654,7 +5672,273 @@ class ReportGenerator:
         os.makedirs(self.output_dir, exist_ok=True)
         print(f"[配置] 输出目录: {self.output_dir}")
         self.results = {}
-    
+        self._cached_haplotype_score = None
+        self._cached_all_haplotype_scores = {}
+        self._cached_haplotype_score_json_path = None
+
+    def compute_haplotype_scores(self, hap_sample_df: pd.DataFrame,
+                                 variant_positions: list,
+                                 region_start: int, region_end: int,
+                                 phenotype_col: str = 'phenotype',
+                                 gene_start: int = None, gene_end: int = None,
+                                 promoter_start: int = None, promoter_end: int = None,
+                                 strand: str = '+',
+                                 exons: list = None, cds: list = None,
+                                 snp_effects: dict = None,
+                                 variant_info: dict = None,
+                                 variant_pvalues: dict = None,
+                                 effect_results: dict = None,
+                                 all_phenotype_results: dict = None) -> dict:
+        """计算并缓存所有表型的 HaplotypeScorer 输出，不依赖HTML生成。"""
+        if hap_sample_df is None or len(hap_sample_df) == 0:
+            return {'all_score_data': {}, 'score_results': {},
+                    'score_json_path': None, 'display_positions': [],
+                    'display_orig_indices': [], 'ld_r2_matrix': []}
+
+        exons = exons or []
+        cds = cds or []
+        snp_effects = snp_effects or {}
+        variant_info = variant_info or {}
+        variant_pvalues = variant_pvalues or {}
+        effect_results = effect_results or {}
+        all_phenotype_results = all_phenotype_results or {}
+        hap_col = 'Hap_Name' if 'Hap_Name' in hap_sample_df.columns else 'Haplotype'
+
+        # 与综合HTML保持一致：按样本数取top8，用于展示位点和LD矩阵。
+        import re
+        def _hap_num(name):
+            m = re.search(r'(\d+)$', str(name))
+            return int(m.group(1)) if m else 0
+        hap_counts_raw = hap_sample_df.groupby(hap_col).size()
+        sorted_hap = sorted(hap_counts_raw.items(), key=lambda x: (-x[1], _hap_num(x[0])))
+        top_haps = pd.Series(dict(sorted_hap)).head(8).index.tolist()
+
+        if 'Haplotype_Seq' in hap_sample_df.columns:
+            first_seq = hap_sample_df['Haplotype_Seq'].iloc[0] if len(hap_sample_df) > 0 else ''
+            seq_len = len(str(first_seq).split('|')) if first_seq else 0
+            all_positions = list(variant_positions) if variant_positions else list(range(seq_len))
+            if seq_len == 0 or len(all_positions) == seq_len or not variant_info:
+                all_orig_indices = list(range(len(all_positions)))
+            else:
+                full_positions = sorted(variant_info.keys())
+                pos_to_idx = {pos: i for i, pos in enumerate(full_positions)}
+                mapped_indices = []
+                kept_positions = []
+                for pos in all_positions:
+                    orig_idx = pos_to_idx.get(pos)
+                    if orig_idx is not None and orig_idx < seq_len:
+                        kept_positions.append(pos)
+                        mapped_indices.append(orig_idx)
+                if mapped_indices:
+                    all_positions = kept_positions
+                    all_orig_indices = mapped_indices
+                else:
+                    all_orig_indices = list(range(len(all_positions)))
+
+            top_hap_alleles = []
+            for hap in top_haps:
+                hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
+                if len(hap_rows) > 0 and 'Haplotype_Seq' in hap_rows.columns:
+                    top_hap_alleles.append(str(hap_rows['Haplotype_Seq'].iloc[0]).split('|'))
+
+            variable_indices = []
+            for idx in range(len(all_positions)):
+                bases_at_pos = set()
+                orig_seq_idx = all_orig_indices[idx]
+                for alleles in top_hap_alleles:
+                    if orig_seq_idx < len(alleles):
+                        bases_at_pos.add(alleles[orig_seq_idx].strip().upper())
+                if len(bases_at_pos) > 1:
+                    variable_indices.append(idx)
+
+            display_positions = [all_positions[i] for i in variable_indices]
+            display_orig_indices = [all_orig_indices[i] for i in variable_indices]
+            sorted_pairs = sorted(zip(display_positions, display_orig_indices), key=lambda x: x[0])
+            display_positions = [p for p, _ in sorted_pairs]
+            display_orig_indices = [i for _, i in sorted_pairs]
+            region_positions, region_indices = [], []
+            for pos, idx in zip(display_positions, display_orig_indices):
+                if region_start <= pos <= region_end:
+                    region_positions.append(pos)
+                    region_indices.append(idx)
+            display_positions = region_positions
+            display_orig_indices = region_indices
+        else:
+            display_positions = list(variant_positions) if variant_positions else []
+            display_orig_indices = list(range(len(display_positions)))
+
+        ld_r2_matrix = []
+        if len(display_positions) >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
+            try:
+                all_bases_at_positions = []
+                for orig_idx in display_orig_indices:
+                    bases_list = []
+                    for _, sample_row in hap_sample_df.iterrows():
+                        seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
+                        bases_list.append(seq[orig_idx].upper() if orig_idx < len(seq) else 'N')
+                    all_bases_at_positions.append(bases_list)
+
+                geno_matrix = []
+                for sample_i in range(len(hap_sample_df)):
+                    geno_vec = []
+                    for pos_i in range(len(display_positions)):
+                        base = all_bases_at_positions[pos_i][sample_i]
+                        if base == 'N':
+                            geno_vec.append(np.nan)
+                        else:
+                            all_non_n = [b for b in all_bases_at_positions[pos_i] if b != 'N']
+                            if len(all_non_n) == 0:
+                                geno_vec.append(np.nan)
+                            else:
+                                from collections import Counter
+                                major_base = Counter(all_non_n).most_common(1)[0][0]
+                                geno_vec.append(0 if base == major_base else 1)
+                    geno_matrix.append(geno_vec)
+
+                geno_array = np.array(geno_matrix, dtype=float)
+                n_pos = geno_array.shape[1]
+                r2_mat = [[1.0] * n_pos for _ in range(n_pos)]
+                for i in range(n_pos):
+                    for j in range(i + 1, n_pos):
+                        xi = geno_array[:, i]
+                        xj = geno_array[:, j]
+                        mask = (~np.isnan(xi)) & (~np.isnan(xj))
+                        xi_m = xi[mask]
+                        xj_m = xj[mask]
+                        if len(xi_m) < 4:
+                            r2 = 0.0
+                        else:
+                            pi = np.mean(xi_m)
+                            pj = np.mean(xj_m)
+                            if pi <= 0 or pi >= 1 or pj <= 0 or pj >= 1:
+                                r2 = 0.0
+                            else:
+                                cov = np.mean(xi_m * xj_m) - pi * pj
+                                denom = (pi * (1 - pi) * pj * (1 - pj)) ** 0.5
+                                r2 = (cov / denom) ** 2 if denom > 0 else 0.0
+                                r2 = min(1.0, max(0.0, r2))
+                        r2_mat[i][j] = r2
+                        r2_mat[j][i] = r2
+                ld_r2_matrix = r2_mat
+            except Exception as e:
+                print(f"[WARNING] LD r²矩阵计算失败: {e}")
+                ld_r2_matrix = []
+
+        # per-position p值 → HaplotypeScorer 的GWAS输入，保持原有FDR策略。
+        gwas_data = []
+        for pos in display_positions:
+            ip = int(pos)
+            pval = variant_pvalues.get(ip, variant_pvalues.get(pos, 1.0))
+            if pval is None or (isinstance(pval, float) and np.isnan(pval)) or pval <= 0:
+                pval = 1e-300
+            info = variant_info.get(ip, variant_info.get(pos, {})) if variant_info else {}
+            ann = info.get('annotation', 'other')
+            if snp_effects:
+                ann = snp_effects.get(ip, snp_effects.get(pos, ann))
+            gwas_data.append({
+                'pos': ip,
+                'pvalue': float(pval),
+                'logp': float(-np.log10(max(pval, 1e-300))),
+                'maf': float(info.get('maf', 0.5)) if info else 0.5,
+                'missing_rate': float(info.get('missing_rate', 0.0)) if info else 0.0,
+                'annotation': ann,
+            })
+
+        try:
+            if gwas_data and len(gwas_data) > 1:
+                pvals = np.array([d['pvalue'] for d in gwas_data], dtype=float)
+                pvals = np.clip(pvals, 1e-300, 1.0)
+                sorted_idx = np.argsort(pvals)
+                n = len(pvals)
+                bh_fdr = np.ones(n)
+                for rank, idx in enumerate(sorted_idx):
+                    bh_fdr[idx] = min(1.0, pvals[idx] * n / (rank + 1))
+                for i in range(n - 2, -1, -1):
+                    bh_fdr[sorted_idx[i]] = min(bh_fdr[sorted_idx[i]], bh_fdr[sorted_idx[i + 1]])
+                fdr_sig_positions = {d['pos'] for i, d in enumerate(gwas_data) if bh_fdr[i] < 0.05}
+                if not fdr_sig_positions:
+                    fdr_sig_positions.add(min(gwas_data, key=lambda x: x['pvalue'])['pos'])
+            else:
+                fdr_sig_positions = set()
+        except Exception as e_fdr:
+            print(f"[WARNING] FDR校正失败: {e_fdr}, 回退到全部位点")
+            fdr_sig_positions = {d['pos'] for d in gwas_data} if gwas_data else set()
+        gwas_data_fdr = [d for d in gwas_data if d['pos'] in fdr_sig_positions]
+
+        all_pheno_names = []
+        if all_phenotype_results:
+            all_pheno_names = [p for p in all_phenotype_results.keys() if p in hap_sample_df.columns]
+        if not all_pheno_names:
+            all_pheno_names = [c for c in hap_sample_df.columns
+                               if c not in ['SampleID', 'Hap_Name', 'Haplotype_Seq']
+                               and not c.startswith('PC')]
+        actual_pheno_col = phenotype_col if phenotype_col in all_pheno_names else (all_pheno_names[0] if all_pheno_names else phenotype_col)
+
+        g_start = gene_start if gene_start else region_start
+        g_end = gene_end if gene_end else region_end
+        all_score_data = {}
+        for score_pheno in all_pheno_names:
+            try:
+                pheno_effect = all_phenotype_results.get(score_pheno, {}).get('effect', {}) if all_phenotype_results else {}
+                pheno_pve = None
+                if all_phenotype_results and score_pheno in all_phenotype_results:
+                    pheno_pve = all_phenotype_results[score_pheno].get('pve', {}).get('eta_squared', None)
+                scorer = HaplotypeScorer(
+                    hap_sample_df=hap_sample_df,
+                    variant_positions=display_positions,
+                    variant_info=variant_info,
+                    snp_effects=snp_effects,
+                    gwas_data=gwas_data_fdr,
+                    exons=exons if exons else [],
+                    cds=cds if cds else [],
+                    gene_start=g_start, gene_end=g_end,
+                    phenotype_col=score_pheno,
+                    maf_threshold=0.05,
+                    ld_r2_matrix=ld_r2_matrix,
+                    effect_results=pheno_effect if pheno_effect else effect_results,
+                    promoter_start=promoter_start, promoter_end=promoter_end,
+                    strand=strand,
+                    pve=pheno_pve
+                )
+                all_score_data[score_pheno] = scorer.score_all()
+            except Exception:
+                all_score_data[score_pheno] = {
+                    'per_sample': [], 'per_haplotype': {},
+                    'r_squared': None, 'regression_pvalue': None,
+                    'slope': 0, 'intercept': 0,
+                    'confidence_level': 'unknown', 'low_confidence': False,
+                    'pve': None, 'circularity_warning': False
+                }
+
+        score_results = all_score_data.get(
+            actual_pheno_col,
+            list(all_score_data.values())[0] if all_score_data else {}
+        )
+        self._cached_all_haplotype_scores = _json_safe(all_score_data)
+        self._cached_haplotype_score = _json_safe(score_results)
+        self._cached_haplotype_score_json_path = None
+        if all_score_data:
+            score_json_path = os.path.join(self.output_dir, "haplotype_scores.json")
+            try:
+                with open(score_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(_json_safe(all_score_data), f, ensure_ascii=False,
+                              indent=2, cls=NumpyEncoder, allow_nan=False)
+                self._cached_haplotype_score_json_path = score_json_path
+                print(f"[INFO] Haplotype scores JSON saved: {score_json_path}")
+            except Exception as e:
+                print(f"[WARNING] Failed to write haplotype_scores.json: {e}")
+
+            first_sc = list(self._cached_all_haplotype_scores.values())[0]
+            print(f"[INFO] Haplotype scoring done ({len(all_score_data)} phenotypes): "
+                  f"R^2={first_sc.get('r_squared','N/A')}, p={first_sc.get('regression_pvalue','N/A')}")
+
+        return {'all_score_data': self._cached_all_haplotype_scores,
+                'score_results': self._cached_haplotype_score,
+                'score_json_path': self._cached_haplotype_score_json_path,
+                'display_positions': display_positions,
+                'display_orig_indices': display_orig_indices,
+                'ld_r2_matrix': ld_r2_matrix}
+
     def add_result(self, key: str, result: dict):
         """添加分析结果"""
         self.results[key] = result
@@ -6408,7 +6692,7 @@ class ReportGenerator:
         for pos in display_positions:
             ip = int(pos)
             pval = variant_pvalues.get(ip, variant_pvalues.get(pos, 1.0))
-            if pval <= 0 or pval is None or (isinstance(pval, float) and np.isnan(pval)):
+            if pval is None or (isinstance(pval, float) and np.isnan(pval)) or pval <= 0:
                 pval = 1e-300
             info = {}
             if variant_info:
@@ -6489,86 +6773,37 @@ class ReportGenerator:
             row["vtype"] = variant_plot_class(info, row["annotation"])
 
         # ==================== 单倍型评分模型计算 ====================
-        # FDR校正：过滤GWAS输入，仅保留显著位点 (BH-FDR < 0.05)
-        try:
-            if gwas_data and len(gwas_data) > 1:
-                from scipy import stats as _scipy_stats
-                # 收集p值并调用已有FDR方法
-                pvals = np.array([d['pvalue'] for d in gwas_data], dtype=float)
-                pvals = np.clip(pvals, 1e-300, 1.0)
-                sorted_idx = np.argsort(pvals)
-                n = len(pvals)
-                # Benjamini-Hochberg FDR
-                bh_fdr = np.ones(n)
-                for rank, idx in enumerate(sorted_idx):
-                    bh_fdr[idx] = min(1.0, pvals[idx] * n / (rank + 1))
-                # 确保单调性
-                for i in range(n - 2, -1, -1):
-                    bh_fdr[sorted_idx[i]] = min(bh_fdr[sorted_idx[i]], bh_fdr[sorted_idx[i + 1]])
-                fdr_sig_positions = set()
-                for i, d in enumerate(gwas_data):
-                    if bh_fdr[i] < 0.05:
-                        fdr_sig_positions.add(d['pos'])
-                n_sig = len(fdr_sig_positions)
-                print(f"[INFO] FDR校正: {len(gwas_data)}个位点 → {n_sig}个FDR显著 (BH-FDR<0.05)")
-                if n_sig == 0 and len(gwas_data) > 0:
-                    # 至少保留最显著的1个位点
-                    top_pos = min(gwas_data, key=lambda x: x['pvalue'])['pos']
-                    fdr_sig_positions.add(top_pos)
-                    print(f"[INFO] 无FDR显著位点，保留最显著位点: {top_pos}")
-            else:
-                fdr_sig_positions = set()
-        except Exception as e_fdr:
-            print(f"[WARNING] FDR校正失败: {e_fdr}, 回退到全部位点")
-            fdr_sig_positions = set(d['pos'] for d in gwas_data) if gwas_data else set()
-
-        # 为评分构建FDR过滤后的GWAS数据
-        gwas_data_fdr = [d for d in gwas_data if d['pos'] in fdr_sig_positions]
-
-        # 为每个表型分别计算单倍型打分
-        all_score_data = {}  # {pheno: score_results}
-        for score_pheno in all_pheno_names:
-            try:
-                pheno_effect = all_phenotype_results.get(score_pheno, {}).get('effect', {}) if all_phenotype_results else {}
-                pheno_pve = None
-                if all_phenotype_results and score_pheno in all_phenotype_results:
-                    pheno_pve = all_phenotype_results[score_pheno].get('pve', {}).get('eta_squared', None)
-                scorer = HaplotypeScorer(
-                    hap_sample_df=hap_sample_df,
-                    variant_positions=display_positions,
-                    variant_info=variant_info,
-                    snp_effects=snp_effects,
-                    gwas_data=gwas_data_fdr,
-                    exons=exons if exons else [],
-                    cds=cds if cds else [],
-                    gene_start=g_start, gene_end=g_end,
-                    phenotype_col=score_pheno,
-                    maf_threshold=0.05,
-                    ld_r2_matrix=ld_r2_matrix,
-                    effect_results=pheno_effect if pheno_effect else effect_results,
-                    promoter_start=promoter_start, promoter_end=promoter_end,
-                    strand=strand,
-                    pve=pheno_pve
-                )
-                score_results = scorer.score_all()
-                all_score_data[score_pheno] = score_results
-            except Exception as e:
-                all_score_data[score_pheno] = {
-                    'per_sample': [], 'per_haplotype': {},
-                    'r_squared': None, 'regression_pvalue': None,
-                    'slope': 0, 'intercept': 0,
-                    'confidence_level': 'unknown', 'low_confidence': False,
-                    'pve': None, 'circularity_warning': False
-                }
-
-        # 默认使用第一个表型的打分（兼容旧代码引用）
-        score_results = all_score_data.get(actual_pheno_col, list(all_score_data.values())[0] if all_score_data else {})
-        haplotype_score_json = json.dumps(all_score_data, cls=NumpyEncoder)
-
-        if all_score_data:
-            first_sc = list(all_score_data.values())[0]
-            print(f"[INFO] Haplotype scoring done ({len(all_score_data)} phenotypes): "
-                  f"R^2={first_sc.get('r_squared','N/A')}, p={first_sc.get('regression_pvalue','N/A')}")
+        # 分析层会提前计算并缓存评分；若外部直接调用HTML生成器，则在此回退计算一次。
+        all_score_data = getattr(self, '_cached_all_haplotype_scores', {}) or {}
+        if not all_score_data:
+            score_bundle = self.compute_haplotype_scores(
+                hap_sample_df=hap_sample_df,
+                variant_positions=variant_positions,
+                region_start=region_start,
+                region_end=region_end,
+                phenotype_col=phenotype_col,
+                gene_start=g_start,
+                gene_end=g_end,
+                promoter_start=promoter_start,
+                promoter_end=promoter_end,
+                strand=strand,
+                exons=exons,
+                cds=cds,
+                snp_effects=snp_effects,
+                variant_info=variant_info,
+                variant_pvalues=variant_pvalues,
+                effect_results=effect_results,
+                all_phenotype_results=all_phenotype_results,
+            )
+            all_score_data = score_bundle.get('all_score_data', {})
+        score_results = all_score_data.get(
+            actual_pheno_col,
+            list(all_score_data.values())[0] if all_score_data else {}
+        )
+        self._cached_haplotype_score = score_results
+        haplotype_score_json = json.dumps(
+            _json_safe(all_score_data), cls=NumpyEncoder, allow_nan=False
+        )
         # ==================== 评分模型计算结束 ====================
 
         # 准备网络图数据
@@ -10514,7 +10749,7 @@ if (promoterStart < promoterEnd) {{
         for pos in (variant_positions or []):
             ip = int(pos)
             pval = variant_pvalues.get(ip, variant_pvalues.get(pos, 1.0))
-            if pval <= 0 or pval is None or (isinstance(pval, float) and np.isnan(pval)):
+            if pval is None or (isinstance(pval, float) and np.isnan(pval)) or pval <= 0:
                 pval = 1e-300
             # 添加变异信息用于过滤
             info = variant_info.get(ip, variant_info.get(pos, {}))
@@ -12238,7 +12473,9 @@ class HaplotypePhenotypeAnalyzer:
         self.hap_df = None
         self.hap_sample_df = None
         self.positions = None
-    
+        self.haplotype_scores = {}
+        self.haplotype_score_json_path = None
+
     def _load_phenotype(self) -> pd.DataFrame:
         """加载表型数据，支持多种格式（包括GEMMA格式）"""
         if self.phenotype_file is None:
@@ -13489,7 +13726,34 @@ class HaplotypePhenotypeAnalyzer:
                 self.positions,
                 first_pheno,
             )
-                    
+
+            score_bundle = self.reporter.compute_haplotype_scores(
+                hap_sample_df=assoc_module.merged_df,
+                variant_positions=self.positions,
+                region_start=plot_region_start,
+                region_end=plot_region_end,
+                phenotype_col=first_pheno,
+                gene_start=gene_body_start,
+                gene_end=gene_body_end,
+                promoter_start=promoter_start_pos,
+                promoter_end=promoter_end_pos,
+                strand=strand,
+                exons=exons_list,
+                cds=cds_list,
+                snp_effects=snp_effects,
+                variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info) else (self.variant_info if self.variant_info else {}),
+                variant_pvalues=variant_pvalues,
+                effect_results=first_effect,
+                all_phenotype_results=all_results.get('phenotype_results', {}),
+            )
+            all_results['haplotype_scores'] = score_bundle.get('all_score_data', {})
+            all_results['haplotype_score_json_path'] = score_bundle.get('score_json_path')
+            self.haplotype_scores = all_results['haplotype_scores']
+            self.haplotype_score_json_path = all_results['haplotype_score_json_path']
+            for pheno, score_data in all_results['haplotype_scores'].items():
+                if pheno in all_results.get('phenotype_results', {}):
+                    all_results['phenotype_results'][pheno]['haplotype_score'] = score_data
+
             self.reporter.generate_integrated_html(
                 hap_sample_df=assoc_module.merged_df,  # 使用 merged_df，包含表型数据
                 effect_results=first_effect,
@@ -13653,6 +13917,18 @@ class HaplotypePhenotypeAnalyzer:
             import traceback
             logger.warning(f"综合HTML生成失败: {e}")
             logger.warning(f"Traceback: {traceback.format_exc()}")
+
+        # 如果综合HTML阶段在评分后失败，仍从已缓存的分析层评分结果暴露给调用方。
+        if 'haplotype_scores' not in all_results:
+            all_score_data = getattr(self.reporter, '_cached_all_haplotype_scores', {}) or {}
+            score_json_path = getattr(self.reporter, '_cached_haplotype_score_json_path', None)
+            all_results['haplotype_scores'] = all_score_data
+            all_results['haplotype_score_json_path'] = score_json_path
+            self.haplotype_scores = all_score_data
+            self.haplotype_score_json_path = score_json_path
+            for pheno, score_data in all_score_data.items():
+                if pheno in all_results.get('phenotype_results', {}):
+                    all_results['phenotype_results'][pheno]['haplotype_score'] = score_data
 
         # 6. 生成报告
         logger.info("[Step 6] 生成分析报告...")

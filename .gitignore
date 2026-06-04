@@ -9,6 +9,16 @@ __pycache__/
 results/
 logs/
 database/
+result_test/
+rice_database/
+rice_database3/
+rice_results/
+maize_results/
+wheat_rht_database/
+wheat_rht_results/
+wheat_genes/
+star_gene_database/
+star_gene_results/
 *.log
 
 # Job output files
@@ -16,6 +26,7 @@ database/
 *.err
 
 # Data files (too large)
+external_data/
 *.vcf
 *.vcf.gz
 *.fasta

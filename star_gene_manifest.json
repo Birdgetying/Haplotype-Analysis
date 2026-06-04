@@ -1,0 +1,296 @@
+{
+  "schema_version": "0.1",
+  "description": "Positive-control star genes/loci for validating HaplotypeScorer on high-impact crop genomics papers. Coordinates and local files are intentionally explicit; unresolved targets must not be guessed.",
+  "defaults": {
+    "database_root": "star_gene_database",
+    "results_root": "star_gene_results",
+    "download_policy": "no_download_by_default"
+  },
+  "papers": [
+    {
+      "paper_id": "rice_science_2024",
+      "short_name": "rice2024",
+      "title": "Genomic investigation of 18,421 lines reveals the genetic architecture of rice",
+      "doi": "10.1126/science.adm8762",
+      "species": "Oryza sativa",
+      "assembly": "paper-specific rice reference/build; confirm from downloaded genotype matrix metadata before analysis",
+      "data_sources": [
+        {
+          "label": "Figshare genotype matrix",
+          "accession_or_doi": "10.6084/m9.figshare.19166475",
+          "url": "https://doi.org/10.6084/m9.figshare.19166475",
+          "notes": "First inspect file list and metadata; do not assume VCF format."
+        },
+        {
+          "label": "Parent genomes",
+          "accession_or_doi": "10.6084/m9.figshare.18972851",
+          "url": "https://doi.org/10.6084/m9.figshare.18972851",
+          "notes": "Optional context; not required for the first check-only pass."
+        },
+        {
+          "label": "ENA/NCBI projects",
+          "accession_or_doi": "PRJEB45850; PRJNA623686; PRJEB45847; PRJEB45851",
+          "url": null,
+          "notes": "Raw sequencing projects are not used by the minimal validation framework."
+        }
+      ],
+      "local_expected_paths": [
+        {
+          "key": "genotype_matrix",
+          "path": "external_data/rice_science_2024/figshare_19166475/genotype_matrix",
+          "format": "unknown",
+          "required": true,
+          "required_for": "analysis",
+          "notes": "Placeholder until the Figshare file list and actual matrix format are confirmed."
+        },
+        {
+          "key": "phenotype_table",
+          "path": "external_data/rice_science_2024/phenotypes.tsv",
+          "format": "phenotype_table",
+          "required": true,
+          "required_for": "analysis",
+          "notes": "Use paper/supplement trait names after inspecting the downloaded files."
+        }
+      ],
+      "license_notes": "Confirm Figshare and journal supplementary data terms before large downloads or redistribution.",
+      "targets": [
+        {
+          "target_id": "OsMADS22",
+          "gene_or_locus": "OsMADS22",
+          "target_type": "gene",
+          "aliases": [],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": null,
+          "coordinates": null,
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "heading date",
+              "aliases": ["Heading_date", "heading_date", "days to heading"],
+              "local_columns": [],
+              "expected_direction": "unknown"
+            },
+            {
+              "name": "plant height",
+              "aliases": ["Plant_height", "plant_height"],
+              "local_columns": [],
+              "expected_direction": "unknown"
+            }
+          ],
+          "notes": "Strong causal-gene positive control in the paper; resolve gene ID/coordinates from paper metadata before running analysis."
+        },
+        {
+          "target_id": "OsFTL1",
+          "gene_or_locus": "OsFTL1",
+          "target_type": "gene",
+          "aliases": [],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": null,
+          "coordinates": null,
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "heading date",
+              "aliases": ["Heading_date", "heading_date", "days to heading"],
+              "local_columns": [],
+              "expected_direction": "unknown"
+            },
+            {
+              "name": "yield",
+              "aliases": ["Yield", "grain yield", "grain_yield"],
+              "local_columns": [],
+              "expected_direction": "unknown"
+            }
+          ],
+          "notes": "Strong causal-gene positive control in the paper; resolve gene ID/coordinates from paper metadata before running analysis."
+        }
+      ]
+    },
+    {
+      "paper_id": "maize_natgenet_2019",
+      "short_name": "maize2019",
+      "title": "Genome assembly of a tropical maize inbred line provides insights into structural variation and crop improvement",
+      "doi": "10.1038/s41588-019-0427-6",
+      "species": "Zea mays",
+      "assembly": "paper-specific maize assembly/build; confirm qHKW1 marker coordinates before analysis",
+      "data_sources": [
+        {
+          "label": "NCBI BioProject",
+          "accession_or_doi": "PRJNA531547",
+          "url": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA531547",
+          "notes": "Do not download raw reads for the minimal validation framework."
+        },
+        {
+          "label": "NCBI BioProject",
+          "accession_or_doi": "PRJNA531553",
+          "url": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA531553",
+          "notes": "Use only paper-provided target variant/SV matrices if available."
+        },
+        {
+          "label": "GSA projects",
+          "accession_or_doi": "CRA001363; CNP0000417; CNP0000418",
+          "url": null,
+          "notes": "Confirm availability and license/terms before use."
+        }
+      ],
+      "local_expected_paths": [
+        {
+          "key": "target_variant_matrix",
+          "path": "external_data/maize_natgenet_2019/qHKW1_or_ZmBAM1d_variant_matrix.tsv",
+          "format": "unknown",
+          "required": true,
+          "required_for": "analysis",
+          "notes": "Must contain the qHKW1/ZmBAM1d 8.9 kb indel or equivalent paper-specific marker; unrelated maize genotype data is not a valid substitute."
+        },
+        {
+          "key": "phenotype_table",
+          "path": "external_data/maize_natgenet_2019/hundred_kernel_weight.tsv",
+          "format": "phenotype_table",
+          "required": true,
+          "required_for": "analysis",
+          "notes": "Must contain hundred-kernel weight / HKW phenotype columns for the same samples."
+        }
+      ],
+      "license_notes": "Confirm repository and paper supplementary data terms before downloading or redistributing variant/SV matrices.",
+      "targets": [
+        {
+          "target_id": "ZmBAM1d",
+          "gene_or_locus": "ZmBAM1d",
+          "target_type": "gene",
+          "aliases": ["qHKW1"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": null,
+          "coordinates": null,
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "hundred-kernel weight",
+              "aliases": ["HKW", "Hundred_kernel_weight", "hundred_kernel_weight"],
+              "local_columns": [],
+              "expected_direction": "unknown"
+            }
+          ],
+          "notes": "Strongest target reported for HKW; retain large-indel/SV annotations (len_diff >= 50 or is_sv) once marker data is available."
+        },
+        {
+          "target_id": "qHKW1",
+          "gene_or_locus": "qHKW1",
+          "target_type": "locus",
+          "aliases": ["ZmBAM1d upstream 8.9kb indel"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": null,
+          "coordinates": null,
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "hundred-kernel weight",
+              "aliases": ["HKW", "Hundred_kernel_weight", "hundred_kernel_weight"],
+              "local_columns": [],
+              "expected_direction": "unknown"
+            }
+          ],
+          "notes": "Locus-level positive control; analysis must verify the paper-specific 8.9 kb indel/marker is actually present."
+        }
+      ]
+    },
+    {
+      "paper_id": "wheat_nature_2024",
+      "short_name": "wheat2024",
+      "title": "Harnessing landrace diversity empowers wheat breeding",
+      "doi": "10.1038/s41586-024-07682-9",
+      "species": "Triticum aestivum",
+      "assembly": "WatSeq Chinese Spring RefSeq v1.0 coordinates; do not mix with CS-IAAS v1.1 without explicit liftover/coordinate confirmation",
+      "data_sources": [
+        {
+          "label": "WatSeq Earlham Open Data",
+          "accession_or_doi": "WatSeq",
+          "url": null,
+          "notes": "Use target chromosome/region VCF plus .csi/.tbi index only; avoid whole-dataset processing on low-memory machine."
+        },
+        {
+          "label": "WWWG2B",
+          "accession_or_doi": "WWWG2B",
+          "url": null,
+          "notes": "Use as directed by paper metadata."
+        },
+        {
+          "label": "GSA projects",
+          "accession_or_doi": "PRJCA019636; CRA012590",
+          "url": null,
+          "notes": "Raw data not used by the minimal validation framework."
+        }
+      ],
+      "local_expected_paths": [
+        {
+          "key": "phenotype_table",
+          "path": "external_data/wheat_nature_2024/watseq/phenotypes.tsv",
+          "format": "phenotype_table",
+          "required": true,
+          "required_for": "analysis",
+          "notes": "Must use sample IDs compatible with WatSeq VCF."
+        }
+      ],
+      "license_notes": "Confirm WatSeq/Earlham and paper data use terms before downloads; do not redistribute large VCFs in this repository.",
+      "targets": [
+        {
+          "target_id": "RHT8",
+          "gene_or_locus": "RHT8",
+          "target_type": "locus",
+          "aliases": ["Reduced height 8"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": null,
+          "coordinates": null,
+          "expected_direction": "decreases_trait",
+          "local_expected_paths": [
+            {
+              "key": "target_vcf",
+              "path": "external_data/wheat_nature_2024/watseq/RHT8.vcf.gz",
+              "format": "vcf",
+              "required": true,
+              "required_for": "analysis",
+              "notes": "Target-region WatSeq RefSeq v1.0 VCF; requires .tbi or .csi for efficient region access."
+            }
+          ],
+          "traits": [
+            {
+              "name": "plant height",
+              "aliases": ["PlantHeight", "PH", "plant_height"],
+              "local_columns": [],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "notes": "Primary wheat positive control. Coordinates must be resolved in WatSeq RefSeq v1.0, not copied from CS-IAAS v1.1."
+        },
+        {
+          "target_id": "Q7B-HT",
+          "gene_or_locus": "Q7B-HT",
+          "target_type": "locus",
+          "aliases": ["Watkins height-increasing haplotype"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": null,
+          "coordinates": null,
+          "expected_direction": "increases_trait",
+          "local_expected_paths": [
+            {
+              "key": "target_vcf",
+              "path": "external_data/wheat_nature_2024/watseq/Q7B-HT.vcf.gz",
+              "format": "vcf",
+              "required": true,
+              "required_for": "analysis",
+              "notes": "Target-region WatSeq RefSeq v1.0 VCF; requires .tbi or .csi for efficient region access."
+            }
+          ],
+          "traits": [
+            {
+              "name": "plant height",
+              "aliases": ["PlantHeight", "PH", "plant_height"],
+              "local_columns": [],
+              "expected_direction": "increases_trait"
+            }
+          ],
+          "notes": "Locus/haplotype-level positive control; requires paper-specific haplotype definition before analysis."
+        }
+      ]
+    }
+  ]
+}
