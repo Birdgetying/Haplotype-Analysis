@@ -58,6 +58,13 @@ def generate_html(gene_id):
     """为单个基因生成HTML报告"""
     gene_dir = os.path.join(DATABASE_DIR, gene_id)
     results_dir = os.path.join(RESULTS_DIR, gene_id)
+
+    required_files = ['gene_info.json', 'phenotype_data.csv', 'haplotype_data.csv', 'haplotype_samples.csv']
+    missing = [f for f in required_files if not os.path.exists(os.path.join(gene_dir, f))]
+    if missing:
+        print(f"\n[WARN] {gene_id}: 数据库不完整，跳过HTML生成，缺少 {missing}")
+        return False
+
     os.makedirs(results_dir, exist_ok=True)
 
     # 更新 gene_info

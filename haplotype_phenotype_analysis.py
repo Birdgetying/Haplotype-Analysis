@@ -633,18 +633,29 @@ class SimpleVCFParser:
     def fetch(self, chrom, start=None, end=None):
         """获取指定区域的变异"""
         self._parse_header()
-        
+
         # 尝试使用 tabix 索引（如果存在）
         tbi_path = self.filepath + '.tbi'
         csi_path = self.filepath + '.csi'
-        
+
         if os.path.exists(tbi_path) or os.path.exists(csi_path):
             # 使用 bgzip + tabix 索引
             yield from self._fetch_with_tabix(chrom, start, end)
         else:
             # 线性扫描（慢但不需要索引）
             yield from self._fetch_linear(chrom, start, end)
-    
+
+    def __iter__(self):
+        """顺序遍历全部变异（兼容 pysam.VariantFile）"""
+        self._parse_header()
+        with self._open_file() as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                record = self._parse_line(line)
+                if record:
+                    yield record
+
     def _fetch_linear(self, chrom, start, end):
         """线性扫描获取区域变异"""
         with self._open_file() as f:
@@ -1684,7 +1695,28 @@ class HaplotypeExtractor:
             valid_bases = {'A', 'T', 'G', 'C', 'a', 't', 'g', 'c'}
             return (len(ref_allele) == 1 and len(alt_allele) == 1 and
                     ref_allele.upper() in valid_bases and alt_allele.upper() in valid_bases)
-        
+
+        def get_rec_fields(rec):
+            if isinstance(rec, dict):
+                return (rec.get('chrom'), rec['pos'], rec.get('ref', ''),
+                        rec.get('alt', [''])[0] if rec.get('alt') else '',
+                        rec.get('info', {}))
+            return rec.chrom, rec.pos, rec.ref or "", (rec.alts[0] if rec.alts else "") or "", rec.info
+
+        def get_sv_len_diff(info, pos):
+            try:
+                svlen = info.get('SVLEN')
+                if svlen is not None:
+                    if isinstance(svlen, (list, tuple)):
+                        svlen = svlen[0]
+                    return int(svlen)
+                sv_end = info.get('END')
+                if sv_end is not None:
+                    return -(int(sv_end) - pos)
+            except Exception:
+                pass
+            return 0
+
         # 提取区间内的变异
         record_count = 0
         filtered_count = 0  # 被过滤的非SNP数量
@@ -1692,16 +1724,8 @@ class HaplotypeExtractor:
             # 使用索引快速查询
             logger.info(f"快速查询区间: {chrom}:{start}-{end}")
             for rec in vcf.fetch(chrom, start, end):
-                # 兼容 pysam 对象和字典格式
-                if isinstance(rec, dict):
-                    pos = rec['pos']
-                    ref = rec.get('ref', '')
-                    alt0 = rec.get('alt', [''])[0] if rec.get('alt') else ''
-                else:
-                    pos = rec.pos
-                    ref = rec.ref or ""
-                    alt0 = (rec.alts[0] if rec.alts else "") or ""
-                
+                _, pos, ref, alt0, info = get_rec_fields(rec)
+
                 # SNP过滤
                 if snp_only and not is_snp(ref, alt0):
                     filtered_count += 1
@@ -1743,21 +1767,7 @@ class HaplotypeExtractor:
                 is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
                 if is_symbolic:
                     # 符号等位基因：尝试从INFO字段获取SVLEN
-                    try:
-                        svlen = rec.info.get('SVLEN')
-                        if svlen is not None:
-                            if isinstance(svlen, (list, tuple)):
-                                svlen = svlen[0]
-                            len_diff = int(svlen)  # SVLEN通常为负数表示缺失
-                        else:
-                            # 尝试从END字段推断长度
-                            sv_end = rec.info.get('END')
-                            if sv_end is not None:
-                                len_diff = -(int(sv_end) - pos)  # 缺失为负
-                            else:
-                                len_diff = 0  # 无法确定长度
-                    except Exception:
-                        len_diff = 0
+                    len_diff = get_sv_len_diff(info, pos)
                     is_sv = True
                 else:
                     len_diff = len(alt0) - len(ref)
@@ -1778,16 +1788,13 @@ class HaplotypeExtractor:
                 total_scanned += 1
                 if total_scanned % 100000 == 0:
                     logger.info(f"已扫描 {total_scanned} 条记录，匹配 {record_count} 条SNP...")
-                
-                if rec.chrom != chrom:
+
+                rec_chrom, pos, ref, alt0, info = get_rec_fields(rec)
+                if rec_chrom != chrom:
                     continue
-                if rec.pos < start or rec.pos > end:
+                if pos < start or pos > end:
                     continue
-                
-                pos = rec.pos
-                ref = rec.ref or ""
-                alt0 = (rec.alts[0] if rec.alts else "") or ""
-                
+
                 # SNP过滤
                 if snp_only and not is_snp(ref, alt0):
                     filtered_count += 1
@@ -1825,20 +1832,7 @@ class HaplotypeExtractor:
                 # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
                 is_symbolic = isinstance(alt0, str) and alt0.startswith('<') and alt0.endswith('>')
                 if is_symbolic:
-                    try:
-                        svlen = rec.info.get('SVLEN')
-                        if svlen is not None:
-                            if isinstance(svlen, (list, tuple)):
-                                svlen = svlen[0]
-                            len_diff = int(svlen)
-                        else:
-                            sv_end = rec.info.get('END')
-                            if sv_end is not None:
-                                len_diff = -(int(sv_end) - pos)
-                            else:
-                                len_diff = 0
-                    except Exception:
-                        len_diff = 0
+                    len_diff = get_sv_len_diff(info, pos)
                     is_sv = True
                 else:
                     len_diff = len(alt0) - len(ref)
@@ -8866,8 +8860,9 @@ function drawHaplotypeScorePlot(scoreData) {
             if (ch) {
                 var compNames = {
                     'variant_effect': 'Variant Effect', 'burden': 'Burden',
-                    'multi_omics': 'Multi-Omics', 'fine_mapping': 'Fine-Map',
-                    'effect_size': 'Effect Size', 'genetic_distinct': 'Gen. Distinct'
+                    'eb_effect': 'EB Effect', 'multi_omics': 'Multi-Omics',
+                    'fine_mapping': 'Fine-Map', 'effect_size': 'Effect Size',
+                    'genetic_distinct': 'Gen. Distinct'
                 };
                 var lines = [];
                 for (var key in compNames) {
@@ -8953,7 +8948,7 @@ function updateScoreStats(scoreData) {
     var compNames = {
         'variant_effect': 'Variant Effect',
         'burden': 'Burden',
-        'gwas': 'GWAS',
+        'eb_effect': 'EB Effect',
         'multi_omics': 'Multi-Omics',
         'fine_mapping': 'Fine-Map',
         'effect_size': 'Effect Size',
@@ -11950,7 +11945,7 @@ if (samples.length < 2) {{
 
     // Stats
     var weights = scoreData.component_weights || {{}};
-    var compNames = {{'variant_effect':'Variant Effect','burden':'Burden','gwas':'GWAS','multi_omics':'Multi-Omics','fine_mapping':'Fine-Map','effect_size':'Effect Size','genetic_distinct':'Gen. Distinct'}};
+    var compNames = {{'variant_effect':'Variant Effect','burden':'Burden','eb_effect':'EB Effect','multi_omics':'Multi-Omics','fine_mapping':'Fine-Map','effect_size':'Effect Size','genetic_distinct':'Gen. Distinct'}};
     var parts = [];
     for (var k in compNames) {{ if (weights[k] !== undefined) parts.push(compNames[k] + ': w=' + weights[k].toFixed(1)); }}
     var statsText = 'Components: ' + parts.join(' | ');
@@ -12297,9 +12292,16 @@ class HaplotypePhenotypeAnalyzer:
                 
                 # 从VCF获取样本ID
                 vcf = open_vcf(self.vcf_file)
-                sample_ids = vcf.samples if hasattr(vcf, 'samples') else []
+                if hasattr(vcf, '_parse_header'):
+                    vcf._parse_header()
+                if hasattr(vcf, 'header') and hasattr(vcf.header, 'samples'):
+                    sample_ids = list(vcf.header.samples)
+                elif hasattr(vcf, 'samples'):
+                    sample_ids = list(vcf.samples)
+                else:
+                    sample_ids = []
                 vcf.close()
-                
+
                 if len(sample_ids) == len(phenotype_values):
                     df = pd.DataFrame({
                         'SampleID': sample_ids,
@@ -12400,18 +12402,39 @@ class HaplotypePhenotypeAnalyzer:
         # **回退到VCF提取**
         try:
             vcf = open_vcf(self.vcf_file)
-            samples = vcf.samples if hasattr(vcf, 'samples') else []
+            if hasattr(vcf, '_parse_header'):
+                vcf._parse_header()
+            if hasattr(vcf, 'header') and hasattr(vcf.header, 'samples'):
+                samples = list(vcf.header.samples)
+            elif hasattr(vcf, 'samples'):
+                samples = list(vcf.samples)
+            else:
+                samples = []
+
+            def get_rec_pos(rec):
+                return rec['pos'] if isinstance(rec, dict) else rec.pos
+
+            def encode_gt(gt):
+                if gt is None:
+                    return -1
+                if isinstance(gt, str):
+                    alleles = gt.replace('|', '/').split('/')
+                    if any(a in ('', '.') for a in alleles):
+                        return -1
+                    try:
+                        return sum(int(a) for a in alleles)
+                    except ValueError:
+                        return -1
+                if any(a is None for a in gt):
+                    return -1
+                return sum(gt)
 
             # 获取区间内的变异
             variants = []
             positions = []
             for rec in vcf.fetch(self.chrom, self.start, self.end):
                 variants.append(rec)
-                # 兼容 pysam 对象和字典格式
-                if isinstance(rec, dict):
-                    positions.append(rec['pos'])
-                else:
-                    positions.append(rec.pos)
+                positions.append(get_rec_pos(rec))
 
             if len(variants) == 0:
                 return None
@@ -12419,22 +12442,15 @@ class HaplotypePhenotypeAnalyzer:
             # 构建基因型矩阵
             gt_data = []
             for rec in variants:
-                # 兼容 pysam 对象和字典格式
-                if isinstance(rec, dict):
-                    pos = rec['pos']
-                else:
-                    pos = rec.pos
+                pos = get_rec_pos(rec)
                 row = {'POS': pos}
                 for sample in samples:
                     if isinstance(rec, dict):
-                        gt = rec.get('samples', {}).get(sample, {}).get('GT') if sample in rec.get('samples', {}) else None
+                        gt = rec.get('samples', {}).get(sample, {}).get('GT')
                     else:
                         gt = rec.samples[sample]['GT']
                     # 编码基因型: 0/0->0, 0/1->1, 1/1->2, missing->-1
-                    if gt is None or None in gt:
-                        row[sample] = -1
-                    else:
-                        row[sample] = sum(gt)
+                    row[sample] = encode_gt(gt)
                 gt_data.append(row)
 
             gt_df = pd.DataFrame(gt_data)
@@ -12514,22 +12530,30 @@ class HaplotypePhenotypeAnalyzer:
             
             try:
                 for rec in vcf_reader.fetch(gene_chrom, region_start, region_end):
-                    pos = rec.pos
+                    # 兼容 pysam 对象和字典格式
+                    if isinstance(rec, dict):
+                        pos = rec['pos']
+                        ref = rec.get('ref', '')
+                        alt_allele = str(rec.get('alt', [''])[0]) if rec.get('alt') else ref
+                        info = rec.get('info', {})
+                    else:
+                        pos = rec.pos
+                        ref = rec.ref or ""
+                        alt_allele = str(rec.alts[0]) if rec.alts else ref
+                        info = rec.info
                     if pos not in pos_set:
                         continue
-                    
+
                     match_count += 1
-                    ref = rec.ref
-                    alt_allele = str(rec.alts[0]) if rec.alts else ref
                     in_cds  = _pos_in_any_interval(pos, cds_intervals)
                     in_exon = _pos_in_any_interval(pos, exon_intervals)
-                    
+
                     # 检查符号等位基因（<DEL>, <INS>, <DUP>, <INV>等）
                     is_symbolic = isinstance(alt_allele, str) and alt_allele.startswith('<') and alt_allele.endswith('>')
                     # 检查INFO字段的SVTYPE
                     svtype = None
                     try:
-                        svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
+                        svtype = info.get('SVTYPE') if 'SVTYPE' in info else None
                     except Exception:
                         pass
                     
@@ -12703,15 +12727,23 @@ class HaplotypePhenotypeAnalyzer:
             variants = []
             try:
                 for rec in vcf.fetch(chrom_in_vcf, promoter_start, promoter_end):
-                    ref = rec.ref
-                    alt = rec.alts[0] if rec.alts else ""
-                    
+                    if isinstance(rec, dict):
+                        pos = rec['pos']
+                        ref = rec.get('ref', '')
+                        alt = rec.get('alt', [''])[0] if rec.get('alt') else ""
+                        info = rec.get('info', {})
+                    else:
+                        pos = rec.pos
+                        ref = rec.ref or ""
+                        alt = rec.alts[0] if rec.alts else ""
+                        info = rec.info
+
                     # 判断变异类型
                     # 检查符号等位基因（<DEL>, <INS>等）
                     is_symbolic = isinstance(alt, str) and alt.startswith('<') and alt.endswith('>')
                     # 检查INFO字段是否有SVTYPE
-                    svtype = rec.info.get('SVTYPE') if 'SVTYPE' in rec.info else None
-                    
+                    svtype = info.get('SVTYPE') if 'SVTYPE' in info else None
+
                     if is_symbolic or svtype:
                         # 符号等位基因或有SVTYPE → SV
                         if svtype:
@@ -12721,15 +12753,15 @@ class HaplotypePhenotypeAnalyzer:
                             var_type = f"SV({sym})"
                         # 从SVLEN或END获取实际长度差
                         try:
-                            svlen = rec.info.get('SVLEN')
+                            svlen = info.get('SVLEN')
                             if svlen is not None:
                                 if isinstance(svlen, (list, tuple)):
                                     svlen = svlen[0]
                                 len_diff = abs(int(svlen))
                             else:
-                                sv_end = rec.info.get('END')
+                                sv_end = info.get('END')
                                 if sv_end is not None:
-                                    len_diff = abs(int(sv_end) - rec.pos)
+                                    len_diff = abs(int(sv_end) - pos)
                                 else:
                                     len_diff = 0
                         except Exception:
@@ -12742,9 +12774,9 @@ class HaplotypePhenotypeAnalyzer:
                             var_type = "SV"
                         else:
                             var_type = "indel"
-                    
+
                     variants.append({
-                        'pos': rec.pos,
+                        'pos': pos,
                         'ref': ref[:20] + "..." if len(ref) > 20 else ref,
                         'alt': alt[:20] + "..." if len(alt) > 20 else alt,
                         'type': var_type,
