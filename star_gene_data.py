@@ -83,6 +83,22 @@ DATA_FILES: List[DataFile] = [
     DataFile(
         paper_id="maize_natgenet_2019",
         short_name="maize2019",
+        key="maize2019_sv_386014_full",
+        label="MaizeGo SV.386014 full structural variation genotype package",
+        source="https://pan.baidu.com/s/10ieQpWGTEC805K4sI4RHOg",
+        local_path="external_data/maize_natgenet_2019/maizego/SV.386014.zip",
+        size_hint="102.42 MB page listing; 107,394,066 bytes in Baidu metadata",
+        is_large=False,
+        default_action="manual_baidu_download",
+        notes=(
+            "Required for the paper-genotype qHKW1/ZmBAM1d 8.9-kb indel check if "
+            "the small direct MaizeGo matrices do not contain the exact marker. "
+            "Baidu share metadata is public, but direct download can require web verification/login."
+        ),
+    ),
+    DataFile(
+        paper_id="maize_natgenet_2019",
+        short_name="maize2019",
         key="maize2019_gwas_psv_21081",
         label="MaizeGo GWAS.pSV.21081",
         source="http://www.maizego.org/download/all.sv/GWAS.pSV.21081.zip",
@@ -249,6 +265,178 @@ def _infer_marker_len_diff(marker: str, ref: str, alt: str) -> int:
         length = int(match.group(2))
         return length if match.group(1) == "insertion" else -length
     return len(alt) - len(ref) if alt else 0
+
+
+def _normal_chrom(value: object) -> str:
+    text = str(value).strip()
+    return text[3:] if text.lower().startswith("chr") else text
+
+
+def _parse_maizego_sv_marker(marker: str) -> Optional[Dict[str, object]]:
+    match = re.search(
+        r'^(?P<chrom>chr[^_]+)_(?P<start>\d+)_(?P<end>\d+)_'
+        r'(?P<variant_type>insertion|deletion)_(?P<length>\d+)(?:$|_)',
+        marker,
+    )
+    if not match:
+        return None
+    start = int(match.group("start"))
+    end = int(match.group("end"))
+    return {
+        "chrom": _normal_chrom(match.group("chrom")),
+        "marker_start": min(start, end),
+        "marker_end": max(start, end),
+        "variant_type": match.group("variant_type"),
+        "sv_length": int(match.group("length")),
+    }
+
+
+def _hmp_sample_start(header: Sequence[str]) -> int:
+    if "QCcode" in header:
+        return list(header).index("QCcode") + 1
+    if "pos" in header:
+        return list(header).index("pos") + 1
+    raise ValueError("MaizeGo/HapMap matrix header must contain QCcode or pos")
+
+
+def _valid_maizego_state(value: object) -> bool:
+    text = str(value).strip()
+    return bool(text) and text.upper() not in {"NA", "NAN", "."}
+
+
+def _format_counts(values: Sequence[str]) -> str:
+    counts = Counter(values)
+    return ";".join(f"{state}:{count}" for state, count in counts.most_common())
+
+
+def scan_maizego_sv_candidates(
+    matrix_paths: Sequence[Path],
+    chrom: str,
+    window_start: int,
+    window_end: int,
+    length_min: int = 8500,
+    length_max: int = 9500,
+    variant_types: Optional[Sequence[str]] = None,
+) -> List[Dict[str, object]]:
+    """Scan MaizeGo/HapMap-style SV matrices for candidate paper markers.
+
+    MaizeGo structural-variation files store marker IDs such as
+    ``chr1_30450000_30458900_insertion_8900`` in the ``rs#`` column and one
+    accession per following sample column. The scanner is intentionally strict:
+    it only reports markers whose parsed chromosome, marker interval, and SV
+    length match the requested paper window.
+    """
+    accepted_types = {str(v).lower() for v in variant_types or []}
+    target_chrom = _normal_chrom(chrom)
+    candidates: List[Dict[str, object]] = []
+
+    for matrix_path in matrix_paths:
+        matrix_path = Path(matrix_path)
+        with open(matrix_path, "r", encoding="utf-8", newline="") as f:
+            header_line = f.readline()
+            if not header_line:
+                continue
+            header = header_line.rstrip("\n\r").split("\t")
+            try:
+                marker_idx = header.index("rs#")
+                alleles_idx = header.index("alleles") if "alleles" in header else None
+                chrom_idx = header.index("chrom") if "chrom" in header else None
+                pos_idx = header.index("pos") if "pos" in header else None
+                sample_start = _hmp_sample_start(header)
+            except ValueError as e:
+                raise ValueError(f"unsupported MaizeGo matrix header in {matrix_path}: {e}") from e
+
+            for line_number, line in enumerate(f, start=2):
+                parts = line.rstrip("\n\r").split("\t")
+                if len(parts) <= max(marker_idx, sample_start - 1):
+                    continue
+                marker = parts[marker_idx]
+                parsed = _parse_maizego_sv_marker(marker)
+                if not parsed:
+                    continue
+                if _normal_chrom(parsed["chrom"]) != target_chrom:
+                    continue
+                if accepted_types and str(parsed["variant_type"]).lower() not in accepted_types:
+                    continue
+                if not (length_min <= int(parsed["sv_length"]) <= length_max):
+                    continue
+                marker_start = int(parsed["marker_start"])
+                marker_end = int(parsed["marker_end"])
+                if marker_end < window_start or marker_start > window_end:
+                    continue
+
+                states = [value.strip() for value in parts[sample_start:] if _valid_maizego_state(value)]
+                pos = ""
+                if pos_idx is not None and pos_idx < len(parts):
+                    pos = parts[pos_idx]
+                alleles = ""
+                if alleles_idx is not None and alleles_idx < len(parts):
+                    alleles = parts[alleles_idx]
+                chrom_value = parsed["chrom"]
+                if chrom_idx is not None and chrom_idx < len(parts) and parts[chrom_idx]:
+                    chrom_value = _normal_chrom(parts[chrom_idx])
+                candidates.append({
+                    "source_path": str(matrix_path),
+                    "line_number": line_number,
+                    "marker": marker,
+                    "alleles": alleles,
+                    "chrom": chrom_value,
+                    "pos": pos,
+                    "marker_start": marker_start,
+                    "marker_end": marker_end,
+                    "variant_type": parsed["variant_type"],
+                    "sv_length": parsed["sv_length"],
+                    "valid_sample_count": len(states),
+                    "state_count": len(set(states)),
+                    "counts": _format_counts(states),
+                })
+
+    return sorted(candidates, key=lambda row: (
+        str(row["source_path"]),
+        int(row["line_number"]),
+    ))
+
+
+def extract_maizego_marker_matrix(
+    matrix_path: Path,
+    marker_id: str,
+    output_path: Path,
+) -> Path:
+    """Transpose one MaizeGo/HapMap marker row into a sample-by-marker table."""
+    matrix_path = Path(matrix_path)
+    output_path = Path(output_path)
+
+    with open(matrix_path, "r", encoding="utf-8", newline="") as f:
+        header_line = f.readline()
+        if not header_line:
+            raise ValueError(f"matrix is empty: {matrix_path}")
+        header = header_line.rstrip("\n\r").split("\t")
+        try:
+            marker_idx = header.index("rs#")
+            sample_start = _hmp_sample_start(header)
+        except ValueError as e:
+            raise ValueError(f"unsupported MaizeGo matrix header in {matrix_path}: {e}") from e
+
+        samples = header[sample_start:]
+        selected_parts = None
+        for line in f:
+            parts = line.rstrip("\n\r").split("\t")
+            if len(parts) > marker_idx and parts[marker_idx] == marker_id:
+                selected_parts = parts
+                break
+
+    if selected_parts is None:
+        raise ValueError(f"marker not found in {matrix_path}: {marker_id}")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["SampleID", marker_id])
+        for i, sample in enumerate(samples, start=sample_start):
+            allele = selected_parts[i] if i < len(selected_parts) else ""
+            writer.writerow([sample, allele])
+
+    return output_path
 
 
 def build_database_from_marker_matrix(

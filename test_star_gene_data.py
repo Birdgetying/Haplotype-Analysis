@@ -4,6 +4,7 @@
 from pathlib import Path
 from contextlib import redirect_stdout
 from io import StringIO
+import json
 import tempfile
 import unittest
 
@@ -210,6 +211,64 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("True", variant_info)
             self.assertIn("SV", variant_info)
 
+    def test_scan_maizego_sv_candidates_filters_by_window_and_length(self):
+        from star_gene_data import scan_maizego_sv_candidates
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            matrix_path = tmp_path / "SV.386014.hmp.txt"
+            matrix_path.write_text(
+                "rs#\talleles\tchrom\tpos\tstrand\tassembly#\tcenter\tprotLSID\tassayLSID\tpanelLSID\tQCcode\tS1\tS2\tS3\tS4\n"
+                "chr1_30450000_30458900_insertion_8900\tA/T\t1\t30454500\t+\tNA\tNA\tNA\tNA\tNA\tNA\tAA\tAA\tNN\tTT\n"
+                "chr1_30452000_30452100_insertion_100\tA/T\t1\t30452000\t+\tNA\tNA\tNA\tNA\tNA\tNA\tAA\tAA\tAA\tAA\n"
+                "chr1_40000000_40008900_insertion_8900\tA/T\t1\t40004500\t+\tNA\tNA\tNA\tNA\tNA\tNA\tAA\tNN\tNN\tTT\n",
+                encoding="utf-8",
+            )
+
+            candidates = scan_maizego_sv_candidates(
+                matrix_paths=[matrix_path],
+                chrom="1",
+                window_start=30440000,
+                window_end=30540000,
+                length_min=8500,
+                length_max=9500,
+            )
+
+            self.assertEqual(len(candidates), 1)
+            candidate = candidates[0]
+            self.assertEqual(candidate["marker"], "chr1_30450000_30458900_insertion_8900")
+            self.assertEqual(candidate["variant_type"], "insertion")
+            self.assertEqual(candidate["sv_length"], 8900)
+            self.assertEqual(candidate["counts"], "AA:2;NN:1;TT:1")
+            self.assertEqual(candidate["source_path"], str(matrix_path))
+
+    def test_extract_maizego_marker_matrix_transposes_selected_record(self):
+        from star_gene_data import extract_maizego_marker_matrix
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            matrix_path = tmp_path / "SV.386014.hmp.txt"
+            output_path = tmp_path / "qHKW1_marker.tsv"
+            marker = "chr1_30450000_30458900_insertion_8900"
+            matrix_path.write_text(
+                "rs#\talleles\tchrom\tpos\tstrand\tassembly#\tcenter\tprotLSID\tassayLSID\tpanelLSID\tQCcode\tS1\tS2\tS3\n"
+                f"{marker}\tA/T\t1\t30454500\t+\tNA\tNA\tNA\tNA\tNA\tNA\tAA\tNN\tTT\n",
+                encoding="utf-8",
+            )
+
+            written = extract_maizego_marker_matrix(
+                matrix_path=matrix_path,
+                marker_id=marker,
+                output_path=output_path,
+            )
+
+            self.assertEqual(written, output_path)
+            matrix_text = output_path.read_text(encoding="utf-8")
+            self.assertEqual(
+                matrix_text,
+                f"SampleID\t{marker}\nS1\tAA\nS2\tNN\nS3\tTT\n",
+            )
+
     def test_complete_database_can_supply_coordinates_and_phenotypes(self):
         from star_gene_validation import StarGeneValidator
 
@@ -278,6 +337,54 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("HKW", check["phenotype_columns"])
             self.assertEqual(coords, ("1", 100, 200))
 
+    def test_required_database_source_blocks_substitute_marker_database(self):
+        from star_gene_validation import StarGeneValidator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_root = tmp_path / "star_gene_database"
+            results_root = tmp_path / "star_gene_results"
+            db_dir = db_root / "paper1" / "qHKW1"
+            db_dir.mkdir(parents=True)
+
+            (db_dir / "gene_info.json").write_text(
+                '{"gene_id":"qHKW1","chrom":"1","start":100,"end":200,"source":"marker_matrix"}',
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\nAA,2,Hap1,AA\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\nS1,AA,Hap1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "phenotype_data.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name,HKW\nS1,AA,Hap1,25\n",
+                encoding="utf-8",
+            )
+
+            paper = {"paper_id": "paper1", "short_name": "p1", "local_expected_paths": []}
+            target = {
+                "target_id": "qHKW1",
+                "gene_or_locus": "qHKW1",
+                "requires_coordinate_resolution": True,
+                "coordinates": None,
+                "required_database_source": "maizego_paper_marker",
+                "traits": [{"name": "hundred-kernel weight", "local_columns": ["HKW"]}],
+            }
+
+            validator = StarGeneValidator(
+                manifest={"papers": [paper]},
+                database_root=db_root,
+                results_root=results_root,
+                check_only=True,
+            )
+            check = validator.check_target(paper, target)
+
+            self.assertEqual(check["status"], "unsupported_input_format_for_analysis")
+            self.assertTrue(any(note.startswith("database_source_mismatch:") for note in check["notes"]))
+
     def test_marker_database_cli(self):
         from build_star_gene_database import main as build_main
 
@@ -313,6 +420,78 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue((out_root / "qHKW1" / "gene_info.json").exists())
             self.assertIn("Built star-gene database", stdout.getvalue())
+
+    def test_maize_qhkw1_prepare_cli_reports_missing_full_sv_package(self):
+        from prepare_maize2019_qhkw1_paper_genotype import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main(["--sv-root", str(tmp_path)])
+
+            self.assertEqual(rc, 2)
+            output = stdout.getvalue()
+            self.assertIn("SV.386014.zip", output)
+            self.assertIn("paper genotype package is missing", output)
+
+    def test_maize_qhkw1_prepare_ignores_non_matrix_text_files(self):
+        from prepare_maize2019_qhkw1_paper_genotype import find_candidate_matrices
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "paper.txt").write_text("This is article text, not genotype data.\n", encoding="utf-8")
+            matrix_path = tmp_path / "MS.step1.org.txt"
+            matrix_path.write_text(
+                "rs#\talleles\tchrom\tpos\tstrand\tassembly#\tcenter\tprotLSID\tassayLSID\tpanelLSID\tQCcode\tS1\n"
+                "chr1_30450000_30458900_insertion_8900\tA/T\t1\t30454500\t+\tNA\tNA\tNA\tNA\tNA\tNA\tAA\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(find_candidate_matrices(tmp_path), [matrix_path])
+
+    def test_maize_qhkw1_prepare_builds_paper_marker_database(self):
+        from prepare_maize2019_qhkw1_paper_genotype import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            sv_root = tmp_path / "maizego"
+            sv_root.mkdir()
+            marker = "chr1_30450000_30458900_insertion_8900"
+            matrix_path = sv_root / "SV.386014.hmp.txt"
+            matrix_path.write_text(
+                "rs#\talleles\tchrom\tpos\tstrand\tassembly#\tcenter\tprotLSID\tassayLSID\tpanelLSID\tQCcode\tS1\tS2\tS3\n"
+                f"{marker}\tA/T\t1\t30454500\t+\tNA\tNA\tNA\tNA\tNA\tNA\tAA\tNN\tTT\n",
+                encoding="utf-8",
+            )
+            phenotype_path = tmp_path / "phenotypes.csv"
+            phenotype_path.write_text(
+                "<Trait>,100grainweight\n"
+                "S1,25.1\n"
+                "S2,29.3\n"
+                "S3,-999\n",
+                encoding="utf-8",
+            )
+            output_root = tmp_path / "db"
+            candidate_output = tmp_path / "candidates.tsv"
+            marker_output = tmp_path / "marker.tsv"
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main([
+                    "--sv-root", str(sv_root),
+                    "--phenotype-table", str(phenotype_path),
+                    "--output-root", str(output_root),
+                    "--candidate-output", str(candidate_output),
+                    "--marker-output", str(marker_output),
+                ])
+
+            self.assertEqual(rc, 0)
+            gene_info = json.loads((output_root / "qHKW1" / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["source"], "maizego_paper_marker")
+            self.assertEqual(gene_info["source_marker"], marker)
+            self.assertTrue(marker_output.exists())
+            self.assertTrue(candidate_output.exists())
 
 
 if __name__ == "__main__":

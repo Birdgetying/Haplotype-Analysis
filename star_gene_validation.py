@@ -361,6 +361,8 @@ class StarGeneValidator:
                     notes.append(f'phenotype_columns:{label}={",".join(cols[:20])}')
 
         database_complete = False
+        database_source_ok = True
+        required_database_source = target.get('required_database_source')
         if database_path.exists():
             missing_db = [name for name in DB_REQUIRED_FILES if not (database_path / name).exists()]
             if missing_db:
@@ -377,21 +379,30 @@ class StarGeneValidator:
             if gene_info_err:
                 notes.append(f'database_gene_info_warning:{gene_info_err}')
             else:
+                if required_database_source:
+                    actual_source = str(database_gene_info.get('source') or '')
+                    if actual_source != str(required_database_source):
+                        database_source_ok = False
+                        database_complete = False
+                        notes.append(
+                            f'database_source_mismatch:required={required_database_source},actual={actual_source or "missing"}'
+                        )
                 db_chrom = database_gene_info.get('chrom') or database_gene_info.get('chr')
                 db_start = _safe_int(database_gene_info.get('start') or database_gene_info.get('gene_start'))
                 db_end = _safe_int(database_gene_info.get('end') or database_gene_info.get('gene_end'))
-                if db_chrom and db_start is not None and db_end is not None:
+                if database_source_ok and db_chrom and db_start is not None and db_end is not None:
                     unresolved_coordinates = False
                     notes.append(f'database_coordinates:{target_id}={db_chrom}:{db_start}-{db_end}')
-                else:
+                elif database_source_ok:
                     notes.append('database_coordinates_missing')
 
-            db_pheno_cols, db_pheno_err = read_database_phenotype_columns(database_path)
-            if db_pheno_err:
-                notes.append(f'database_phenotype_warning:{db_pheno_err}')
-            elif db_pheno_cols:
-                phenotype_columns = db_pheno_cols
-                notes.append(f'database_phenotype_columns:{",".join(db_pheno_cols[:20])}')
+            if database_source_ok:
+                db_pheno_cols, db_pheno_err = read_database_phenotype_columns(database_path)
+                if db_pheno_err:
+                    notes.append(f'database_phenotype_warning:{db_pheno_err}')
+                elif db_pheno_cols:
+                    phenotype_columns = db_pheno_cols
+                    notes.append(f'database_phenotype_columns:{",".join(db_pheno_cols[:20])}')
 
         if unresolved_coordinates:
             notes.append('coordinates_unresolved')
@@ -411,7 +422,9 @@ class StarGeneValidator:
         if database_complete:
             missing_required = []
 
-        if missing_required:
+        if not database_source_ok:
+            data_status = 'unsupported_input_format_for_analysis'
+        elif missing_required:
             data_status = 'missing_required_files'
         elif unresolved_coordinates:
             data_status = 'requires_coordinate_resolution'

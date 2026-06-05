@@ -12,6 +12,7 @@ The first implementation is intentionally **check-only by default**. It records 
 - [`run_rice2024_star_genes.py`](../run_rice2024_star_genes.py): thin wrapper for the Rice Science 2024 targets.
 - [`run_maize2019_star_gene.py`](../run_maize2019_star_gene.py): thin wrapper for the Maize Nature Genetics 2019 qHKW1/ZmBAM1d targets.
 - [`run_wheat2024_star_genes.py`](../run_wheat2024_star_genes.py): thin wrapper for Wheat Nature 2024 WatSeq targets.
+- [`prepare_maize2019_qhkw1_paper_genotype.py`](../prepare_maize2019_qhkw1_paper_genotype.py): strict MaizeGo full-SV-package preparation script for the qHKW1/ZmBAM1d paper 8.9-kb indel.
 
 ## Default safe check
 
@@ -63,6 +64,31 @@ The recommended first pass is:
 3. Inspect whether the qHKW1/ZmBAM1d 8.9 kb indel has sample-level allele calls.
 4. Convert the confirmed marker/phenotype table into the existing per-target database format before running `--run-analysis`.
 
+## Maize qHKW1 paper-genotype preparation
+
+The qHKW1/ZmBAM1d positive control must use the paper-compatible 8.9-kb indel marker, not a nearby or count-compatible substitute marker. The small direct MaizeGo matrices available through HTTP do not currently contain a chr1 `30.44-30.54 Mb` 8.5-9.5 kb candidate in the paper figure window.
+
+The full MaizeGo `SV.386014.zip` package is listed on the MaizeGo Resources page through Baidu:
+
+```text
+https://pan.baidu.com/s/10ieQpWGTEC805K4sI4RHOg
+```
+
+Direct automated download is not implemented because the Baidu share can require web verification or login. After obtaining the file manually, place it here:
+
+```text
+external_data/maize_natgenet_2019/maizego/SV.386014.zip
+```
+
+Then run:
+
+```bash
+python prepare_maize2019_qhkw1_paper_genotype.py
+python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1
+```
+
+The preparation script extracts the package if needed, scans only MaizeGo/HapMap matrix files for a chr1 paper-window 8.5-9.5 kb insertion/deletion, writes `external_data/maize_natgenet_2019/maizego/qHKW1_paper_8p9kb_candidates.tsv`, and builds the qHKW1 database only when exactly one candidate is found. If it reports zero or multiple candidates, inspect the candidate TSV or obtain the author-provided per-accession marker table before interpreting any qHKW1 result.
+
 ## Build a precomputed database from marker tables
 
 When a paper source provides a small sample-by-marker matrix, convert it with:
@@ -105,6 +131,8 @@ python run_star_gene_validation.py --run-analysis --paper wheat2024 --target RHT
 A target will only run if it has resolved coordinates and a supported local genotype source. Coordinates can come from the manifest (`chrom`, `start`, `end`) or from a complete precomputed database `gene_info.json`; when a complete database is present, its `phenotype_data.csv` can also provide the phenotype columns.
 
 For the current maize first pass, the public MaizeGo small resources let the pipeline run end to end for a count-compatible qHKW1 candidate marker, but they did not produce a positive validation signal (`association_pvalue=0.3914`, `score_r_squared=0.0008`). Do not treat that marker as proof of HaplotypeScorer effectiveness; the exact paper 8.9-kb indel marker still needs confirmation.
+
+The current qHKW1 status is therefore **data-blocked**, not method-negative. A substitute marker that is not the paper Fig. 4h indel should not be used to decide whether haplotype scoring can identify known key genes.
 
 ## Haplotype score export
 

@@ -44,14 +44,29 @@ Download the small MaizeGo SV/pSV and BLUP phenotype files, inspect whether they
 Outcome: the lightweight MaizeGo path now runs end to end from a marker matrix, but the count-compatible public marker did not provide a positive validation signal for qHKW1. The exact paper 8.9-kb indel marker remains unresolved in the small public resources.
 
 ### Phase 7: Next positive-control target selection
-Status: pending
+Status: in_progress
 
 Choose the next validation route: obtain the exact qHKW1 8.9-kb indel marker from a paper-specific source/contact, or move to a rice/wheat target with confirmed sample-level genotype and phenotype files.
+
+Current decision: keep qHKW1/ZmBAM1d as the first priority, but require the paper genotype marker before interpreting the result. Added a strict preparation script for the MaizeGo full `SV.386014.zip` package. It scans only HapMap/SV matrix files for a chr1 paper-window 8.5-9.5 kb candidate and builds the database only if exactly one marker is found. With currently available small MaizeGo matrices, the script finds zero exact candidates, so qHKW1 remains data-blocked rather than method-negative.
+
+### Phase 8: Paper-genotype rerun after full MaizeGo SV package
+Status: pending
+
+Place `SV.386014.zip` at `external_data/maize_natgenet_2019/maizego/SV.386014.zip`, then run:
+
+```bash
+python prepare_maize2019_qhkw1_paper_genotype.py
+python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1
+```
+
+Only if the preparation script finds the paper-compatible 8.9 kb indel should the qHKW1 run be interpreted as a positive-control validation.
 
 ## Open Questions
 - Which validation depth should be prioritized: full-paper datasets, target-region VCFs, or marker/phenotype positive-control tables?
 - Whether the user wants local large downloads on this machine or only scripts/instructions.
 - For maize, the exact paper 8.9-kb qHKW1 marker was not identified in the small MaizeGo resources; the count-compatible marker is not sufficient as proof.
+- `SV.386014.zip` exists on a Baidu share, but direct automated download is blocked by Baidu verification/login mechanics from this environment.
 
 ## Errors Encountered
 - Figshare API and Science article pages returned HTTP 403 from local PowerShell requests. Used accessible public pages/search snippets and official article/data URLs instead.
