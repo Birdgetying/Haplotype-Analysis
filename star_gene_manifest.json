@@ -65,19 +65,13 @@
           "expected_direction": "unknown",
           "traits": [
             {
-              "name": "heading date",
-              "aliases": ["Heading_date", "heading_date", "days to heading"],
-              "local_columns": [],
-              "expected_direction": "unknown"
-            },
-            {
-              "name": "plant height",
-              "aliases": ["Plant_height", "plant_height"],
+              "name": "panicle number",
+              "aliases": ["Panicle_number", "panicle_number", "Num_panicles", "number of panicles"],
               "local_columns": [],
               "expected_direction": "unknown"
             }
           ],
-          "notes": "Strong causal-gene positive control in the paper; resolve gene ID/coordinates from paper metadata before running analysis."
+          "notes": "Strong causal-gene positive control reported for panicle number in the paper; resolve gene ID/coordinates from paper metadata before running analysis."
         },
         {
           "target_id": "OsFTL1",
@@ -94,15 +88,9 @@
               "aliases": ["Heading_date", "heading_date", "days to heading"],
               "local_columns": [],
               "expected_direction": "unknown"
-            },
-            {
-              "name": "yield",
-              "aliases": ["Yield", "grain yield", "grain_yield"],
-              "local_columns": [],
-              "expected_direction": "unknown"
             }
           ],
-          "notes": "Strong causal-gene positive control in the paper; resolve gene ID/coordinates from paper metadata before running analysis."
+          "notes": "Strong causal-gene positive control reported for heading date in the paper; resolve gene ID/coordinates from paper metadata before running analysis."
         }
       ]
     },
@@ -125,6 +113,12 @@
           "accession_or_doi": "PRJNA531553",
           "url": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA531553",
           "notes": "Use only paper-provided target variant/SV matrices if available."
+        },
+        {
+          "label": "MaizeGo SV map and BLUP traits",
+          "accession_or_doi": "MaizeGo Resources",
+          "url": "http://www.maizego.org/Resources.html",
+          "notes": "Lightweight first pass can download small SV/pSV zip files and BLUP traits via run_star_gene_validation.py --print-downloads --paper maize2019."
         },
         {
           "label": "GSA projects",
@@ -204,14 +198,14 @@
         {
           "label": "WatSeq Earlham Open Data",
           "accession_or_doi": "WatSeq",
-          "url": null,
-          "notes": "Use target chromosome/region VCF plus .csi/.tbi index only; avoid whole-dataset processing on low-memory machine."
+          "url": "https://opendata.earlham.ac.uk/wheat/under_license/toronto/WatSeq_2023-09-15_landrace_modern_Variation_Data/",
+          "notes": "Use target chromosome/region VCF plus .csi/.tbi index only; exact object names must be confirmed from WWWG2B/Earlham metadata before hard-coded downloads."
         },
         {
           "label": "WWWG2B",
           "accession_or_doi": "WWWG2B",
-          "url": null,
-          "notes": "Use as directed by paper metadata."
+          "url": "https://wwwg2b.com/dataAvailable",
+          "notes": "Use as directed by paper metadata; lightweight first pass should obtain phenotype and target-region VCF metadata here."
         },
         {
           "label": "GSA projects",

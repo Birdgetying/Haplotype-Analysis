@@ -736,6 +736,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help='confirm external data terms before any future download path is enabled')
     parser.add_argument('--score-mode', choices=['default', 'no_finemap', 'functional_only'], default='default',
                         help='sensitivity-analysis label; only default is executed by the minimal framework')
+    parser.add_argument('--print-downloads', action='store_true',
+                        help='print lightweight data-source notes and copyable download commands, then exit')
+    parser.add_argument('--include-large-downloads', action='store_true',
+                        help='include large/manual sources in printed notes; direct commands are still only emitted for safe small files')
     return parser
 
 
@@ -746,6 +750,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     manifest_path = _to_path(args.manifest) or DEFAULT_MANIFEST
     database_root = _to_path(args.database_root) or DEFAULT_DATABASE_ROOT
     results_root = _to_path(args.results_root) or DEFAULT_RESULTS_ROOT
+
+    if args.print_downloads:
+        from star_gene_data import build_download_commands, summarize_downloads
+
+        paper_filter = args.paper[0] if len(args.paper) == 1 else None
+        if len(args.paper) > 1:
+            paper_filter = None
+        if args.paper and len(args.paper) == 1:
+            print(summarize_downloads(paper=paper_filter))
+            commands = build_download_commands(
+                paper=paper_filter,
+                include_large=args.include_large_downloads,
+            )
+        else:
+            print(summarize_downloads())
+            commands = build_download_commands(include_large=args.include_large_downloads)
+
+        if commands:
+            print('\n[DOWNLOAD COMMANDS]')
+            for command in commands:
+                print(command)
+        else:
+            print('\n[DOWNLOAD COMMANDS]')
+            print('No safe direct-download commands for the selected paper(s). See notes above.')
+        return 0
 
     manifest = load_manifest(manifest_path)
     if not args.all and not args.paper and not args.target:
