@@ -122,6 +122,162 @@ class StarGeneDataTests(unittest.TestCase):
             phenotype_data = (db_dir / "phenotype_data.csv").read_text(encoding="utf-8")
             self.assertIn("HKW", phenotype_data)
 
+    def test_build_database_filters_configured_phenotype_missing_values(self):
+        from star_gene_data import build_database_from_marker_matrix
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            marker_path = tmp_path / "markers.tsv"
+            phenotype_path = tmp_path / "phenotypes.tsv"
+            out_root = tmp_path / "db"
+
+            marker_path.write_text(
+                "SampleID\tm1\n"
+                "S1\tNN\n"
+                "S2\tAA\n"
+                "S3\tAA\n",
+                encoding="utf-8",
+            )
+            phenotype_path.write_text(
+                "SampleID\tHKW\n"
+                "S1\t-999.0\n"
+                "S2\t25.1\n"
+                "S3\t25.3\n",
+                encoding="utf-8",
+            )
+
+            db_dir = build_database_from_marker_matrix(
+                marker_matrix=marker_path,
+                phenotype_table=phenotype_path,
+                output_root=out_root,
+                target_id="qHKW1",
+                chrom="chr1",
+                start=100,
+                end=100,
+                phenotype_columns=["HKW"],
+                marker_columns=["m1"],
+                marker_positions={"m1": 100},
+                phenotype_missing_values=["-999"],
+            )
+
+            phenotype_data = (db_dir / "phenotype_data.csv").read_text(encoding="utf-8")
+            hap_samples = (db_dir / "haplotype_samples.csv").read_text(encoding="utf-8")
+
+            self.assertNotIn("S1", phenotype_data)
+            self.assertNotIn("-999.0", phenotype_data)
+            self.assertIn("S2", phenotype_data)
+            self.assertNotIn("S1", hap_samples)
+
+    def test_build_database_infers_sv_length_from_marker_id(self):
+        from star_gene_data import build_database_from_marker_matrix
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            marker_path = tmp_path / "markers.tsv"
+            phenotype_path = tmp_path / "phenotypes.tsv"
+            out_root = tmp_path / "db"
+            marker_name = "chr1_27976568_27994848_deletion_18280"
+
+            marker_path.write_text(
+                f"SampleID\t{marker_name}\n"
+                "S1\tNN\n"
+                "S2\tAA\n",
+                encoding="utf-8",
+            )
+            phenotype_path.write_text(
+                "SampleID\tHKW\n"
+                "S1\t22\n"
+                "S2\t25\n",
+                encoding="utf-8",
+            )
+
+            db_dir = build_database_from_marker_matrix(
+                marker_matrix=marker_path,
+                phenotype_table=phenotype_path,
+                output_root=out_root,
+                target_id="qHKW1",
+                chrom="1",
+                start=27976568,
+                end=27994848,
+                phenotype_columns=["HKW"],
+                marker_columns=[marker_name],
+                marker_positions={marker_name: 28892142},
+            )
+
+            variant_info = (db_dir / "variant_info.csv").read_text(encoding="utf-8")
+
+            self.assertIn("-18280", variant_info)
+            self.assertIn("True", variant_info)
+            self.assertIn("SV", variant_info)
+
+    def test_complete_database_can_supply_coordinates_and_phenotypes(self):
+        from star_gene_validation import StarGeneValidator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_root = tmp_path / "star_gene_database"
+            results_root = tmp_path / "star_gene_results"
+            db_dir = db_root / "paper1" / "qHKW1"
+            db_dir.mkdir(parents=True)
+
+            (db_dir / "gene_info.json").write_text(
+                '{"gene_id":"qHKW1","chrom":"1","start":100,"end":200}',
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\nAA,2,Hap1,AA\nNN,2,Hap2,NN\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\nS1,AA,Hap1\nS2,AA,Hap1\nS3,NN,Hap2\nS4,NN,Hap2\n",
+                encoding="utf-8",
+            )
+            (db_dir / "phenotype_data.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name,HKW\nS1,AA,Hap1,25\nS2,AA,Hap1,26\nS3,NN,Hap2,22\nS4,NN,Hap2,23\n",
+                encoding="utf-8",
+            )
+
+            paper = {
+                "paper_id": "paper1",
+                "short_name": "p1",
+                "local_expected_paths": [
+                    {
+                        "key": "target_variant_matrix",
+                        "path": "missing/markers.tsv",
+                        "format": "unknown",
+                        "required": True,
+                    },
+                    {
+                        "key": "phenotype_table",
+                        "path": "missing/phenotype.tsv",
+                        "format": "phenotype_table",
+                        "required": True,
+                    },
+                ],
+            }
+            target = {
+                "target_id": "qHKW1",
+                "gene_or_locus": "qHKW1",
+                "requires_coordinate_resolution": True,
+                "coordinates": None,
+                "traits": [{"name": "hundred-kernel weight", "local_columns": ["HKW"]}],
+            }
+
+            validator = StarGeneValidator(
+                manifest={"papers": [paper]},
+                database_root=db_root,
+                results_root=results_root,
+                check_only=False,
+            )
+            check = validator.check_target(paper, target)
+            coords = validator.resolve_target_coordinates(target, check["database_path"])
+
+            self.assertEqual(check["status"], "ready_for_analysis")
+            self.assertIn("database_complete", check["notes"])
+            self.assertIn("database_coordinates:qHKW1=1:100-200", check["notes"])
+            self.assertIn("HKW", check["phenotype_columns"])
+            self.assertEqual(coords, ("1", 100, 200))
+
     def test_marker_database_cli(self):
         from build_star_gene_database import main as build_main
 

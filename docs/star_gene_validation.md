@@ -78,7 +78,8 @@ python build_star_gene_database.py \
   --end 100 \
   --phenotype-column HKW \
   --marker-column qHKW1_8_9kb_indel \
-  --marker-position qHKW1_8_9kb_indel=100
+  --marker-position qHKW1_8_9kb_indel=100 \
+  --phenotype-missing-value -999
 ```
 
 Use real marker names and coordinates from the paper data. The command writes:
@@ -91,6 +92,8 @@ Use real marker names and coordinates from the paper data. The command writes:
 
 Those files are the same precomputed database format already consumed by `HaplotypePhenotypeAnalyzer`.
 
+`--phenotype-missing-value` is repeatable and compares numeric equivalents, so `-999` also removes `-999.0`. Marker IDs ending in `insertion_<length>` or `deletion_<length>` are used to populate `variant_info.csv` as structural variants.
+
 ## Analysis mode
 
 Analysis mode is available but guarded by the manifest:
@@ -99,7 +102,9 @@ Analysis mode is available but guarded by the manifest:
 python run_star_gene_validation.py --run-analysis --paper wheat2024 --target RHT8
 ```
 
-A target will only run if the manifest has resolved `coordinates` (`chrom`, `start`, `end`) and the expected local files exist. For the current manifest, the planned targets intentionally keep `requires_coordinate_resolution: true` until paper-specific coordinates/builds are confirmed.
+A target will only run if it has resolved coordinates and a supported local genotype source. Coordinates can come from the manifest (`chrom`, `start`, `end`) or from a complete precomputed database `gene_info.json`; when a complete database is present, its `phenotype_data.csv` can also provide the phenotype columns.
+
+For the current maize first pass, the public MaizeGo small resources let the pipeline run end to end for a count-compatible qHKW1 candidate marker, but they did not produce a positive validation signal (`association_pvalue=0.3914`, `score_r_squared=0.0008`). Do not treat that marker as proof of HaplotypeScorer effectiveness; the exact paper 8.9-kb indel marker still needs confirmation.
 
 ## Haplotype score export
 

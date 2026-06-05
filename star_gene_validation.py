@@ -115,6 +115,32 @@ def _open_text_maybe_gzip(path: Path):
     return open(path, 'r', encoding='utf-8', errors='replace')
 
 
+def read_database_gene_info(database_path: Path) -> Tuple[Dict[str, Any], Optional[str]]:
+    gene_info_path = database_path / 'gene_info.json'
+    if not gene_info_path.exists():
+        return {}, 'gene_info_missing'
+    try:
+        with open(gene_info_path, 'r', encoding='utf-8') as f:
+            return json.load(f), None
+    except Exception as e:
+        return {}, f'gene_info_read_error:{e}'
+
+
+def read_database_phenotype_columns(database_path: Path) -> Tuple[List[str], Optional[str]]:
+    phenotype_path = database_path / 'phenotype_data.csv'
+    if not phenotype_path.exists():
+        return [], 'phenotype_data_missing'
+    try:
+        with open(phenotype_path, 'r', encoding='utf-8', newline='') as f:
+            reader = csv.reader(f)
+            header = next(reader, [])
+    except Exception as e:
+        return [], f'phenotype_data_read_error:{e}'
+
+    reserved = {'SampleID', 'Hap_Name', 'Haplotype_Seq'}
+    return [col for col in header if col not in reserved], None
+
+
 def read_vcf_samples(vcf_path: Path, max_header_lines: int = 200000) -> Tuple[Set[str], Optional[str]]:
     """Read VCF sample IDs from the #CHROM header without scanning variants."""
     try:
@@ -292,9 +318,6 @@ class StarGeneValidator:
         unsupported_vcf_reasons: List[str] = []
         unresolved_coordinates = bool(target.get('requires_coordinate_resolution')) or not target.get('coordinates')
 
-        if unresolved_coordinates:
-            notes.append('coordinates_unresolved')
-
         for entry in entries:
             path = _to_path(entry.get('path'))
             label = entry.get('key') or entry.get('path') or 'local_path'
@@ -348,6 +371,31 @@ class StarGeneValidator:
         else:
             notes.append('database_missing')
 
+        database_gene_info: Dict[str, Any] = {}
+        if database_complete:
+            database_gene_info, gene_info_err = read_database_gene_info(database_path)
+            if gene_info_err:
+                notes.append(f'database_gene_info_warning:{gene_info_err}')
+            else:
+                db_chrom = database_gene_info.get('chrom') or database_gene_info.get('chr')
+                db_start = _safe_int(database_gene_info.get('start') or database_gene_info.get('gene_start'))
+                db_end = _safe_int(database_gene_info.get('end') or database_gene_info.get('gene_end'))
+                if db_chrom and db_start is not None and db_end is not None:
+                    unresolved_coordinates = False
+                    notes.append(f'database_coordinates:{target_id}={db_chrom}:{db_start}-{db_end}')
+                else:
+                    notes.append('database_coordinates_missing')
+
+            db_pheno_cols, db_pheno_err = read_database_phenotype_columns(database_path)
+            if db_pheno_err:
+                notes.append(f'database_phenotype_warning:{db_pheno_err}')
+            elif db_pheno_cols:
+                phenotype_columns = db_pheno_cols
+                notes.append(f'database_phenotype_columns:{",".join(db_pheno_cols[:20])}')
+
+        if unresolved_coordinates:
+            notes.append('coordinates_unresolved')
+
         if phenotype_samples and vcf_sample_sets:
             # Report overlap against the union because target projects may provide one VCF per locus.
             vcf_union = set().union(*vcf_sample_sets)
@@ -359,6 +407,9 @@ class StarGeneValidator:
         has_supported_genotype_source = database_complete or supported_vcf_path is not None
         if unsupported_vcf_reasons:
             notes.append('unsupported_vcf:' + ','.join(unsupported_vcf_reasons))
+
+        if database_complete:
+            missing_required = []
 
         if missing_required:
             data_status = 'missing_required_files'
@@ -439,6 +490,26 @@ class StarGeneValidator:
             'notes': '',
         }
 
+    def resolve_target_coordinates(self, target: Dict[str, Any],
+                                   database_path: Optional[Path] = None) -> Tuple[Optional[str], Optional[int], Optional[int]]:
+        coords = target.get('coordinates') or {}
+        chrom = coords.get('chrom') or coords.get('chr')
+        start = _safe_int(coords.get('start'))
+        end = _safe_int(coords.get('end'))
+        if chrom and start is not None and end is not None:
+            return str(chrom), start, end
+
+        if database_path:
+            gene_info, err = read_database_gene_info(database_path)
+            if not err:
+                chrom = gene_info.get('chrom') or gene_info.get('chr')
+                start = _safe_int(gene_info.get('start') or gene_info.get('gene_start'))
+                end = _safe_int(gene_info.get('end') or gene_info.get('gene_end'))
+                if chrom and start is not None and end is not None:
+                    return str(chrom), start, end
+
+        return None, None, None
+
     def run_target(self, paper: Dict[str, Any], target: Dict[str, Any], check: Dict[str, Any]) -> List[Dict[str, Any]]:
         if self.check_only:
             return check.get('rows') or [check['row']]
@@ -458,10 +529,7 @@ class StarGeneValidator:
                 rows.append(row)
             return rows
 
-        coords = target.get('coordinates') or {}
-        chrom = coords.get('chrom') or coords.get('chr')
-        start = _safe_int(coords.get('start'))
-        end = _safe_int(coords.get('end'))
+        chrom, start, end = self.resolve_target_coordinates(target, check['database_path'])
         if not chrom or start is None or end is None:
             row = dict(check['row'])
             row['data_status'] = 'skipped_missing_coordinates'
@@ -476,6 +544,10 @@ class StarGeneValidator:
         vcf_path = _to_path(vcf_entry.get('path')) if vcf_entry else None
         pheno_path = _to_path(pheno_entry.get('path')) if pheno_entry else None
         gtf_path = _to_path(gtf_entry.get('path')) if gtf_entry else None
+        if (pheno_path is None or not pheno_path.exists()) and check['database_path'].exists():
+            database_pheno_path = check['database_path'] / 'phenotype_data.csv'
+            if database_pheno_path.exists():
+                pheno_path = database_pheno_path
         database_root_for_paper = self.database_root / str(paper.get('paper_id') or paper.get('short_name') or 'paper')
         result_path = check['result_path']
         result_path.mkdir(parents=True, exist_ok=True)

@@ -36,9 +36,22 @@ Status: complete
 
 Run required tests, commit modified files, and push to GitHub if network allows.
 
+### Phase 6: Maize qHKW1/ZmBAM1d positive-control run
+Status: complete
+
+Download the small MaizeGo SV/pSV and BLUP phenotype files, inspect whether they contain sample-level qHKW1/ZmBAM1d 8.9 kb indel information and hundred-kernel-weight phenotypes, then either build a precomputed database and run analysis or record the exact data blocker.
+
+Outcome: the lightweight MaizeGo path now runs end to end from a marker matrix, but the count-compatible public marker did not provide a positive validation signal for qHKW1. The exact paper 8.9-kb indel marker remains unresolved in the small public resources.
+
+### Phase 7: Next positive-control target selection
+Status: pending
+
+Choose the next validation route: obtain the exact qHKW1 8.9-kb indel marker from a paper-specific source/contact, or move to a rice/wheat target with confirmed sample-level genotype and phenotype files.
+
 ## Open Questions
 - Which validation depth should be prioritized: full-paper datasets, target-region VCFs, or marker/phenotype positive-control tables?
 - Whether the user wants local large downloads on this machine or only scripts/instructions.
+- For maize, the exact paper 8.9-kb qHKW1 marker was not identified in the small MaizeGo resources; the count-compatible marker is not sufficient as proof.
 
 ## Errors Encountered
 - Figshare API and Science article pages returned HTTP 403 from local PowerShell requests. Used accessible public pages/search snippets and official article/data URLs instead.

@@ -56,6 +56,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Expected phenotype direction for the beneficial marker/haplotype")
     parser.add_argument("--min-haplotype-count", type=int, default=1,
                         help="Minimum sample count required to retain a haplotype")
+    parser.add_argument("--phenotype-missing-value", action="append", default=[],
+                        help="Phenotype value to exclude before building the database; repeatable")
     return parser
 
 
@@ -77,6 +79,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         expected_direction=args.expected_direction,
         sample_column=args.sample_column,
         min_haplotype_count=args.min_haplotype_count,
+        phenotype_missing_values=args.phenotype_missing_value,
     )
     print(f"[INFO] Built star-gene database: {db_dir}")
     return 0

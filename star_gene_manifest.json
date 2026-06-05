@@ -159,8 +159,8 @@
           "traits": [
             {
               "name": "hundred-kernel weight",
-              "aliases": ["HKW", "Hundred_kernel_weight", "hundred_kernel_weight"],
-              "local_columns": [],
+              "aliases": ["HKW", "Hundred_kernel_weight", "hundred_kernel_weight", "100grainweight", "100 grain weight", "100-grain weight"],
+              "local_columns": ["100grainweight"],
               "expected_direction": "unknown"
             }
           ],
@@ -178,8 +178,8 @@
           "traits": [
             {
               "name": "hundred-kernel weight",
-              "aliases": ["HKW", "Hundred_kernel_weight", "hundred_kernel_weight"],
-              "local_columns": [],
+              "aliases": ["HKW", "Hundred_kernel_weight", "hundred_kernel_weight", "100grainweight", "100 grain weight", "100-grain weight"],
+              "local_columns": ["100grainweight"],
               "expected_direction": "unknown"
             }
           ],

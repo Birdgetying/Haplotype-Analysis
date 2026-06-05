@@ -8,6 +8,7 @@ copying the generated PowerShell commands.
 
 import csv
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -224,6 +225,32 @@ def _write_csv(path: Path, fieldnames: Sequence[str], rows: Sequence[Dict[str, o
             writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
+def _is_configured_missing_value(value: object, missing_values: Sequence[str]) -> bool:
+    text = str(value).strip()
+    if text in missing_values:
+        return True
+    try:
+        numeric_value = float(text)
+    except ValueError:
+        return False
+
+    for missing in missing_values:
+        try:
+            if numeric_value == float(str(missing).strip()):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _infer_marker_len_diff(marker: str, ref: str, alt: str) -> int:
+    match = re.search(r'_(insertion|deletion)_(\d+)(?:$|_)', marker)
+    if match:
+        length = int(match.group(2))
+        return length if match.group(1) == "insertion" else -length
+    return len(alt) - len(ref) if alt else 0
+
+
 def build_database_from_marker_matrix(
     marker_matrix: Path,
     phenotype_table: Path,
@@ -238,6 +265,7 @@ def build_database_from_marker_matrix(
     expected_direction: str = "unknown",
     sample_column: str = "SampleID",
     min_haplotype_count: int = 1,
+    phenotype_missing_values: Optional[Sequence[str]] = None,
 ) -> Path:
     """Convert a small sample-by-marker matrix into the precomputed DB format.
 
@@ -275,7 +303,19 @@ def build_database_from_marker_matrix(
     }
     positions = [int(marker_positions[marker]) for marker in marker_columns]
 
-    phenotype_by_sample = {row[sample_column]: row for row in phenotype_rows}
+    missing_values = tuple(str(value).strip() for value in phenotype_missing_values or [])
+    phenotype_by_sample = {}
+    for row in phenotype_rows:
+        has_missing_phenotype = False
+        for col in phenotype_columns:
+            if col not in row:
+                raise ValueError(f"phenotype table missing selected column: {col}")
+            if _is_configured_missing_value(row.get(col, ""), missing_values):
+                has_missing_phenotype = True
+                break
+        if not has_missing_phenotype:
+            phenotype_by_sample[row[sample_column]] = row
+
     sample_hap_sequences: Dict[str, str] = {}
     alleles_by_marker = {marker: [] for marker in marker_columns}
 
@@ -349,7 +389,7 @@ def build_database_from_marker_matrix(
         alt = sorted_alleles[1] if len(sorted_alleles) > 1 else ""
         sorted_counts = [count for _, count in allele_counts.most_common()]
         maf = sorted_counts[1] / sum(sorted_counts) if len(sorted_counts) > 1 else 0.0
-        len_diff = len(alt) - len(ref) if alt else 0
+        len_diff = _infer_marker_len_diff(marker, ref, alt)
         variant_rows.append({
             "position": pos,
             "ref": ref,
