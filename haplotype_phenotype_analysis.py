@@ -9074,6 +9074,28 @@ function drawHaplotypeScorePlot(scoreData) {
             .attr('opacity', 0.8);
     }
 
+    function positionFixedTooltip(tooltip, event) {
+        var node = tooltip.node ? tooltip.node() : null;
+        if (!node) return;
+        var pad = 12;
+        var x = event.clientX + pad;
+        var y = event.clientY - 28;
+        node.style.left = '0px';
+        node.style.top = '0px';
+        var rect = node.getBoundingClientRect();
+        if (x + rect.width + pad > window.innerWidth) {
+            x = event.clientX - rect.width - pad;
+        }
+        if (y + rect.height + pad > window.innerHeight) {
+            y = event.clientY - rect.height - pad;
+        }
+        if (y < pad) {
+            y = event.clientY + pad;
+        }
+        tooltip.style('left', Math.max(pad, x) + 'px')
+            .style('top', Math.max(pad, y) + 'px');
+    }
+
     // Tooltip div
     var tooltip = d3.select('#d3-tooltip');
 
@@ -9117,8 +9139,7 @@ function drawHaplotypeScorePlot(scoreData) {
                     + 'Phenotype: ' + d.phenotype.toFixed(3));
         })
         .on('mousemove', function(event) {
-            tooltip.style('left', (event.pageX + 12) + 'px')
-                .style('top', (event.pageY - 28) + 'px');
+            positionFixedTooltip(tooltip, event);
         })
         .on('mouseout', function(event, d) {
             tooltip.style('display', 'none');
@@ -12138,6 +12159,28 @@ if (samples.length < 2) {{
             .attr('stroke','#c0392b').attr('stroke-width',1.8).attr('stroke-dasharray','6,3').attr('opacity',0.8);
     }}
 
+    function positionFixedTooltip(tip, event) {{
+        var node = tip.node ? tip.node() : null;
+        if (!node) return;
+        var pad = 12;
+        var x = event.clientX + pad;
+        var y = event.clientY - 28;
+        node.style.left = '0px';
+        node.style.top = '0px';
+        var rect = node.getBoundingClientRect();
+        if (x + rect.width + pad > window.innerWidth) {{
+            x = event.clientX - rect.width - pad;
+        }}
+        if (y + rect.height + pad > window.innerHeight) {{
+            y = event.clientY - rect.height - pad;
+        }}
+        if (y < pad) {{
+            y = event.clientY + pad;
+        }}
+        tip.style('left', Math.max(pad, x) + 'px')
+            .style('top', Math.max(pad, y) + 'px');
+    }}
+
     var tip = d3.select('#tooltip');
     svg.selectAll('circle').data(samples).enter().append('circle')
         .attr('cx', function(d) {{ return x(d.score); }})
@@ -12150,7 +12193,7 @@ if (samples.length < 2) {{
                 .html('<b>' + d.sample_id + '</b><br>Haplotype: ' + d.haplotype + '<br>Score: ' + d.score.toFixed(3) + '<br>Phenotype: ' + d.phenotype.toFixed(3));
         }})
         .on('mousemove', function(event) {{
-            tip.style('left',(event.pageX+12)+'px').style('top',(event.pageY-28)+'px');
+            positionFixedTooltip(tip, event);
         }})
         .on('mouseout', function() {{ tip.style('display','none'); }});
 

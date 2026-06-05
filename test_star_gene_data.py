@@ -85,6 +85,23 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("maize2019_sv_382254", stdout.getvalue())
 
+    def test_score_tooltips_use_viewport_coordinates(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("function drawHaplotypeScorePlot(scoreData)")
+        integrated_end = source.index("function updateScoreLegend", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        standalone_start = source.index("def generate_haplotype_score_html")
+        standalone_end = source.index("def generate_effect_boxplot_html", standalone_start)
+        standalone_block = source[standalone_start:standalone_end]
+
+        for block in (integrated_block, standalone_block):
+            self.assertIn("clientX", block)
+            self.assertIn("clientY", block)
+            self.assertNotIn("pageX", block)
+            self.assertNotIn("pageY", block)
+
     def test_build_database_from_wide_marker_matrix(self):
         from star_gene_data import build_database_from_marker_matrix
 
