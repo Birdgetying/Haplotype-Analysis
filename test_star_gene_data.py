@@ -37,15 +37,29 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("external_data/maize_natgenet_2019/maizego", command_text)
 
     def test_wheat_sources_are_instruction_only_until_object_names_are_known(self):
-        from star_gene_data import build_download_commands, iter_data_files
+        from star_gene_data import iter_data_files
 
         wheat_files = list(iter_data_files(paper="wheat2024"))
         self.assertTrue(wheat_files)
         portal_files = [f for f in wheat_files if f.key in {"wheat2024_wwwg2b_portal", "wheat2024_earlham_watseq"}]
         self.assertEqual(len(portal_files), 2)
         self.assertTrue(all(f.default_action == "instruction_only" for f in portal_files))
-        self.assertEqual(build_download_commands(paper="wheat2024"), [])
         self.assertTrue(any("wwwg2b.com" in f.source for f in wheat_files))
+
+    def test_wheat_q7b_small_files_have_wwwg2b_download_commands(self):
+        from star_gene_data import build_download_commands, iter_data_files
+
+        wheat_files = list(iter_data_files(paper="wheat2024"))
+        keys = {f.key for f in wheat_files}
+
+        self.assertIn("wheat2024_q7b_ph_figure3g", keys)
+        self.assertIn("wheat2024_watkins_jic_phenotypes", keys)
+
+        commands = build_download_commands(paper="wheat2024")
+        command_text = "\n".join(commands)
+        self.assertIn("get_download_url_form_onedrive", command_text)
+        self.assertIn("Watseq_Figure_3g_NIL_Q7B-PH_field_data.xlsx", command_text)
+        self.assertIn("external_data/wheat_nature_2024/wwwg2b/q7b_ph", command_text)
 
     def test_summarize_downloads_contains_status_and_target_paths(self):
         from star_gene_data import summarize_downloads
@@ -585,6 +599,56 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(gene_info["source_marker"], marker)
             self.assertTrue(marker_output.exists())
             self.assertTrue(candidate_output.exists())
+
+    def test_wheat_q7b_ph_prepare_builds_figure3g_database(self):
+        from openpyxl import Workbook
+        from prepare_wheat2024_q7b_ph_figure3g import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_path = tmp_path / "figure3g.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Figure_3_NIL_Q7B-PH_W141_field_"
+            ws.append([
+                "site", "year", "siteyear", "Accession", "allele",
+                "Replicate", "PH_M_cm", "GY_Calc_tha", "GW_M_g1000grn",
+            ])
+            ws.append(["JIC", "H15", "JIC_H15", "WL0019", "W", 1, 103, 8.34, 48.55])
+            ws.append(["JIC", "H15", "JIC_H15", "WL0019", "W", 2, 101, 8.10, 49.00])
+            ws.append(["JIC", "H15", "JIC_H15", "WL0025", "P", 1, 97, 8.52, 50.19])
+            ws.append(["JIC", "H15", "JIC_H15", "Paragon", "P", 1, 74, 7.90, 46.00])
+            ws.append(["JIC", "H15", "JIC_H15", "W10074", "Par", 1, 98, 8.10, None])
+            wb.save(source_path)
+
+            output_root = tmp_path / "db"
+            marker_output = tmp_path / "q7b_marker.tsv"
+            phenotype_output = tmp_path / "q7b_pheno.tsv"
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main([
+                    "--source-xlsx", str(source_path),
+                    "--output-root", str(output_root),
+                    "--marker-output", str(marker_output),
+                    "--phenotype-output", str(phenotype_output),
+                ])
+
+            self.assertEqual(rc, 0)
+            db_dir = output_root / "Q7B-HT"
+            gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["source"], "wwwg2b_q7b_ph_figure3g")
+            self.assertEqual(gene_info["source_file"], str(source_path))
+            self.assertEqual(gene_info["source_marker"], "Q7B-PH_allele")
+            self.assertLess(gene_info["start"], gene_info["end"])
+            self.assertTrue(marker_output.exists())
+            self.assertTrue(phenotype_output.exists())
+            hap_samples = (db_dir / "haplotype_samples.csv").read_text(encoding="utf-8")
+            phenotype_data = (db_dir / "phenotype_data.csv").read_text(encoding="utf-8")
+            self.assertIn("Q7B-PH_allele", (db_dir / "variant_info.csv").read_text(encoding="utf-8"))
+            self.assertIn("WL0019__plot0001", hap_samples)
+            self.assertIn("WL0019__plot0002", hap_samples)
+            self.assertIn("WL0019__plot0001", phenotype_data)
 
 
 if __name__ == "__main__":

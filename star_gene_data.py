@@ -160,6 +160,60 @@ DATA_FILES: List[DataFile] = [
     DataFile(
         paper_id="wheat_nature_2024",
         short_name="wheat2024",
+        key="wheat2024_q7b_ph_figure3d",
+        label="WWWG2B Figure 3d Q7B-PH ParW141 LOD scores",
+        source=(
+            "https://wwwg2b.com/api/dataAvailable/table/get_download_url_form_onedrive"
+            "?type=availableTable&fileId=01SSKBI2HAVQT54U7YRJCKGAE46A3GT5ML"
+        ),
+        local_path=(
+            "external_data/wheat_nature_2024/wwwg2b/q7b_ph/"
+            "Watseq_Figure_3d_Q7B-PH-ParW141-LODscores.xlsx"
+        ),
+        size_hint="8.7 KB observed",
+        is_large=False,
+        default_action="wwwg2b_onedrive_download",
+        notes="Genetic-map LOD-score source data for Q7B-PH; supports locus placement but not per-accession phenotypes.",
+    ),
+    DataFile(
+        paper_id="wheat_nature_2024",
+        short_name="wheat2024",
+        key="wheat2024_q7b_ph_figure3g",
+        label="WWWG2B Figure 3g NIL Q7B-PH field data",
+        source=(
+            "https://wwwg2b.com/api/dataAvailable/table/get_download_url_form_onedrive"
+            "?type=availableTable&fileId=01SSKBI2GUDON5GUU65VH2NJUWF3IRSKM7"
+        ),
+        local_path=(
+            "external_data/wheat_nature_2024/wwwg2b/q7b_ph/"
+            "Watseq_Figure_3g_NIL_Q7B-PH_field_data.xlsx"
+        ),
+        size_hint="14.8 KB observed",
+        is_large=False,
+        default_action="wwwg2b_onedrive_download",
+        notes="Per-plot Q7B-PH NIL source data with Accession, allele, and PH_M_cm; used by prepare_wheat2024_q7b_ph_figure3g.py.",
+    ),
+    DataFile(
+        paper_id="wheat_nature_2024",
+        short_name="wheat2024",
+        key="wheat2024_watkins_jic_phenotypes",
+        label="WWWG2B Watkins JIC phenotype workbook",
+        source=(
+            "https://wwwg2b.com/api/dataAvailable/table/get_download_url_form_onedrive"
+            "?type=availableTable&fileId=01SSKBI2HKPZS7HSLDMJG37QBQDV7JR6AJ"
+        ),
+        local_path=(
+            "external_data/wheat_nature_2024/wwwg2b/q7b_ph/"
+            "Watkins_Collection_WGIN_WISP_DFW_watseq_phenotype_data_JIC.xlsx"
+        ),
+        size_hint="336 KB observed",
+        is_large=False,
+        default_action="wwwg2b_onedrive_download",
+        notes="Watkins natural-population phenotype workbook; useful for later chr7B VCF-region validation.",
+    ),
+    DataFile(
+        paper_id="wheat_nature_2024",
+        short_name="wheat2024",
         key="wheat2024_ngdc_gsa",
         label="NGDC/GSA raw WGS projects",
         source="PRJCA019636; CRA012590",
@@ -192,6 +246,13 @@ def iter_data_files(paper: Optional[str] = None) -> Iterable[DataFile]:
 def _powershell_download_command(data_file: DataFile) -> str:
     local_path = data_file.normalized_local_path
     parent = str(Path(local_path).parent).replace("\\", "/")
+    if data_file.default_action == "wwwg2b_onedrive_download":
+        return (
+            f"New-Item -ItemType Directory -Force -Path '{parent}' | Out-Null; "
+            f"$r = Invoke-RestMethod -Method Get -Uri '{data_file.source}'; "
+            f"if ($r.code -ne 0) {{ throw $r.error }}; "
+            f"Invoke-WebRequest -Uri $r.data -OutFile '{local_path}'"
+        )
     return (
         f"New-Item -ItemType Directory -Force -Path '{parent}' | Out-Null; "
         f"Invoke-WebRequest -Uri '{data_file.source}' -OutFile '{local_path}'"
@@ -201,7 +262,7 @@ def _powershell_download_command(data_file: DataFile) -> str:
 def build_download_commands(paper: Optional[str] = None, include_large: bool = False) -> List[str]:
     commands: List[str] = []
     for data_file in iter_data_files(paper=paper):
-        if data_file.default_action != "small_direct_download":
+        if data_file.default_action not in {"small_direct_download", "wwwg2b_onedrive_download"}:
             continue
         if data_file.is_large and not include_large:
             continue

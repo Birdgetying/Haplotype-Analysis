@@ -52,3 +52,16 @@
 - Public MaizeGo sample-level matrices do contain qHKW1-nearby 8.5-9.5 kb SV rows. The strongest candidate is `chr1_28599370_28608270_deletion_8900` in `SV.382254/SV.382254/MS.step1.org.txt`, with 521 sample states `TT=272` and `NN=249`; after overlap with local BLUP HKW phenotypes excluding `-999`, the groups are `TT=253` and `NN=235`, Welch t-test `P=0.15997`.
 - This public row may represent a nearby 8.9-kb SV but does not match the paper Fig. 4h group sizes (`0 kb n=261`, `8.9 kb n=170`) and should not be treated as the exact positive-control genotype table without author confirmation.
 - Wrote ignored local diagnostic files `external_data/maize_natgenet_2019/qHKW1_nearby_8p5_9p5kb_public_marker_summary.tsv` and `external_data/maize_natgenet_2019/qHKW1_nearby_8p5_9p5kb_public_genotypes.tsv` for manual review of public nearby candidates.
+
+## Wheat Q7B-PH Figure 3g Positive Control
+- WWWG2B provides small OneDrive-backed source files through `get_download_url_form_onedrive`. Useful file IDs are Figure 3d Q7B-PH LOD scores `01SSKBI2HAVQT54U7YRJCKGAE46A3GT5ML`, Figure 3g NIL Q7B-PH field data `01SSKBI2GUDON5GUU65VH2NJUWF3IRSKM7`, and Watkins JIC phenotype workbook `01SSKBI2HKPZS7HSLDMJG37QBQDV7JR6AJ`.
+- Added `prepare_wheat2024_q7b_ph_figure3g.py`, which converts the Figure 3g workbook into a precomputed Q7B-HT database using plot-level rows by default. It writes 139 plot-level `SampleID`s such as `WL0019__plot0001`, marker `Q7B-PH_allele`, phenotype `PH_M_cm`, and `gene_info.json` source `wwwg2b_q7b_ph_figure3g`.
+- The Figure 3g source has 139 complete plot-level observations and three paper-defined alleles. Group means from the analysis are Hap1/Par `n=62`, mean `101.161 cm`; Hap2/P `n=46`, mean `86.439 cm`; Hap3/W `n=31`, mean `92.994 cm`.
+- Running `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Q7B-HT` produced a usable positive-control result: corrected association p-value `0.0240306`, PVE `29.63%`, HaplotypeScorer regression `R^2=0.2627`, regression p-value `1.119e-10`, high confidence, and expected-direction consistency for the height-increasing haplotype.
+- Effect table confirms the top/reference haplotype is height-increasing: Hap2 effect `-14.722 cm` vs Hap1, and Hap3 effect `-8.168 cm` vs Hap1, both significant in the generated effect table.
+- Interpretation limit: this validates scoring on a paper-defined haplotype label from source data. It does not yet prove the method can discover Q7B-PH from an unlabelled chr7B VCF scan. A stronger next wheat step requires confirming the physical Q7B-PH interval and extracting chr7B SNP/INDEL VCF calls.
+
+## Rice Science 2024 Current Blocker
+- Local `external_data/rice_science_2024` has no files available for analysis.
+- On 2026-06-05, local PowerShell requests to `https://api.figshare.com/v2/articles/19166475`, `https://api.figshare.com/v2/articles/19166475?private_link=12978737918eecb74903`, and `https://figshare.com/ndownloader/articles/19166475?private_link=12978737918eecb74903` all returned HTTP 403.
+- Therefore rice OsMADS22/OsFTL1 validation remains data-blocked. Do not interpret rice targets until `NAM_variations` or another official per-accession genotype plus phenotype source is downloaded and inspected.

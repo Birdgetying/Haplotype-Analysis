@@ -66,7 +66,7 @@ found 6 candidate matrix files from the small MaizeGo resources, 2 SV catalogue 
 Outcome: qHKW1/ZmBAM1d remains data-blocked. Do not run or interpret `python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1` until a per-accession genotype table for the paper 8.9-kb indel is available.
 
 ### Phase 9: Next actionable validation route
-Status: in_progress
+Status: complete
 
 Pick a positive-control target with confirmed sample-level genotype plus phenotype. Options:
 - obtain the author/MaizeGo region-analysis qHKW1 8.9-kb indel per-accession genotypes;
@@ -75,11 +75,32 @@ Pick a positive-control target with confirmed sample-level genotype plus phenoty
 
 Current qHKW1 acquisition status: Nature supplementary files and public MaizeGo downloads do not expose the exact Fig. 4h per-accession genotype table. The public MaizeGo matrices include nearby 8.5-9.5 kb sample-level SV rows, including `chr1_28599370_28608270_deletion_8900`, but this row does not match the paper group sizes and is not sufficient as the positive-control table. Best next action is to request the exact qHKW1/ZmBAM1d Fig. 4h indel genotype table from the MaizeGo/Yan lab contact for specific gene or region analysis.
 
+User decision: pause the maize qHKW1 route and proceed with the other two papers first.
+
+### Phase 10: Rice/Wheat positive-control execution
+Status: in_progress
+
+Wheat Q7B-PH is the first completed positive-control route from the remaining two papers. The minimal first pass uses WWWG2B Figure 3g source data (`Accession`, `allele`, `PH_M_cm`) and treats the paper-defined `allele` as the Q7B-PH haplotype label. This is a paper-source haplotype positive control, not a chr7B physical-interval VCF discovery run.
+
+Commands:
+
+```bash
+python prepare_wheat2024_q7b_ph_figure3g.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Q7B-HT
+```
+
+Current Q7B-PH result: 139 plot-level observations, 3 haplotypes, 1 paper-defined marker, corrected association p-value `0.02403`, PVE `29.63%`, HaplotypeScorer regression `R^2=0.2627`, regression p-value `1.119e-10`, high confidence, and direction consistency for the expected height-increasing haplotype.
+
+Rice Science 2024 remains data-blocked locally. Requests from this machine to Figshare article/API/ndownloader for `10.6084/m9.figshare.19166475` returned HTTP 403, and no `external_data/rice_science_2024` files are currently present. Do not claim rice OsMADS22/OsFTL1 validation until the per-accession genotype and phenotype files are available and inspected.
+
 ## Open Questions
 - Which validation depth should be prioritized: full-paper datasets, target-region VCFs, or marker/phenotype positive-control tables?
 - Whether the user wants local large downloads on this machine or only scripts/instructions.
 - For maize, the exact paper 8.9-kb qHKW1 sample-level marker was not identified in the small MaizeGo resources or the downloaded full `SV.386014.zip`; the count-compatible marker and catalogue-only records are not sufficient as proof.
+- For rice, the next blocker is data acquisition rather than code: need a reachable Figshare mirror, browser/manual download, or user-provided `NAM_variations` files before target adapters can be written.
+- For wheat, the next stronger test is chr7B VCF/INDEL extraction around Q7B-PH after confirming the physical interval; the current Figure 3g result validates scoring against paper-defined haplotype labels only.
 
 ## Errors Encountered
 - Figshare API and Science article pages returned HTTP 403 from local PowerShell requests. Used accessible public pages/search snippets and official article/data URLs instead.
+- On 2026-06-05, Figshare API, private-link API, and ndownloader URLs for article `19166475` still returned HTTP 403 from local PowerShell requests.
 - Earlham WatSeq root and guessed subdirectory URLs returned HTTP 404. Paper confirms the OpenData path, but exact downloadable VCF object names should be obtained from WWWG2B/Earlham metadata or portal interaction before hard-coding.

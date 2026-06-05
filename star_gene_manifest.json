@@ -264,6 +264,7 @@
           "requires_coordinate_resolution": true,
           "coordinate_source": null,
           "coordinates": null,
+          "required_database_source": "wwwg2b_q7b_ph_figure3g",
           "expected_direction": "increases_trait",
           "local_expected_paths": [
             {
@@ -278,12 +279,12 @@
           "traits": [
             {
               "name": "plant height",
-              "aliases": ["PlantHeight", "PH", "plant_height"],
-              "local_columns": [],
+              "aliases": ["PlantHeight", "PH", "plant_height", "PH_M_cm"],
+              "local_columns": ["PH_M_cm"],
               "expected_direction": "increases_trait"
             }
           ],
-          "notes": "Locus/haplotype-level positive control; requires paper-specific haplotype definition before analysis."
+          "notes": "Locus/haplotype-level positive control. The minimal first pass uses WWWG2B Figure 3g paper-defined Q7B-PH allele labels and plant-height source data; chr7B VCF extraction remains a later region-level validation."
         }
       ]
     }
