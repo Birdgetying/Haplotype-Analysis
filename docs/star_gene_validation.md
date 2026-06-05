@@ -87,7 +87,9 @@ python prepare_maize2019_qhkw1_paper_genotype.py
 python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1
 ```
 
-The preparation script extracts the package if needed, scans only MaizeGo/HapMap matrix files for a chr1 paper-window 8.5-9.5 kb insertion/deletion, writes `external_data/maize_natgenet_2019/maizego/qHKW1_paper_8p9kb_candidates.tsv`, and builds the qHKW1 database only when exactly one candidate is found. If it reports zero or multiple candidates, inspect the candidate TSV or obtain the author-provided per-accession marker table before interpreting any qHKW1 result.
+The preparation script extracts the package if needed, scans only MaizeGo/HapMap matrix files for a chr1 paper-window 8.5-9.5 kb insertion/deletion, writes `external_data/maize_natgenet_2019/maizego/qHKW1_paper_8p9kb_candidates.tsv`, and builds the qHKW1 database only when exactly one sample-level candidate is found. It also scans no-header `svs.final.*.txt` SV catalogues and writes `external_data/maize_natgenet_2019/maizego/qHKW1_paper_8p9kb_catalogue_candidates.tsv` as a diagnostic file. Catalogue rows do not have accession genotype columns and are not accepted for database construction.
+
+Current local rerun result after placing `SV.386014.zip`: the full package extracted to `svs.final.ms.txt` and `svs.final.bs.txt`, both no-header SV catalogues. The strict chr1 `30.44-30.54 Mb` paper window yielded 0 sample-level 8.5-9.5 kb matrix candidates and 0 catalogue candidates. An expanded chr1 `27-31 Mb` catalogue scan yielded 8 MS records of 8.5-9.5 kb, but they still lack per-accession genotypes. Therefore qHKW1 remains data-blocked until a per-accession genotype table for the paper 8.9-kb indel is obtained.
 
 ## Build a precomputed database from marker tables
 

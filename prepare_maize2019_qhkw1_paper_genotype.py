@@ -22,6 +22,7 @@ if sys.platform == 'win32':
 from star_gene_data import (
     build_database_from_marker_matrix,
     extract_maizego_marker_matrix,
+    scan_maizego_sv_catalogue_candidates,
     scan_maizego_sv_candidates,
 )
 
@@ -30,6 +31,7 @@ DEFAULT_SV_ROOT = Path("external_data/maize_natgenet_2019/maizego")
 DEFAULT_PHENOTYPE = DEFAULT_SV_ROOT / "blup_traits_final.csv"
 DEFAULT_OUTPUT_ROOT = Path("star_gene_database/maize_natgenet_2019")
 DEFAULT_CANDIDATE_TSV = DEFAULT_SV_ROOT / "qHKW1_paper_8p9kb_candidates.tsv"
+DEFAULT_CATALOGUE_TSV = DEFAULT_SV_ROOT / "qHKW1_paper_8p9kb_catalogue_candidates.tsv"
 DEFAULT_MARKER_MATRIX = Path("external_data/maize_natgenet_2019/qHKW1_exact_indel_variant_matrix.tsv")
 DEFAULT_NORMALIZED_PHENOTYPE = Path("external_data/maize_natgenet_2019/qHKW1_100grainweight_phenotype.tsv")
 
@@ -59,6 +61,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Output star-gene database root")
     parser.add_argument("--candidate-output", default=str(DEFAULT_CANDIDATE_TSV),
                         help="TSV file to write candidate marker scan results")
+    parser.add_argument("--catalogue-output", default=str(DEFAULT_CATALOGUE_TSV),
+                        help="TSV file to write no-sample SV catalogue candidates")
     parser.add_argument("--marker-output", default=str(DEFAULT_MARKER_MATRIX),
                         help="Sample-by-marker matrix written when exactly one candidate is found")
     parser.add_argument("--normalized-phenotype-output", default=str(DEFAULT_NORMALIZED_PHENOTYPE),
@@ -103,9 +107,38 @@ def find_candidate_matrices(sv_root: Path) -> Sequence[Path]:
     return unique
 
 
+def find_sv_catalogues(sv_root: Path) -> Sequence[Path]:
+    patterns = ("svs.final.*.txt",)
+    paths = []
+    for pattern in patterns:
+        paths.extend(sv_root.rglob(pattern))
+    unique = []
+    seen = set()
+    for path in paths:
+        normalized = str(path.resolve())
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                first_line = f.readline().rstrip("\n\r").split("\t")
+        except OSError:
+            continue
+        if len(first_line) >= 5 and first_line[3].lower() in {"insertion", "deletion"}:
+            unique.append(path)
+    return unique
+
+
+def _full_package_extracted(sv_root: Path) -> bool:
+    return bool(find_sv_catalogues(sv_root))
+
+
 def ensure_extracted(sv_root: Path, sv_zip: Path, force_extract: bool = False) -> int:
     existing = find_candidate_matrices(sv_root)
-    if existing and not force_extract:
+    existing_catalogues = find_sv_catalogues(sv_root)
+    if existing_catalogues and not force_extract:
+        return len(existing)
+    if existing and not force_extract and (not sv_zip.exists() or _full_package_extracted(sv_root)):
         if not sv_zip.exists():
             print(f"[WARN] Full paper genotype package not found: {sv_zip}")
             print("[WARN] Scanning currently available MaizeGo matrices only; qHKW1 remains data-blocked if no exact marker is found.")
@@ -128,6 +161,21 @@ def write_candidates(path: Path, candidates: Sequence[dict]) -> None:
         "source_path", "line_number", "marker", "alleles", "chrom", "pos",
         "marker_start", "marker_end", "variant_type", "sv_length",
         "valid_sample_count", "state_count", "counts",
+    ]
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for row in candidates:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
+def write_catalogue_candidates(path: Path, candidates: Sequence[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "source_path", "line_number", "record_id", "raw_chrom", "chrom",
+        "start", "end", "variant_type", "sv_length", "strand", "anchor_id",
+        "anchor_start", "anchor_end", "score", "sequence_length",
+        "sample_genotype_columns", "has_sample_genotypes",
     ]
     with open(path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", lineterminator="\n")
@@ -172,6 +220,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sv_zip = Path(args.sv_zip) if args.sv_zip else sv_root / "SV.386014.zip"
     phenotype_table = Path(args.phenotype_table)
     candidate_output = Path(args.candidate_output)
+    catalogue_output = Path(args.catalogue_output)
     marker_output = Path(args.marker_output)
     normalized_phenotype_output = Path(args.normalized_phenotype_output)
     output_root = Path(args.output_root)
@@ -182,6 +231,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     matrix_paths = find_candidate_matrices(sv_root)
     print(f"[INFO] Candidate matrix files: {len(matrix_paths)}")
+    catalogue_paths = find_sv_catalogues(sv_root)
+    print(f"[INFO] SV catalogue files without sample genotypes: {len(catalogue_paths)}")
     candidates = scan_maizego_sv_candidates(
         matrix_paths=matrix_paths,
         chrom=args.chrom,
@@ -195,8 +246,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"[INFO] qHKW1 paper-window 8.5-9.5 kb candidates: {len(candidates)}")
     print(f"[INFO] Candidate TSV: {candidate_output}")
 
+    catalogue_candidates = scan_maizego_sv_catalogue_candidates(
+        catalogue_paths=catalogue_paths,
+        chrom=args.chrom,
+        window_start=args.window_start,
+        window_end=args.window_end,
+        length_min=args.length_min,
+        length_max=args.length_max,
+        variant_types=["insertion", "deletion"],
+    )
+    write_catalogue_candidates(catalogue_output, catalogue_candidates)
+    print(f"[INFO] SV catalogue candidate records: {len(catalogue_candidates)}")
+    print(f"[INFO] Catalogue TSV: {catalogue_output}")
+
     if not candidates:
         print("[BLOCKED] no exact qHKW1 8.9-kb candidate marker found in available SV matrices")
+        if catalogue_candidates:
+            print("[INFO] Matching/nearby SV catalogue rows were found, but these files are not sample-level genotype matrices.")
         print("This means the currently available local matrices are not sufficient for the paper-genotype positive control.")
         return 3
     if len(candidates) > 1:

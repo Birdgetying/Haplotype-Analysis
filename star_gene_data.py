@@ -84,7 +84,7 @@ DATA_FILES: List[DataFile] = [
         paper_id="maize_natgenet_2019",
         short_name="maize2019",
         key="maize2019_sv_386014_full",
-        label="MaizeGo SV.386014 full structural variation genotype package",
+        label="MaizeGo SV.386014 full structural variation package",
         source="https://pan.baidu.com/s/10ieQpWGTEC805K4sI4RHOg",
         local_path="external_data/maize_natgenet_2019/maizego/SV.386014.zip",
         size_hint="102.42 MB page listing; 107,394,066 bytes in Baidu metadata",
@@ -93,7 +93,8 @@ DATA_FILES: List[DataFile] = [
         notes=(
             "Required for the paper-genotype qHKW1/ZmBAM1d 8.9-kb indel check if "
             "the small direct MaizeGo matrices do not contain the exact marker. "
-            "Baidu share metadata is public, but direct download can require web verification/login."
+            "Baidu share metadata is public, but direct download can require web verification/login. "
+            "The downloaded package may contain SV catalogue files rather than sample-level genotype matrices."
         ),
     ),
     DataFile(
@@ -390,6 +391,95 @@ def scan_maizego_sv_candidates(
                     "state_count": len(set(states)),
                     "counts": _format_counts(states),
                 })
+
+    return sorted(candidates, key=lambda row: (
+        str(row["source_path"]),
+        int(row["line_number"]),
+    ))
+
+
+def _parse_maizego_sv_catalogue_parts(parts: Sequence[str]) -> Optional[Dict[str, object]]:
+    """Parse one no-header MaizeGo SV catalogue row.
+
+    The full ``SV.386014`` package contains ``svs.final.ms.txt`` and
+    ``svs.final.bs.txt`` catalogue files. These rows describe SV intervals but
+    do not contain accession-by-marker genotype states.
+    """
+    if len(parts) < 5:
+        return None
+    variant_type = parts[3].strip().lower()
+    if variant_type not in {"insertion", "deletion"}:
+        return None
+    try:
+        start = int(parts[1])
+        end = int(parts[2])
+        sv_length = int(parts[4])
+    except ValueError:
+        return None
+    return {
+        "raw_chrom": parts[0].strip(),
+        "chrom": _normal_chrom(parts[0]),
+        "start": min(start, end),
+        "end": max(start, end),
+        "variant_type": variant_type,
+        "sv_length": sv_length,
+        "strand": parts[5].strip() if len(parts) > 5 else "",
+        "anchor_id": parts[6].strip() if len(parts) > 6 else "",
+        "anchor_start": parts[7].strip() if len(parts) > 7 else "",
+        "anchor_end": parts[8].strip() if len(parts) > 8 else "",
+        "score": parts[12].strip() if len(parts) > 12 else "",
+        "sequence_length": len(parts[13].strip()) if len(parts) > 13 else "",
+        "sample_genotype_columns": 0,
+        "has_sample_genotypes": "False",
+    }
+
+
+def scan_maizego_sv_catalogue_candidates(
+    catalogue_paths: Sequence[Path],
+    chrom: str,
+    window_start: int,
+    window_end: int,
+    length_min: int = 8500,
+    length_max: int = 9500,
+    variant_types: Optional[Sequence[str]] = None,
+) -> List[Dict[str, object]]:
+    """Scan no-header MaizeGo SV catalogues for interval candidates.
+
+    This is a diagnostic scanner only. A catalogue hit confirms that an SV
+    interval exists in the full package, but it is not sufficient to build a
+    haplotype database because there are no sample genotype columns.
+    """
+    accepted_types = {str(v).lower() for v in variant_types or []}
+    target_chrom = _normal_chrom(chrom)
+    candidates: List[Dict[str, object]] = []
+
+    for catalogue_path in catalogue_paths:
+        catalogue_path = Path(catalogue_path)
+        with open(catalogue_path, "r", encoding="utf-8", errors="ignore", newline="") as f:
+            for line_number, line in enumerate(f, start=1):
+                parts = line.rstrip("\n\r").split("\t")
+                parsed = _parse_maizego_sv_catalogue_parts(parts)
+                if not parsed:
+                    continue
+                if _normal_chrom(parsed["chrom"]) != target_chrom:
+                    continue
+                if accepted_types and str(parsed["variant_type"]).lower() not in accepted_types:
+                    continue
+                if not (length_min <= int(parsed["sv_length"]) <= length_max):
+                    continue
+                start = int(parsed["start"])
+                end = int(parsed["end"])
+                if end < window_start or start > window_end:
+                    continue
+
+                row = dict(parsed)
+                row["source_path"] = str(catalogue_path)
+                row["line_number"] = line_number
+                row["record_id"] = (
+                    f"{row['raw_chrom']}_{row['start']}_{row['end']}_"
+                    f"{row['variant_type']}_{row['sv_length']}"
+                )
+                candidates.append(row)
 
     return sorted(candidates, key=lambda row: (
         str(row["source_path"]),

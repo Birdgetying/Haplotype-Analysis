@@ -242,6 +242,39 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(candidate["counts"], "AA:2;NN:1;TT:1")
             self.assertEqual(candidate["source_path"], str(matrix_path))
 
+    def test_scan_maizego_sv_catalogue_candidates_reports_records_without_samples(self):
+        from star_gene_data import scan_maizego_sv_catalogue_candidates
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            catalogue_path = tmp_path / "svs.final.ms.txt"
+            catalogue_path.write_text(
+                "chr1\t30450000\t30458900\tinsertion\t8900\t+\tMo17.chr1.64\t29961002\t29969902\t295670\t181512\t324959\t0.558569\tACGT\n"
+                "chr1\t30452000\t30452100\tinsertion\t100\t+\tMo17.chr1.64\t29961002\t29961102\t295670\t181512\t324959\t0.558569\tAC\n"
+                "chr1\t40000000\t40008900\tdeletion\t8900\t+\tMo17.chr1.64\t39961002\t39961002\t295670\t181512\t324959\t0.558569\tACGT\n",
+                encoding="utf-8",
+            )
+
+            candidates = scan_maizego_sv_catalogue_candidates(
+                catalogue_paths=[catalogue_path],
+                chrom="1",
+                window_start=30440000,
+                window_end=30540000,
+                length_min=8500,
+                length_max=9500,
+            )
+
+            self.assertEqual(len(candidates), 1)
+            candidate = candidates[0]
+            self.assertEqual(candidate["chrom"], "1")
+            self.assertEqual(candidate["start"], 30450000)
+            self.assertEqual(candidate["end"], 30458900)
+            self.assertEqual(candidate["variant_type"], "insertion")
+            self.assertEqual(candidate["sv_length"], 8900)
+            self.assertEqual(candidate["sample_genotype_columns"], 0)
+            self.assertEqual(candidate["has_sample_genotypes"], "False")
+            self.assertEqual(candidate["source_path"], str(catalogue_path))
+
     def test_extract_maizego_marker_matrix_transposes_selected_record(self):
         from star_gene_data import extract_maizego_marker_matrix
 
@@ -449,6 +482,66 @@ class StarGeneDataTests(unittest.TestCase):
             )
 
             self.assertEqual(find_candidate_matrices(tmp_path), [matrix_path])
+
+    def test_maize_qhkw1_prepare_reports_catalogue_candidates_but_keeps_blocked(self):
+        from prepare_maize2019_qhkw1_paper_genotype import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            sv_root = tmp_path / "maizego"
+            extracted_dir = sv_root / "SV.386014" / "SV.386014"
+            extracted_dir.mkdir(parents=True)
+            (extracted_dir / "svs.final.ms.txt").write_text(
+                "chr1\t30450000\t30458900\tinsertion\t8900\t+\tMo17.chr1.64\t29961002\t29969902\t295670\t181512\t324959\t0.558569\tACGT\n",
+                encoding="utf-8",
+            )
+            matrix_candidate_output = tmp_path / "matrix_candidates.tsv"
+            catalogue_output = tmp_path / "catalogue_candidates.tsv"
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main([
+                    "--sv-root", str(sv_root),
+                    "--candidate-output", str(matrix_candidate_output),
+                    "--catalogue-output", str(catalogue_output),
+                ])
+
+            self.assertEqual(rc, 3)
+            output = stdout.getvalue()
+            self.assertIn("Candidate matrix files: 0", output)
+            self.assertIn("SV catalogue candidate records: 1", output)
+            self.assertIn("not sample-level genotype matrices", output)
+            self.assertTrue(matrix_candidate_output.exists())
+            catalogue_text = catalogue_output.read_text(encoding="utf-8")
+            self.assertIn("sample_genotype_columns", catalogue_text)
+            self.assertIn("chr1", catalogue_text)
+
+    def test_maize_qhkw1_prepare_does_not_reextract_existing_catalogues(self):
+        from prepare_maize2019_qhkw1_paper_genotype import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            sv_root = tmp_path / "maizego"
+            extracted_dir = sv_root / "SV.386014" / "SV.386014"
+            extracted_dir.mkdir(parents=True)
+            (extracted_dir / "svs.final.ms.txt").write_text(
+                "chr1\t30450000\t30458900\tinsertion\t8900\t+\tMo17.chr1.64\t29961002\t29969902\t295670\t181512\t324959\t0.558569\tACGT\n",
+                encoding="utf-8",
+            )
+            invalid_zip = sv_root / "SV.386014.zip"
+            invalid_zip.write_text("not a zip file\n", encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main([
+                    "--sv-root", str(sv_root),
+                    "--sv-zip", str(invalid_zip),
+                    "--candidate-output", str(tmp_path / "matrix_candidates.tsv"),
+                    "--catalogue-output", str(tmp_path / "catalogue_candidates.tsv"),
+                ])
+
+            self.assertEqual(rc, 3)
+            self.assertIn("SV catalogue candidate records: 1", stdout.getvalue())
 
     def test_maize_qhkw1_prepare_builds_paper_marker_database(self):
         from prepare_maize2019_qhkw1_paper_genotype import main as prepare_main

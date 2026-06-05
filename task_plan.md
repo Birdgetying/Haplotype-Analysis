@@ -44,29 +44,39 @@ Download the small MaizeGo SV/pSV and BLUP phenotype files, inspect whether they
 Outcome: the lightweight MaizeGo path now runs end to end from a marker matrix, but the count-compatible public marker did not provide a positive validation signal for qHKW1. The exact paper 8.9-kb indel marker remains unresolved in the small public resources.
 
 ### Phase 7: Next positive-control target selection
-Status: in_progress
+Status: complete
 
 Choose the next validation route: obtain the exact qHKW1 8.9-kb indel marker from a paper-specific source/contact, or move to a rice/wheat target with confirmed sample-level genotype and phenotype files.
 
 Current decision: keep qHKW1/ZmBAM1d as the first priority, but require the paper genotype marker before interpreting the result. Added a strict preparation script for the MaizeGo full `SV.386014.zip` package. It scans only HapMap/SV matrix files for a chr1 paper-window 8.5-9.5 kb candidate and builds the database only if exactly one marker is found. With currently available small MaizeGo matrices, the script finds zero exact candidates, so qHKW1 remains data-blocked rather than method-negative.
 
 ### Phase 8: Paper-genotype rerun after full MaizeGo SV package
-Status: pending
+Status: complete
 
-Place `SV.386014.zip` at `external_data/maize_natgenet_2019/maizego/SV.386014.zip`, then run:
+`SV.386014.zip` is present at `external_data/maize_natgenet_2019/maizego/SV.386014.zip` and has been extracted. The package contains `svs.final.ms.txt` and `svs.final.bs.txt`, which are no-header SV catalogue files, not sample-level accession-by-marker genotype matrices.
+
+Running:
 
 ```bash
-python prepare_maize2019_qhkw1_paper_genotype.py
-python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1
+python prepare_maize2019_qhkw1_paper_genotype.py --force-extract
 ```
 
-Only if the preparation script finds the paper-compatible 8.9 kb indel should the qHKW1 run be interpreted as a positive-control validation.
+found 6 candidate matrix files from the small MaizeGo resources, 2 SV catalogue files from the full package, 0 sample-level qHKW1 paper-window 8.5-9.5 kb marker candidates, and 0 catalogue candidates in chr1 `30.44-30.54 Mb`. An expanded chr1 `27-31 Mb` catalogue scan found 8 MS catalogue records of 8.5-9.5 kb, but these have no sample genotype columns and cannot be used to build haplotypes or score associations.
+
+Outcome: qHKW1/ZmBAM1d remains data-blocked. Do not run or interpret `python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1` until a per-accession genotype table for the paper 8.9-kb indel is available.
+
+### Phase 9: Next actionable validation route
+Status: pending
+
+Pick a positive-control target with confirmed sample-level genotype plus phenotype. Options:
+- obtain the author/MaizeGo region-analysis qHKW1 8.9-kb indel per-accession genotypes;
+- pivot to rice 18K or wheat WatSeq target-region data where public files expose sample-level genotypes for known genes;
+- create a narrow target-region extraction plan once the relevant VCF/matrix filenames are confirmed.
 
 ## Open Questions
 - Which validation depth should be prioritized: full-paper datasets, target-region VCFs, or marker/phenotype positive-control tables?
 - Whether the user wants local large downloads on this machine or only scripts/instructions.
-- For maize, the exact paper 8.9-kb qHKW1 marker was not identified in the small MaizeGo resources; the count-compatible marker is not sufficient as proof.
-- `SV.386014.zip` exists on a Baidu share, but direct automated download is blocked by Baidu verification/login mechanics from this environment.
+- For maize, the exact paper 8.9-kb qHKW1 sample-level marker was not identified in the small MaizeGo resources or the downloaded full `SV.386014.zip`; the count-compatible marker and catalogue-only records are not sufficient as proof.
 
 ## Errors Encountered
 - Figshare API and Science article pages returned HTTP 403 from local PowerShell requests. Used accessible public pages/search snippets and official article/data URLs instead.

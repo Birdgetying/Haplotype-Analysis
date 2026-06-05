@@ -35,3 +35,12 @@
 - Added `prepare_maize2019_qhkw1_paper_genotype.py` to make the next rerun reproducible. It looks for `external_data/maize_natgenet_2019/maizego/SV.386014.zip`, extracts it when present, scans only MaizeGo/HapMap matrix files, writes `qHKW1_paper_8p9kb_candidates.tsv`, and builds `star_gene_database/maize_natgenet_2019/qHKW1` only if exactly one chr1 paper-window 8.5-9.5 kb candidate marker is found.
 - Running that strict preparation script against the currently available small MaizeGo matrices found zero exact qHKW1 paper-window 8.5-9.5 kb candidates. Therefore the current qHKW1 status is data-blocked, not evidence that haplotype scoring cannot recover a real star gene.
 - Interpretation rule for this validation: a negative result from an unmatched or count-compatible substitute marker must not be used to judge the method. The positive-control test only starts after the sample-level paper marker is present and verified.
+
+## Maize SV.386014 Full-Package Rerun
+- User-provided `SV.386014.zip` is present at `external_data/maize_natgenet_2019/maizego/SV.386014.zip` with size `107,394,066` bytes.
+- Extracted full-package files are `SV.386014/SV.386014/svs.final.ms.txt` (`221,334,895` bytes) and `SV.386014/SV.386014/svs.final.bs.txt` (`192,796,318` bytes).
+- These two files are no-header 14-column SV catalogues. Example fields are chromosome, start, end, variant type, SV length, strand, anchor id, anchor start/end, three numeric fields, score, and sequence. They do not have sample/accession genotype columns.
+- Re-running `python prepare_maize2019_qhkw1_paper_genotype.py --force-extract` after the full package was present found 6 candidate matrix files, 2 catalogue files, 0 sample-level chr1 `30.44-30.54 Mb` 8.5-9.5 kb qHKW1 candidates, and 0 catalogue candidates in the same paper window.
+- Expanded catalogue scan over chr1 `27-31 Mb` with 8.5-9.5 kb SV length found 8 MS records and 0 BS records; all are catalogue intervals without per-accession genotypes. Chr1-wide 8.5-9.5 kb SV counts are 269 in `svs.final.ms.txt` and 258 in `svs.final.bs.txt`.
+- Code now writes an additional diagnostic TSV, `qHKW1_paper_8p9kb_catalogue_candidates.tsv`, for no-sample catalogue candidates. Catalogue hits are intentionally not accepted for database construction.
+- Current conclusion is unchanged but stronger: qHKW1/ZmBAM1d remains data-blocked because the downloaded full MaizeGo package is not the needed sample-level paper-marker genotype table.

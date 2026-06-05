@@ -42,3 +42,15 @@
 - Re-ran `python run_star_gene_validation.py --check-only --all --no-download`: passed; qHKW1 now reports `unsupported_input_format_for_analysis` with `database_source_mismatch:required=maizego_paper_marker,actual=marker_matrix`.
 - Re-ran `python prepare_maize2019_qhkw1_paper_genotype.py`: same expected blocked state because `SV.386014.zip` is not present and the available 6 matrices contain 0 exact paper-window candidates.
 - Ran `python run_rice_test.py`: exit code 0 in 270.87 s; status distribution `success=2`, `no_phenotype_match=1`.
+- User downloaded `SV.386014.zip`; confirmed it exists at `external_data/maize_natgenet_2019/maizego/SV.386014.zip` with size `107,394,066` bytes.
+- Ran `python prepare_maize2019_qhkw1_paper_genotype.py --force-extract`: it found 6 candidate matrix files, 2 full-package SV catalogue files, 0 sample-level paper-window qHKW1 8.5-9.5 kb candidates, and 0 catalogue candidates in chr1 `30.44-30.54 Mb`; exit code was blocked as expected.
+- Inspected extracted full-package files `svs.final.ms.txt` and `svs.final.bs.txt`; they are no-header SV catalogue tables, not accession-by-marker genotype matrices.
+- Added TDD coverage and implementation for scanning no-sample MaizeGo SV catalogue files and writing `qHKW1_paper_8p9kb_catalogue_candidates.tsv` as a diagnostic output while still refusing to build a qHKW1 database from catalogue-only records.
+- Ran an expanded diagnostic scan over chr1 `27-31 Mb`, SV length 8.5-9.5 kb: found 8 MS catalogue records and 0 BS catalogue records; chr1-wide 8.5-9.5 kb counts were 269 MS and 258 BS. These remain non-actionable for haplotype scoring because sample genotypes are absent.
+- Ran targeted new tests for catalogue scanning and no-reextract behavior; all passed.
+- Ran `python -m unittest test_star_gene_data.py -v`: passed 20 tests.
+- Ran `python prepare_maize2019_qhkw1_paper_genotype.py`: exited blocked with 6 candidate matrix files, 2 no-sample catalogue files, 0 matrix candidates, and 0 paper-window catalogue candidates.
+- Ran `python run_star_gene_validation.py --check-only --all --no-download`: passed; qHKW1 remains blocked by `database_source_mismatch`.
+- Ran `python run_rice_test.py`: exit code 0 in 181.53 s; status distribution `success=2`, `no_phenotype_match=1`.
+- Ran `python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1`: qHKW1 did not run and remains `unsupported_input_format_for_analysis` because the local database source is the old substitute `marker_matrix`.
+- Ran `git diff --check` on this turn's files: no whitespace errors; only CRLF conversion warnings from git.
