@@ -44,3 +44,11 @@
 - Expanded catalogue scan over chr1 `27-31 Mb` with 8.5-9.5 kb SV length found 8 MS records and 0 BS records; all are catalogue intervals without per-accession genotypes. Chr1-wide 8.5-9.5 kb SV counts are 269 in `svs.final.ms.txt` and 258 in `svs.final.bs.txt`.
 - Code now writes an additional diagnostic TSV, `qHKW1_paper_8p9kb_catalogue_candidates.tsv`, for no-sample catalogue candidates. Catalogue hits are intentionally not accepted for database construction.
 - Current conclusion is unchanged but stronger: qHKW1/ZmBAM1d remains data-blocked because the downloaded full MaizeGo package is not the needed sample-level paper-marker genotype table.
+
+## Maize qHKW1 Paper-Marker Acquisition Route
+- Nature Genetics article data availability lists raw/resequencing data under PRJNA531553, CRA001363, and CNP0000418, and states that the SV map plus Supplementary Fig. 9 step results are available through MaizeGo Resources. The article supplementary downloads are MOESM1-6 only; none is a source-data table for Fig. 4h.
+- Downloaded the remaining Nature supplementary files MOESM2, MOESM4, and MOESM5. They are reporting summary, Iso-Seq/RNA-Seq summary, and eQTL enrichment summary; they do not contain qHKW1 per-accession genotypes.
+- The MaizeGo Resources page explicitly provides contact `yjianbing@mail.hzau.edu.cn` and says the group can share data for specific gene or region analysis. This is the best route for the exact Fig. 4h qHKW1 8.9-kb indel genotype table.
+- Public MaizeGo sample-level matrices do contain qHKW1-nearby 8.5-9.5 kb SV rows. The strongest candidate is `chr1_28599370_28608270_deletion_8900` in `SV.382254/SV.382254/MS.step1.org.txt`, with 521 sample states `TT=272` and `NN=249`; after overlap with local BLUP HKW phenotypes excluding `-999`, the groups are `TT=253` and `NN=235`, Welch t-test `P=0.15997`.
+- This public row may represent a nearby 8.9-kb SV but does not match the paper Fig. 4h group sizes (`0 kb n=261`, `8.9 kb n=170`) and should not be treated as the exact positive-control genotype table without author confirmation.
+- Wrote ignored local diagnostic files `external_data/maize_natgenet_2019/qHKW1_nearby_8p5_9p5kb_public_marker_summary.tsv` and `external_data/maize_natgenet_2019/qHKW1_nearby_8p5_9p5kb_public_genotypes.tsv` for manual review of public nearby candidates.

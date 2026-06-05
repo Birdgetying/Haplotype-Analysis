@@ -66,12 +66,14 @@ found 6 candidate matrix files from the small MaizeGo resources, 2 SV catalogue 
 Outcome: qHKW1/ZmBAM1d remains data-blocked. Do not run or interpret `python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1` until a per-accession genotype table for the paper 8.9-kb indel is available.
 
 ### Phase 9: Next actionable validation route
-Status: pending
+Status: in_progress
 
 Pick a positive-control target with confirmed sample-level genotype plus phenotype. Options:
 - obtain the author/MaizeGo region-analysis qHKW1 8.9-kb indel per-accession genotypes;
 - pivot to rice 18K or wheat WatSeq target-region data where public files expose sample-level genotypes for known genes;
 - create a narrow target-region extraction plan once the relevant VCF/matrix filenames are confirmed.
+
+Current qHKW1 acquisition status: Nature supplementary files and public MaizeGo downloads do not expose the exact Fig. 4h per-accession genotype table. The public MaizeGo matrices include nearby 8.5-9.5 kb sample-level SV rows, including `chr1_28599370_28608270_deletion_8900`, but this row does not match the paper group sizes and is not sufficient as the positive-control table. Best next action is to request the exact qHKW1/ZmBAM1d Fig. 4h indel genotype table from the MaizeGo/Yan lab contact for specific gene or region analysis.
 
 ## Open Questions
 - Which validation depth should be prioritized: full-paper datasets, target-region VCFs, or marker/phenotype positive-control tables?

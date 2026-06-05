@@ -54,3 +54,7 @@
 - Ran `python run_rice_test.py`: exit code 0 in 181.53 s; status distribution `success=2`, `no_phenotype_match=1`.
 - Ran `python run_star_gene_validation.py --run-analysis --paper maize2019 --target qHKW1`: qHKW1 did not run and remains `unsupported_input_format_for_analysis` because the local database source is the old substitute `marker_matrix`.
 - Ran `git diff --check` on this turn's files: no whitespace errors; only CRLF conversion warnings from git.
+- Investigated how to obtain the exact qHKW1 Fig. 4h 8.9-kb indel per-accession genotype table. Confirmed Nature supplementary files MOESM1-6 do not provide a Fig. 4h source-data table.
+- Downloaded MOESM2, MOESM4, and MOESM5 for completeness; none contains qHKW1 per-accession genotype data.
+- Rechecked MaizeGo Resources: contact email is `yjianbing@mail.hzau.edu.cn`, and the page explicitly says the group can share data for specific gene or region analysis.
+- Extracted public qHKW1-nearby 8.5-9.5 kb sample-level marker rows into ignored diagnostic files under `external_data/maize_natgenet_2019/`. The candidate `chr1_28599370_28608270_deletion_8900` has per-accession states but does not match paper Fig. 4h group sizes and is not significant with local BLUP HKW (`P=0.15997`).
