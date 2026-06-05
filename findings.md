@@ -65,3 +65,10 @@
 - Local `external_data/rice_science_2024` has no files available for analysis.
 - On 2026-06-05, local PowerShell requests to `https://api.figshare.com/v2/articles/19166475`, `https://api.figshare.com/v2/articles/19166475?private_link=12978737918eecb74903`, and `https://figshare.com/ndownloader/articles/19166475?private_link=12978737918eecb74903` all returned HTTP 403.
 - Therefore rice OsMADS22/OsFTL1 validation remains data-blocked. Do not interpret rice targets until `NAM_variations` or another official per-accession genotype plus phenotype source is downloaded and inspected.
+
+## Wheat TaGW2 Grain-Weight Target
+- WheatOmics gene search for `GW2` returns grain-weight/size/width targets: `TraesCS6A02G189300` = `TaGW2-A1` at `chr6A:237.734-237.759 Mb`, `TraesCS6B02G215300` = `TaGW2-B1` at `chr6B:291.761-291.764 Mb`, and `TraesCS6D02G176900` = `TaGW2-D1` at `chr6D:175.712-175.721 Mb`.
+- WheatOmics `geneDetail.py` confirms the Chinese Spring 1.0 coordinates: A1 `237,734,651-237,760,058`, B1 `291,761,229-291,778,752`, D1 `175,712,228-175,721,507`; all are annotated as Protein SIP5 with RING-type zinc-finger domains.
+- WheatOmics known-gene result summarizes the cited mechanism: TaGW2-B1 and TaGW2-D1 affect TGW through grain width/length, B1 has the stronger effect, and B1/D1 modulate cell number and length in the developing grain outer pericarp.
+- Local wheat phenotypes are currently not suitable for GW2 grain-weight validation: `D:\Desktop\wheat_data\Phe.raw2` has columns `PH`, `SL`, `SN`, `SGN`, `FL`, `FW`, `NBS`, `AL` but no confirmed TGW/HKW/grain-weight column; `Phe.txt` has `TFW_DSI`, not grain weight.
+- Coordinate caution: local VCF/GFF are CS-IAAS-style `Chr*` coordinates. A quick CS-IAAS GFF check near the WheatOmics Chinese Spring 1.0 GW2 coordinates found `CSIAAS6AG0515400HC` near A1, two small `CSIAAS6BG06472/47400HC` genes near B1, and no gene near D1. Do not claim a direct CS-IAAS GW2 run until the TraesCS-to-CSIAAS coordinate mapping is resolved or a WheatOmics/IWGSC-coordinate genotype file is downloaded.
