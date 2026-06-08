@@ -91,6 +91,8 @@ python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Q7B
 
 Current Q7B-PH result: 139 plot-level observations, 3 haplotypes, 1 paper-defined marker, corrected association p-value `0.02403`, PVE `29.63%`, HaplotypeScorer regression `R^2=0.2627`, regression p-value `1.119e-10`, high confidence, and direction consistency for the expected height-increasing haplotype.
 
+TaGW2 A/D WatSeq VCF run is also complete for the locally downloaded chr6A and chr6D SNP VCFs. `TaGW2-A1` (`TraesCS6A02G189300`) has 709 samples, 55 SNPs, 19 haplotypes, corrected association P value `7.07e-06`, PVE `16.30%`, HaplotypeScorer `R^2=0.0431`, score-regression P value `2.416e-08`, and moderate confidence. `TaGW2-D1` (`TraesCS6D02G176900`) has 820 samples, 2 SNPs, 3 haplotypes, corrected association P value `1.0`, PVE `3.95%`, HaplotypeScorer `R^2=0.0257`, score-regression P value `3.893e-06`, and low confidence. This is A/D-only; `TaGW2-B1` remains excluded until the chr6B VCF download succeeds.
+
 Rice Science 2024 remains data-blocked locally. Requests from this machine to Figshare article/API/ndownloader for `10.6084/m9.figshare.19166475` returned HTTP 403, and no `external_data/rice_science_2024` files are currently present. Do not claim rice OsMADS22/OsFTL1 validation until the per-accession genotype and phenotype files are available and inspected.
 
 ## Open Questions

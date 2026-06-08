@@ -10136,7 +10136,11 @@ svg.selectAll('circle')
 
         # PCA分析
         X = np.array(samples)
-        pca = PCA(n_components=min(3, len(samples) - 1))
+        n_components = min(3, len(samples) - 1, X.shape[1])
+        if n_components < 1:
+            print("[WARNING] 变异位点数不足，无法进行PCA分析")
+            return None
+        pca = PCA(n_components=n_components)
         pca_result = pca.fit_transform(X)
         
         # 构建数据点
@@ -10152,7 +10156,7 @@ svg.selectAll('circle')
                 'id': sample_ids[i],
                 'haplotype': sample_haps[i],
                 'pc1': float(pca_result[i, 0]),
-                'pc2': float(pca_result[i, 1]),
+                'pc2': float(pca_result[i, 1]) if pca_result.shape[1] > 1 else 0,
                 'pc3': float(pca_result[i, 2]) if pca_result.shape[1] > 2 else 0,
                 'color': hap_colors.get(sample_haps[i], '#999999')
             }
@@ -10164,6 +10168,7 @@ svg.selectAll('circle')
         
         # 方差解释率
         var_explained = [float(v * 100) for v in pca.explained_variance_ratio_]
+        var_explained = (var_explained + [0.0, 0.0, 0.0])[:3]
         
         points_json = json.dumps(points, cls=NumpyEncoder)
         hap_colors_json = json.dumps(hap_colors, cls=NumpyEncoder)
@@ -10810,15 +10815,19 @@ if (promoterStart < promoterEnd) {{
                     max_len = max(len(s) for s in samples)
                     samples = [s + [6] * (max_len - len(s)) for s in samples]
                     X = np.array(samples)
-                    pca = PCA(n_components=min(3, len(samples) - 1))
+                    n_components = min(3, len(samples) - 1, X.shape[1])
+                    if n_components < 1:
+                        raise ValueError("not enough variant features for PCA")
+                    pca = PCA(n_components=n_components)
                     pca_result = pca.fit_transform(X)
                     var_explained = [float(v * 100) for v in pca.explained_variance_ratio_]
+                    var_explained = (var_explained + [0.0, 0.0, 0.0])[:3]
                     
                     for i in range(len(samples)):
                         pca_points.append({
                             'haplotype': sample_haps[i],
                             'pc1': float(pca_result[i, 0]),
-                            'pc2': float(pca_result[i, 1]),
+                            'pc2': float(pca_result[i, 1]) if pca_result.shape[1] > 1 else 0,
                             'pc3': float(pca_result[i, 2]) if pca_result.shape[1] > 2 else 0,
                             'color': network_nodes[hap_names.index(sample_haps[i])]['color'] if sample_haps[i] in hap_names else '#999'
                         })

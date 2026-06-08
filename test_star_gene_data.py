@@ -4,6 +4,7 @@
 from pathlib import Path
 from contextlib import redirect_stdout
 from io import StringIO
+import gzip
 import json
 import tempfile
 import unittest
@@ -101,6 +102,32 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("clientY", block)
             self.assertNotIn("pageX", block)
             self.assertNotIn("pageY", block)
+
+    def test_pca_plot_handles_two_variant_haplotypes(self):
+        import pandas as pd
+        from haplotype_phenotype_analysis import ReportGenerator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            hap_sample_df = pd.DataFrame({
+                "SampleID": ["S1", "S2", "S3", "S4"],
+                "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap3"],
+                "Haplotype_Seq": ["T|G", "T|G", "T|A", "C|G"],
+                "TGW_mean": [39.7, 40.1, 31.4, 39.6],
+            })
+            generator = ReportGenerator(output_dir=tmp)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                html_path = generator.generate_pca_plot_html(
+                    hap_sample_df,
+                    phenotype_col="TGW_mean",
+                )
+
+            self.assertTrue(Path(html_path).exists())
+            html = Path(html_path).read_text(encoding="utf-8")
+            self.assertIn("Principal Component Analysis", html)
+            self.assertIn("PC2", html)
+            self.assertIn("PCA分析图已保存", stdout.getvalue())
 
     def test_build_database_from_wide_marker_matrix(self):
         from star_gene_data import build_database_from_marker_matrix
@@ -666,6 +693,70 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("WL0019__plot0001", hap_samples)
             self.assertIn("WL0019__plot0002", hap_samples)
             self.assertIn("WL0019__plot0001", phenotype_data)
+
+    def test_wheat_tagw2_ad_prepare_builds_vcf_region_databases(self):
+        from openpyxl import Workbook
+        from prepare_wheat2024_tagw2_ad import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vcf_a = tmp_path / "chr6A.vcf.gz"
+            vcf_d = tmp_path / "chr6D.vcf.gz"
+
+            vcf_header = (
+                "##fileformat=VCFv4.2\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t"
+                "WATDE0001\tWATDE0002\tWATDE0003\tModernA\n"
+            )
+            with gzip.open(vcf_a, "wt", encoding="utf-8", newline="") as f:
+                f.write(vcf_header)
+                f.write("6A\t237732100\toutside\tA\tG\t.\tPASS\t.\tGT\t0/0\t0/0\t0/0\t0/0\n")
+                f.write("6A\t237734700\tvarA1\tA\tG\t.\tPASS\t.\tGT\t0/0\t1/1\t0/1\t0/0\n")
+                f.write("6A\t237735000\tvarA2\tC\tT\t.\tPASS\t.\tGT\t1/1\t1/1\t0/0\t0/0\n")
+                f.write("6A\t237761000\tafter\tC\tT\t.\tPASS\t.\tGT\t0/0\t0/0\t0/0\t0/0\n")
+            with gzip.open(vcf_d, "wt", encoding="utf-8", newline="") as f:
+                f.write(vcf_header.replace("6A", "6D"))
+                f.write("6D\t175712300\tvarD1\tG\tA\t.\tPASS\t.\tGT\t0/0\t1/1\t1/1\t0/0\n")
+                f.write("6D\t175721000\tvarD2\tT\tC\t.\tPASS\t.\tGT\t1/1\t1/1\t0/0\t0/0\n")
+
+            phenotype_xlsx = tmp_path / "watkins.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "WISP_Watkins_JIC_CFLN10"
+            ws.append(["StoreCode", "GW_M_g1000grn-CFLN10"])
+            ws.append(["WATDE0001", 40.0])
+            ws.append(["WATDE0002", 44.0])
+            ws.append(["WATDE0003", 42.0])
+            ws2 = wb.create_sheet("DFW_Watkins_JI_CFLN14")
+            ws2.append(["StoreCode", "GW_M_g1000grn-CFLN14"])
+            ws2.append(["WATDE0001", 41.0])
+            ws2.append(["WATDE0002", 45.0])
+            ws2.append(["WATDE0003", None])
+            wb.save(phenotype_xlsx)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "external"
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main([
+                    "--vcf-a", str(vcf_a),
+                    "--vcf-d", str(vcf_d),
+                    "--phenotype-xlsx", str(phenotype_xlsx),
+                    "--output-root", str(output_root),
+                    "--intermediate-root", str(intermediate_root),
+                    "--min-haplotype-count", "1",
+                ])
+
+            self.assertEqual(rc, 0)
+            for target_id in ["TaGW2-A1", "TaGW2-D1"]:
+                db_dir = output_root / target_id
+                self.assertTrue((db_dir / "gene_info.json").exists())
+                gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+                self.assertEqual(gene_info["source"], "watseq_tagw2_ad_vcf")
+                self.assertIn("TGW_mean", (db_dir / "phenotype_data.csv").read_text(encoding="utf-8"))
+                self.assertIn("marker_id", (db_dir / "variant_info.csv").read_text(encoding="utf-8"))
+                self.assertIn("WATDE0001", (db_dir / "haplotype_samples.csv").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

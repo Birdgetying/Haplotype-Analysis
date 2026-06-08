@@ -285,6 +285,54 @@
             }
           ],
           "notes": "Locus/haplotype-level positive control. The minimal first pass uses WWWG2B Figure 3g paper-defined Q7B-PH allele labels and plant-height source data; chr7B VCF extraction remains a later region-level validation."
+        },
+        {
+          "target_id": "TaGW2-A1",
+          "gene_or_locus": "TaGW2-A1",
+          "target_type": "gene",
+          "aliases": ["TraesCS6A02G189300", "GW2-A1"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0",
+          "coordinates": {
+            "chrom": "6A",
+            "start": 237732651,
+            "end": 237760058
+          },
+          "required_database_source": "watseq_tagw2_ad_vcf",
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "thousand grain weight",
+              "aliases": ["TGW", "grain weight", "GW_M_g1000grn", "TGW_mean", "TGW_CFLN10", "TGW_CFLN14"],
+              "local_columns": ["TGW_mean", "TGW_CFLN10", "TGW_CFLN14"],
+              "expected_direction": "unknown"
+            }
+          ],
+          "notes": "TaGW2-A1 first-pass validation from local WatSeq chr6A SNP VCF and Watkins TGW phenotypes, prepared by prepare_wheat2024_tagw2_ad.py. This A/D run does not include the stronger TaGW2-B1 copy."
+        },
+        {
+          "target_id": "TaGW2-D1",
+          "gene_or_locus": "TaGW2-D1",
+          "target_type": "gene",
+          "aliases": ["TraesCS6D02G176900", "GW2-D1"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0",
+          "coordinates": {
+            "chrom": "6D",
+            "start": 175710228,
+            "end": 175721507
+          },
+          "required_database_source": "watseq_tagw2_ad_vcf",
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "thousand grain weight",
+              "aliases": ["TGW", "grain weight", "GW_M_g1000grn", "TGW_mean", "TGW_CFLN10", "TGW_CFLN14"],
+              "local_columns": ["TGW_mean", "TGW_CFLN10", "TGW_CFLN14"],
+              "expected_direction": "unknown"
+            }
+          ],
+          "notes": "TaGW2-D1 first-pass validation from local WatSeq chr6D SNP VCF and Watkins TGW phenotypes, prepared by prepare_wheat2024_tagw2_ad.py. This A/D run does not include the stronger TaGW2-B1 copy."
         }
       ]
     }
