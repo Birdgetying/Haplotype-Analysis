@@ -1,0 +1,5 @@
+item,status,local_match_count,details
+local_chr6A_indel_or_sv_vcf,missing,0,
+earlham_chr6A_indel_vcf,available_remote_large_not_downloaded,0,https://opendata.earlham.ac.uk/wheat/under_license/toronto/WatSeq_2023-09-15_landrace_modern_Variation_Data/WatSeq_VCF_Raw_ChineseSpringRefSeqv1.0/chr6A/chr6A.HARD.INDEL.Missing-unphasing.ID.ann.finalSID.vcf.gz
+earlham_chr6A_indel_csi,available_remote_small_index,0,https://opendata.earlham.ac.uk/wheat/under_license/toronto/WatSeq_2023-09-15_landrace_modern_Variation_Data/WatSeq_VCF_Raw_ChineseSpringRefSeqv1.0/chr6A/chr6A.HARD.INDEL.Missing-unphasing.ID.ann.finalSID.vcf.gz.csi
+local_extraction_tools,requires_bcftools_or_pysam_for_indexed_region_extraction,0,Current Windows environment lacks pysam/bcftools in the checked run.

@@ -758,6 +758,68 @@ class StarGeneDataTests(unittest.TestCase):
                 self.assertIn("marker_id", (db_dir / "variant_info.csv").read_text(encoding="utf-8"))
                 self.assertIn("WATDE0001", (db_dir / "haplotype_samples.csv").read_text(encoding="utf-8"))
 
+    def test_tagw2_hap8_maps_published_promoter_offsets_to_refseq_positions(self):
+        from analyze_tagw2_hap8_functional_groups import map_promoter_offset_to_position
+
+        gene_start = 237_734_651
+        cds_start_offset_1based = 185
+
+        self.assertEqual(
+            map_promoter_offset_to_position(gene_start, cds_start_offset_1based, -739),
+            237_734_096,
+        )
+        self.assertEqual(
+            map_promoter_offset_to_position(gene_start, cds_start_offset_1based, -593),
+            237_734_242,
+        )
+
+    def test_tagw2_hap8_classifies_literature_and_background_patterns(self):
+        import pandas as pd
+        from analyze_tagw2_hap8_functional_groups import classify_literature_background_groups
+
+        df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4"],
+            "Hap_Name": ["Hap8", "Hap7", "Hap1", "Hap15"],
+            "lit1": ["G", "G", "A", "G"],
+            "lit2": ["A", "A", "G", "A"],
+            "bg1": ["C", "T", "T", "C"],
+            "bg2": ["T", "T", "T", "G"],
+        })
+
+        classified = classify_literature_background_groups(
+            df,
+            literature_alleles={"lit1": "G", "lit2": "A"},
+            background_alleles={"bg1": "C", "bg2": "T"},
+            full_haplotype_name="Hap8",
+        )
+
+        self.assertEqual(classified["PublishedPair"].tolist(), [True, True, False, True])
+        self.assertEqual(classified["Hap8Background"].tolist(), [True, False, False, False])
+        self.assertEqual(classified["FullHap8"].tolist(), [True, False, False, False])
+        self.assertEqual(
+            classified["Hap8SplitGroup"].tolist(),
+            ["Published+Background", "PublishedOnly", "Neither", "PublishedOnly"],
+        )
+
+    def test_tagw2_hap8_binary_trait_summary_reports_effect_and_pvalue(self):
+        import pandas as pd
+        from analyze_tagw2_hap8_functional_groups import summarize_binary_trait
+
+        df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4", "S5"],
+            "group": [True, True, False, False, False],
+            "TGW_mean": [30.0, 32.0, 40.0, 42.0, 44.0],
+        })
+
+        summary = summarize_binary_trait(df, "group", "TGW_mean", "case", "control")
+
+        self.assertEqual(summary["case_label"], "case")
+        self.assertEqual(summary["control_label"], "control")
+        self.assertEqual(summary["case_n"], 2)
+        self.assertEqual(summary["control_n"], 3)
+        self.assertLess(summary["effect_case_minus_control"], 0)
+        self.assertTrue(0 <= summary["welch_pvalue"] <= 1)
+
 
 if __name__ == "__main__":
     unittest.main()

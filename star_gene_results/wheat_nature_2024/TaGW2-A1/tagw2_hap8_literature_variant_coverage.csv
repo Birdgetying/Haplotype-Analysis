@@ -1,0 +1,7 @@
+variant_name,variant_class,promoter_offset_from_atg,literature_alleles,jaiswal_hap5_allele,tested_group,source_note,refseqv1_position,marker_id,covered_in_current_snp_markers,hap8_defining_snp,Hap1_allele_current,Hap8_allele_current
+SNP-988,promoter_snp,-988.0,G/A,G,coverage_only,Jaiswal 2015 reported four promoter SNPs; Hap5 is G_A_G_A.,237733847,chr6A_237733847,True,False,G,G
+SNP-739,promoter_snp,-739.0,G/A,A,su_qin_two_snp_pair,Previously reported by Su et al.; part of the two-SNP state carried by local Hap8.,237734096,chr6A_237734096,True,True,A,G
+SNP-593,promoter_snp,-593.0,A/G,G,su_qin_two_snp_pair,Previously reported by Su et al.; part of the two-SNP state carried by local Hap8.,237734242,chr6A_237734242,True,True,G,A
+SNP-494,promoter_snp,-494.0,G/A,A,not_tested_missing_marker,Jaiswal 2015 nominated SNP-494 as causal and expression-regulating.,237734341,chr6A_237734341,False,False,,
+G2373A,splice_acceptor_snp,,G/A,,not_tested_coordinate_not_lifted,Simmonds 2016 reported G2373A on an earlier TaGW2-A1 reference context.,,,False,False,,
+exon8_1bp_insertion,coding_indel,,1-bp T insertion,,not_tested_indel_data_missing,Reported coding indel; the current database was built from SNP VCF only.,,,False,False,,
