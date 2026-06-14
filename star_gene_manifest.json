@@ -308,7 +308,133 @@
               "expected_direction": "unknown"
             }
           ],
+          "literature_variants": [
+            {
+              "variant_name": "SNP-988",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237733847,
+              "marker_id": "chr6A_237733847",
+              "expected_allele": "G",
+              "source_note": "Jaiswal et al. TaGW2-A1 promoter Hap5 component; expected Hap5 pattern is G/A/G/A."
+            },
+            {
+              "variant_name": "SNP-739",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237734096,
+              "marker_id": "chr6A_237734096",
+              "expected_allele": "A",
+              "source_note": "Jaiswal et al. TaGW2-A1 promoter Hap5 component; also part of the older local two-SNP promoter state."
+            },
+            {
+              "variant_name": "SNP-593",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237734242,
+              "marker_id": "chr6A_237734242",
+              "expected_allele": "G",
+              "source_note": "Jaiswal et al. TaGW2-A1 promoter Hap5 component; also part of the older local two-SNP promoter state."
+            },
+            {
+              "variant_name": "SNP-494",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237734341,
+              "marker_id": "chr6A_237734341",
+              "expected_allele": "A",
+              "source_note": "Jaiswal et al. nominated SNP-494 as the key expression-regulating TaGW2-A1 promoter SNP."
+            }
+          ],
+          "literature_haplotypes": [
+            {
+              "haplotype_name": "Jaiswal_Hap5",
+              "variant_class": "promoter_haplotype",
+              "expected_markers": {
+                "chr6A_237733847": "G",
+                "chr6A_237734096": "A",
+                "chr6A_237734242": "G",
+                "chr6A_237734341": "A"
+              },
+              "source_note": "Jaiswal et al. reported the TaGW2-A1 promoter Hap5 pattern as G/A/G/A across SNP-988, SNP-739, SNP-593, and SNP-494."
+            }
+          ],
           "notes": "TaGW2-A1 first-pass validation from local WatSeq chr6A SNP VCF and Watkins TGW phenotypes, prepared by prepare_wheat2024_tagw2_ad.py. This A/D run does not include the stronger TaGW2-B1 copy."
+        },
+        {
+          "target_id": "TaGW2-A1-remoteSNP",
+          "gene_or_locus": "TaGW2-A1",
+          "target_type": "gene",
+          "aliases": ["TraesCS6A02G189300", "GW2-A1", "TaGW2-A1 remote SNP"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0 remote merged SNP VCF",
+          "coordinates": {
+            "chrom": "6A",
+            "start": 237732651,
+            "end": 237760058
+          },
+          "required_database_source": "wheatomics_remote_merged_snp_vcf",
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "thousand grain weight",
+              "aliases": ["TGW", "grain weight", "GW_M_g1000grn", "TGW_mean", "TGW_CFLN10", "TGW_CFLN14"],
+              "local_columns": ["TGW_mean", "TGW_CFLN10", "TGW_CFLN14"],
+              "expected_direction": "unknown"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "SNP-988",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237733847,
+              "marker_id": "chr6A_237733847",
+              "expected_allele": "G",
+              "source_note": "Jaiswal et al. TaGW2-A1 promoter Hap5 component; expected Hap5 pattern is G/A/G/A."
+            },
+            {
+              "variant_name": "SNP-739",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237734096,
+              "marker_id": "chr6A_237734096",
+              "expected_allele": "A",
+              "source_note": "Jaiswal et al. TaGW2-A1 promoter Hap5 component."
+            },
+            {
+              "variant_name": "SNP-593",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237734242,
+              "marker_id": "chr6A_237734242",
+              "expected_allele": "G",
+              "source_note": "Jaiswal et al. TaGW2-A1 promoter Hap5 component."
+            },
+            {
+              "variant_name": "SNP-494",
+              "variant_class": "promoter_snp",
+              "chrom": "chr6A",
+              "position": 237734341,
+              "marker_id": "chr6A_237734341",
+              "expected_allele": "A",
+              "source_note": "Jaiswal et al. nominated SNP-494 as the key expression-regulating TaGW2-A1 promoter SNP."
+            }
+          ],
+          "literature_haplotypes": [
+            {
+              "haplotype_name": "Jaiswal_Hap5",
+              "variant_class": "promoter_haplotype",
+              "expected_markers": {
+                "chr6A_237733847": "G",
+                "chr6A_237734096": "A",
+                "chr6A_237734242": "G",
+                "chr6A_237734341": "A"
+              },
+              "source_note": "Jaiswal et al. reported the TaGW2-A1 promoter Hap5 pattern as G/A/G/A across SNP-988, SNP-739, SNP-593, and SNP-494."
+            }
+          ],
+          "notes": "TaGW2-A1 remote-SNP rerun from WheatOmics merged SNP VCF region extraction; includes SNP-494 but remains SNP-only without INDEL/SV."
         },
         {
           "target_id": "TaGW2-D1",

@@ -105,3 +105,10 @@
 - A micro-VCF for the TaGW2-A1 region was extracted to `external_data/wheat_nature_2024/tagw2_remote/TaGW2-A1.remote_wheatomics_237732651_237760058.vcf.gz`; it has 192 records and includes `SNP-494`.
 - Current interpretation: the existing TaGW2-A1 HTML cannot fully validate the published Jaiswal functional haplotype because the local filtered VCF omitted `SNP-494`; a remote-SNP rerun is the next stronger GW2 test.
 - Earlham chr6A INDEL endpoint currently returns `Request Rejected` HTML to range/body requests from this machine, so INDEL/SV augmentation is still blocked unless the endpoint becomes healthy or the file is downloaded manually/HPC-side.
+
+## Literature Functional-Variant Audit
+- Added generic manifest-driven literature audit outputs. For targets with `literature_variants` or `literature_haplotypes`, analysis now writes `literature_variant_audit.csv` and `literature_variant_audit.json` in the target result directory.
+- Audit statuses are intentionally strict. A known functional marker must be present in the database, must segregate in the current analysis samples, and the top-scored haplotype must contain the expected allele/pattern before it is called `matched_top_haplotype`.
+- The local WatSeq `TaGW2-A1` audit has five records. The first three Jaiswal promoter SNPs are matched by the top-scored haplotype, but `SNP-494` is `missing_from_database`; therefore the full `Jaiswal_Hap5` row is also `missing_from_database`.
+- The remote-SNP `TaGW2-A1-remoteSNP` audit also has five records. It covers `SNP-494`, but the current 552 complete Watkins samples are all `G` at `chr6A:237,734,341`, so the expected `A` allele has `carrier_count=0`, `segregating_in_current_samples=False`, and `validation_status=present_not_segregating`. The full `Jaiswal_Hap5` pattern is `haplotype_not_observed`.
+- Interpretation: the top-scored TaGW2-A1 haplotypes agree with the first three promoter SNPs, but current data still cannot prove recovery of the published Jaiswal causal `SNP-494` or full Hap5 because the expected `A` allele is absent among analyzed samples.

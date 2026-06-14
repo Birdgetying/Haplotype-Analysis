@@ -519,6 +519,261 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(check["status"], "unsupported_input_format_for_analysis")
             self.assertTrue(any(note.startswith("database_source_mismatch:") for note in check["notes"]))
 
+    def test_literature_audit_matches_top_haplotype_for_single_variant(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,A,G,0,False,0.5,0.0,promoter,m1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "G,2,Hap1,G\n"
+                "A,1,Hap2,A\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,G,Hap1\n"
+                "S2,G,Hap1\n"
+                "S3,A,Hap2\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({
+                    "Trait": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 4.2},
+                            "Hap2": {"total": 1.1},
+                        },
+                        "per_sample": [
+                            {"sample_id": "S1", "haplotype": "Hap1"},
+                            {"sample_id": "S2", "haplotype": "Hap1"},
+                            {"sample_id": "S3", "haplotype": "Hap2"},
+                        ],
+                    }
+                }),
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_variants": [
+                        {
+                            "variant_name": "KnownSNP",
+                            "chrom": "chr1",
+                            "position": 100,
+                            "marker_id": "m1",
+                            "expected_allele": "G",
+                            "variant_class": "promoter_snp",
+                            "source_note": "unit test",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            self.assertEqual(len(records), 1)
+            row = records[0]
+            self.assertEqual(row["record_type"], "variant")
+            self.assertEqual(row["variant_name"], "KnownSNP")
+            self.assertTrue(row["covered_in_database"])
+            self.assertTrue(row["segregating_in_current_samples"])
+            self.assertEqual(row["carrier_count"], 2)
+            self.assertEqual(row["top_scored_haplotype"], "Hap1")
+            self.assertEqual(row["top_haplotype_sample_count"], 2)
+            self.assertEqual(row["top_haplotype_carrier_count"], 2)
+            self.assertTrue(row["top_haplotype_contains_expected"])
+            self.assertEqual(row["validation_status"], "matched_top_haplotype")
+            self.assertTrue((result_dir / "literature_variant_audit.csv").exists())
+            self.assertTrue((result_dir / "literature_variant_audit.json").exists())
+
+    def test_literature_audit_reports_missing_and_nonsegregating_variants(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,A,G,0,False,0.0,0.0,promoter,m1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\nA,3,Hap1,A\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\nS1,A,Hap1\nS2,A,Hap1\nS3,A,Hap1\n",
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_variants": [
+                        {
+                            "variant_name": "ExpectedMissingAllele",
+                            "chrom": "chr1",
+                            "position": 100,
+                            "marker_id": "m1",
+                            "expected_allele": "G",
+                        },
+                        {
+                            "variant_name": "AbsentMarker",
+                            "chrom": "chr1",
+                            "position": 200,
+                            "marker_id": "m2",
+                            "expected_allele": "T",
+                        },
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            by_name = {row["variant_name"]: row for row in records}
+            self.assertEqual(by_name["ExpectedMissingAllele"]["validation_status"], "present_not_segregating")
+            self.assertTrue(by_name["ExpectedMissingAllele"]["covered_in_database"])
+            self.assertFalse(by_name["ExpectedMissingAllele"]["segregating_in_current_samples"])
+            self.assertEqual(by_name["ExpectedMissingAllele"]["carrier_count"], 0)
+            self.assertEqual(by_name["ExpectedMissingAllele"]["allele_counts"], "A:3")
+            self.assertEqual(by_name["AbsentMarker"]["validation_status"], "missing_from_database")
+            self.assertFalse(by_name["AbsentMarker"]["covered_in_database"])
+
+    def test_literature_audit_does_not_validate_monomorphic_expected_allele(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,G,A,0,False,0.0,0.0,promoter,m1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\nG,3,Hap1,G\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\nS1,G,Hap1\nS2,G,Hap1\nS3,G,Hap1\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({"Trait": {"per_haplotype": {"Hap1": {"total": 5.0}}}}),
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_variants": [
+                        {
+                            "variant_name": "MonomorphicExpected",
+                            "marker_id": "m1",
+                            "expected_allele": "G",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            row = records[0]
+            self.assertEqual(row["carrier_count"], 3)
+            self.assertFalse(row["segregating_in_current_samples"])
+            self.assertTrue(row["top_haplotype_contains_expected"])
+            self.assertEqual(row["validation_status"], "present_not_segregating")
+
+    def test_literature_audit_reports_group_haplotype_status(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,A,G,0,False,0.5,0.0,promoter,m1\n"
+                "200,C,T,0,False,0.5,0.0,promoter,m2\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "G|T,2,Hap1,G|T\n"
+                "G|C,1,Hap2,G|C\n"
+                "A|T,1,Hap3,A|T\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,G|T,Hap1\n"
+                "S2,G|T,Hap1\n"
+                "S3,G|C,Hap2\n"
+                "S4,A|T,Hap3\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({
+                    "Trait": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 2.0},
+                            "Hap2": {"total": 5.0},
+                            "Hap3": {"total": 1.0},
+                        }
+                    }
+                }),
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_haplotypes": [
+                        {
+                            "haplotype_name": "PublishedPair",
+                            "expected_markers": {"m1": "G", "m2": "T"},
+                            "source_note": "unit test pair",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            self.assertEqual(len(records), 1)
+            row = records[0]
+            self.assertEqual(row["record_type"], "haplotype")
+            self.assertEqual(row["variant_name"], "PublishedPair")
+            self.assertTrue(row["covered_in_database"])
+            self.assertTrue(row["segregating_in_current_samples"])
+            self.assertEqual(row["carrier_count"], 2)
+            self.assertEqual(row["top_scored_haplotype"], "Hap2")
+            self.assertFalse(row["top_haplotype_contains_expected"])
+            self.assertEqual(row["validation_status"], "present_but_not_top")
+
     def test_marker_database_cli(self):
         from build_star_gene_database import main as build_main
 

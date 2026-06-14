@@ -631,7 +631,27 @@ class StarGeneValidator:
             if row['data_status'] == 'analysis_trait_missing':
                 row['notes'] += f'; analyzer result missing selected trait column: {selected_col}'
             trait_rows.append(row)
+
+        self.write_literature_audit(paper, target, check['database_path'], result_path, trait_rows)
         return trait_rows
+
+    def write_literature_audit(self, paper: Dict[str, Any], target: Dict[str, Any],
+                               database_path: Path, result_path: Path,
+                               rows: List[Dict[str, Any]]) -> None:
+        if not (target.get('literature_variants') or target.get('literature_haplotypes')):
+            return
+        try:
+            from star_gene_literature_audit import run_literature_audit
+
+            records = run_literature_audit(paper, target, database_path, result_path)
+            note = f'literature_audit_records={len(records)}'
+            if records:
+                note += f'; literature_audit={result_path / "literature_variant_audit.csv"}'
+        except Exception as e:
+            note = f'literature_audit_error:{e}'
+        for row in rows:
+            existing = row.get('notes') or ''
+            row['notes'] = f'{existing}; {note}' if existing else note
 
     def resolve_trait_column(self, trait: Dict[str, Any], phenotype_columns: Sequence[str]) -> Optional[str]:
         requested = []

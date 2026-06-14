@@ -108,3 +108,18 @@ Rice Science 2024 remains data-blocked locally. Requests from this machine to Fi
 - Figshare API and Science article pages returned HTTP 403 from local PowerShell requests. Used accessible public pages/search snippets and official article/data URLs instead.
 - On 2026-06-05, Figshare API, private-link API, and ndownloader URLs for article `19166475` still returned HTTP 403 from local PowerShell requests.
 - Earlham WatSeq root and guessed subdirectory URLs returned HTTP 404. Paper confirms the OpenData path, but exact downloadable VCF object names should be obtained from WWWG2B/Earlham metadata or portal interaction before hard-coding.
+
+### Phase 11: Literature functional-variant audit table
+Status: complete
+
+Implemented a manifest-driven audit that writes `literature_variant_audit.csv` and `literature_variant_audit.json` for analyzed star-gene targets with configured literature variants or literature haplotypes.
+
+Current TaGW2-A1 audit configuration tracks the Jaiswal promoter SNP group:
+
+- `SNP-988` = `chr6A:237,733,847`, expected allele `G`
+- `SNP-739` = `chr6A:237,734,096`, expected allele `A`
+- `SNP-593` = `chr6A:237,734,242`, expected allele `G`
+- `SNP-494` = `chr6A:237,734,341`, expected allele `A`
+- `Jaiswal_Hap5` = `G/A/G/A` across the four markers
+
+The audit logic reports whether each literature marker is covered by the current database, whether the expected allele or full literature haplotype segregates in the analyzed samples, whether the top-scored haplotype contains it, and a strict `validation_status`. Monomorphic or absent expected alleles are not accepted as validation even if the top haplotype carries the reference/background state.
