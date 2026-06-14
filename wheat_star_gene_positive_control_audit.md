@@ -21,7 +21,7 @@ If a functional variant is absent, monomorphic, or represented only by a nearby/
 | Rht1 / Rht-B1b | Plant height | `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`, stop-gained in `TraesCS4B01G043100` | Present in WheatOmics merged SNP VCF, but 0 T carriers among Watkins phenotype-overlap samples | Data-blocked in Watkins panel; cannot validate scoring with this phenotype set |
 | VRN / spring-winter habit | Growth habit / flowering biology | VRN1 promoter and intron-1 variants, especially large deletions/CNV at `VRN-A1/VRN-B1/VRN-D1` | Watkins workbook has `GrwHabit_E_sw-CFLN06`, but no current diagnostic VRN marker table; ordinary SNP-only region data may miss intron deletion/CNV | Potentially good positive control, but not yet runnable without diagnostic marker/SV/CNV genotype calls |
 | GW2 / TaGW2-A1 | Thousand grain weight | Jaiswal Hap5 promoter group: `SNP-988/SNP-739/SNP-593/SNP-494 = G/A/G/A`, with `SNP-494` as key expression-regulating SNP | Local SNP VCF misses `SNP-494`; remote SNP VCF contains it but Watkins complete samples are all `G` at `SNP-494`, expected `A` carriers = 0 | Gene-level signal exists for TaGW2-A1, but exact functional Hap5 is not validated in current samples |
-| GW2 / TaGW2-B1 | Thousand grain weight | Literature says B1 is the stronger copy for TGW/grain size, but exact current functional marker still needs paper-level resolution | Local `D:\Desktop\data\GW2` has chr6B `.csi` index but no chr6B `.vcf.gz`; cannot build B1 | High priority next target once chr6B VCF and exact B1 functional marker are available |
+| GW2 / TaGW2-B1 | Thousand grain weight | Qin et al. 2014 favorable promoter haplotype `Hap-6B-1`, diagnostic pattern `-1709/-721/-83 = A/G/C` | Functional promoter positions resolved to `chr6B:291759688/291760676/291761314`, but the current WheatOmics remote merged SNP VCF has no usable records for these three sites; local `D:\Desktop\data\GW2` still has chr6B `.csi` only and no chr6B `.vcf.gz` | Data-blocked for exact B1 validation until a chr6B genotype source covering these promoter SNPs is available |
 | TaPIF4 | Heat-related grain size / plant architecture context | Author workflow classifies promoter coverage haplotypes from BAM depth, producing `PIF_hap.txt` | GitHub `QinZhen1995/CAU-TaSG` exposes scripts and `samlist`, not final per-sample `PIF_hap.txt` plus matching TGW/height table | Not suitable as current positive control unless raw BAM-derived coverage matrix or final haplotype table is obtained |
 
 ## Rht1 result
@@ -72,7 +72,19 @@ Strict functional-haplotype audit:
 - Full `Jaiswal_Hap5 = G/A/G/A` is therefore not observed.
 
 Interpretation:
-TaGW2-A1 supports a gene-level signal, but it does not yet prove recovery of the published functional Hap5. TaGW2-B1 remains a better biological target, but the chr6B VCF main file is still missing locally.
+TaGW2-A1 supports a gene-level signal, but it does not yet prove recovery of the published functional Hap5.
+
+TaGW2-B1 follow-up:
+- Qin et al. 2014 reports the favorable natural promoter haplotype `Hap-6B-1`.
+- From Fig. 2B, the three diagnostic promoter sites are `-1709=A`, `-721=G`, and `-83=C`.
+- The local WheatOmics sequence header for `TraesCS6B02G215300` gives gene start `chr6B:291,761,229` and `CDS=169`, so ATG maps to `chr6B:291,761,397`.
+- Therefore the three diagnostic sites map to `chr6B:291,759,688`, `chr6B:291,760,676`, and `chr6B:291,761,314`.
+- Added `prepare_wheat2024_tagw2_b1_remote_snp.py` and manifest target `TaGW2-B1-remoteSNP` so this route is reproducible.
+- Running the script against the current WheatOmics remote merged SNP VCF blocked with: literature promoter SNPs are missing or not segregating at all three marker IDs.
+- The Earlham chr6B SNP URL currently returns a small HTML response (`Content-Type: text/html`, `Content-Length: 2261`) rather than the VCF body, and the local folder has only the `.csi` index. Thus B1 cannot yet validate scoring.
+
+Interpretation:
+TaGW2-B1 is still the best GW2 biological target, but current genotype data do not cover its published diagnostic promoter haplotype. This is a data blocker, not a negative method result.
 
 ## VRN result
 
@@ -86,6 +98,9 @@ Data blocker:
 
 Interpretation:
 VRN is conceptually a strong positive control because the phenotype is categorical and large-effect. It should be the next target only after obtaining diagnostic marker/SV/CNV genotypes.
+
+Potential external route:
+Kiss et al. 2014 used diagnostic molecular markers for `VRN-A1`, `VRN-B1`, `VRN-D1`, `PPD-B1`, and `PPD-D1` in a 683-genotype worldwide wheat collection with heading phenotypes. This could become a strong independent VRN/heading positive control if the supplementary per-genotype marker table can be downloaded and converted. The Springer supplementary DOC download timed out from this machine in the current run, so it is not yet an available dataset.
 
 ## TaPIF4 result
 
@@ -104,8 +119,9 @@ TaPIF4 is not currently usable as a clean positive control. It can become usable
 
 1. Rht-D1b: usable but weak; exact functional variant recovered, carrier count too low.
 2. GW2-A1: gene-level signal, but exact published Hap5 not recovered because `SNP-494 A` is absent.
-3. VRN: promising, but blocked by missing diagnostic structural/CNV marker calls.
-4. TaPIF4: currently unsuitable, because public data expose scripts rather than the final per-sample haplotype/phenotype table.
+3. TaGW2-B1: biologically strong and exact promoter haplotype now mapped, but current VCF sources do not cover the three diagnostic SNPs.
+4. VRN: promising, but blocked by missing diagnostic structural/CNV marker calls.
+5. TaPIF4: currently unsuitable, because public data expose scripts rather than the final per-sample haplotype/phenotype table.
 
 Best next data action:
-Obtain a genotype panel where Rht-B1b/Rht-D1b or VRN diagnostic variants segregate at reasonable frequency, or finish chr6B VCF download and identify the exact TaGW2-B1 functional marker.
+Obtain a chr6B genotype source covering the TaGW2-B1 promoter diagnostic SNPs, or obtain a per-genotype VRN diagnostic marker table with matching heading/growth-habit phenotype.

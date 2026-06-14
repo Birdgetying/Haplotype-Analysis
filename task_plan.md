@@ -140,3 +140,16 @@ Current GW2 result remains unchanged but stricter: TaGW2-A1 shows gene-level sig
 Current TaPIF4 result: the public `QinZhen1995/CAU-TaSG` GitHub repository exposes promoter-haplotype scripts and `samlist`, but not the final per-sample `PIF_hap.txt`, `coverage.martix`, or matching phenotype table. It is not currently suitable as a positive control.
 
 Detailed report: `wheat_star_gene_positive_control_audit.md`.
+
+### Phase 13: TaGW2-B1 and VRN stronger positive-control follow-up
+Status: complete
+
+TaGW2-B1 is now functionally mapped but data-blocked. Qin et al. 2014 reports the favorable natural promoter haplotype `Hap-6B-1` with diagnostic states `-1709=A`, `-721=G`, and `-83=C`. Using the local WheatOmics `TraesCS6B02G215300` sequence header (`chr6B:291,761,229-291,778,752`, `CDS=169`), ATG maps to `chr6B:291,761,397`, so the three diagnostic sites map to `chr6B:291,759,688`, `chr6B:291,760,676`, and `chr6B:291,761,314`.
+
+Implemented `prepare_wheat2024_tagw2_b1_remote_snp.py` and manifest target `TaGW2-B1-remoteSNP`. The script is intentionally strict: it builds a database only when all three literature promoter SNPs are present and segregating; otherwise it writes `external_data/wheat_nature_2024/tagw2_b1_remote/prepare_status.json` with a blocked reason. Synthetic VCF unit coverage confirms it can build a database and retain the `A|G|C` favorable haplotype.
+
+Real-data status: running the script against the current WheatOmics remote merged SNP VCF blocks because `chr6B_291759688`, `chr6B_291760676`, and `chr6B_291761314` are missing or not segregating. The guessed Earlham chr6B SNP VCF URL currently returns a small HTML response, and local `D:\Desktop\data\GW2` still contains only the chr6B `.csi` index, not the `.vcf.gz`.
+
+VRN remains the second strongest candidate but needs a per-genotype diagnostic marker table. Kiss et al. 2014 is a promising external route because it used diagnostic markers for `VRN-A1`, `VRN-B1`, `VRN-D1`, `PPD-B1`, and `PPD-D1` in 683 genotypes with heading phenotypes, but the Springer supplementary DOC download timed out from this machine and has not been inspected.
+
+Next action: obtain either (1) a chr6B genotype source covering the TaGW2-B1 promoter diagnostic SNPs, preferably the full WatSeq chr6B SNP VCF, or (2) a per-genotype VRN diagnostic marker table with matching heading/growth-habit phenotypes.

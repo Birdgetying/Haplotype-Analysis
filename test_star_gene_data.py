@@ -1160,6 +1160,67 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertFalse((output_root / "Rht-B1b" / "gene_info.json").exists())
             self.assertTrue((output_root / "Rht-D1b" / "gene_info.json").exists())
 
+    def test_wheat_tagw2_b1_prepare_builds_remote_snp_database(self):
+        import pandas as pd
+        from openpyxl import Workbook
+        from prepare_wheat2024_tagw2_b1_remote_snp import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vcf_path = tmp_path / "tagw2_b1.vcf"
+            vcf_path.write_text(
+                "\n".join([
+                    "##fileformat=VCFv4.2",
+                    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWATDE0001\tWATDE0002\tWATDE0003\tWATDE0004",
+                    "chr6B\t291759688\tchr6B_291759688\tC\tA\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
+                    "chr6B\t291760676\tchr6B_291760676\tA\tG\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
+                    "chr6B\t291761314\tchr6B_291761314\tT\tC\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+
+            phenotype_xlsx = tmp_path / "watkins.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "WISP_Watkins_JIC_CFLN10"
+            ws.append(["StoreCode", "GW_M_g1000grn-CFLN10"])
+            ws.append(["WATDE0001", 48.0])
+            ws.append(["WATDE0002", 40.0])
+            ws.append(["WATDE0003", 47.0])
+            ws.append(["WATDE0004", 41.0])
+            ws2 = wb.create_sheet("DFW_Watkins_JI_CFLN14")
+            ws2.append(["StoreCode", "GW_M_g1000grn-CFLN14"])
+            ws2.append(["WATDE0001", 49.0])
+            ws2.append(["WATDE0002", 39.0])
+            ws2.append(["WATDE0003", 46.0])
+            ws2.append(["WATDE0004", 42.0])
+            wb.save(phenotype_xlsx)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            rc = prepare_main([
+                "--vcf", str(vcf_path),
+                "--phenotype-xlsx", str(phenotype_xlsx),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(intermediate_root),
+                "--min-haplotype-count", "1",
+            ])
+
+            self.assertEqual(rc, 0)
+            db_dir = output_root / "TaGW2-B1-remoteSNP"
+            gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["source"], "wheatomics_remote_tagw2_b1_promoter_snp_vcf")
+            self.assertEqual(gene_info["atg_position"], 291761397)
+            variant_info = pd.read_csv(db_dir / "variant_info.csv")
+            self.assertEqual(
+                variant_info["marker_id"].tolist(),
+                ["chr6B_291759688", "chr6B_291760676", "chr6B_291761314"],
+            )
+            self.assertTrue((variant_info["annotation"] == "promoter_snp").all())
+            hap_text = (db_dir / "haplotype_data.csv").read_text(encoding="utf-8")
+            self.assertIn("A|G|C", hap_text)
+
     def test_tagw2_hap8_maps_published_promoter_offsets_to_refseq_positions(self):
         from analyze_tagw2_hap8_functional_groups import map_promoter_offset_to_position
 

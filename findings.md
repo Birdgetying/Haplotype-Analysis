@@ -122,3 +122,16 @@
 - VRN status: the Watkins workbook contains growth habit column `GrwHabit_E_sw-CFLN06`, but VRN validation needs diagnostic structural/CNV marker genotypes for `VRN-A1/VRN-B1/VRN-D1`. SNP-only region data are not enough because key VRN alleles are often promoter/intron-1 deletions or copy-number variants.
 - TaPIF4 status: the public `QinZhen1995/CAU-TaSG` repository contains scripts under `03.PIF4_Promoter_Hap` and `samlist`, but not the final `coverage.martix`, `PIF_hap.txt`, or matching TGW/height phenotype table. It is currently not suitable as a clean positive control.
 - Current ranking for proving scoring effectiveness among teacher targets: `Rht-D1b` is usable but weak; `GW2-A1` is gene-level only and not exact-Hap5 validated; `VRN` is promising but data-blocked; `TaPIF4` is unsuitable without final haplotype/phenotype files.
+
+## Wheat TaGW2-B1 Functional-Haplotype Follow-up
+- Qin et al. 2014 BMC Plant Biology Fig. 2B reports `TaGW2-6B` natural promoter haplotypes; the favorable `Hap-6B-1` diagnostic states are `-1709=A`, `-721=G`, and `-83=C`.
+- The local WheatOmics `TraesCS6B02G215300` sequence header has `chr6B:291,761,229-291,778,752` and `CDS=169`. Therefore ATG is `chr6B:291,761,397`, and the diagnostic sites map to `chr6B:291,759,688`, `chr6B:291,760,676`, and `chr6B:291,761,314`.
+- Added `prepare_wheat2024_tagw2_b1_remote_snp.py` and manifest target `TaGW2-B1-remoteSNP` with literature variant/haplotype audit metadata. A synthetic VCF unit test confirms the script builds a database and records the `A|G|C` favorable haplotype pattern.
+- Running the script against the current WheatOmics remote merged SNP VCF is blocked: all three literature promoter SNP marker IDs are missing or not segregating in the available records.
+- Direct HEAD checks for the guessed Earlham chr6B SNP VCF and `.csi` returned a small HTML response (`Content-Type: text/html`, `Content-Length: 2261`) rather than VCF/index data; locally `D:\Desktop\data\GW2` still has only the chr6B `.csi` and no `.vcf.gz`.
+- Interpretation: TaGW2-B1 is now biologically and coordinate-resolved, but current accessible genotype data do not cover the exact published promoter haplotype. This is a data blocker, not evidence against haplotype scoring.
+
+## Wheat VRN External Positive-Control Route
+- Watkins has `GrwHabit_E_sw-CFLN06`, but no local diagnostic `VRN-A1/VRN-B1/VRN-D1` genotype table.
+- Kiss et al. 2014 is a promising external route because it used diagnostic molecular markers for `VRN-A1`, `VRN-B1`, `VRN-D1`, `PPD-B1`, and `PPD-D1` in 683 wheat genotypes with heading phenotypes.
+- Automated download of the Springer supplementary DOC for Kiss et al. 2014 timed out from this machine, so the per-genotype marker table has not been inspected. Do not treat VRN as runnable until that table or another per-sample diagnostic marker source is obtained.
