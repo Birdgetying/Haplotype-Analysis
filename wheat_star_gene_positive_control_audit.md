@@ -21,7 +21,7 @@ If a functional variant is absent, monomorphic, or represented only by a nearby/
 | Rht1 / Rht-B1b | Plant height | `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`, stop-gained in `TraesCS4B01G043100` | Present in WheatOmics merged SNP VCF, but 0 T carriers among Watkins phenotype-overlap samples | Data-blocked in Watkins panel; cannot validate scoring with this phenotype set |
 | VRN / Kiss2014 | Heading date / flowering biology | Diagnostic spring/dominant marker states at `VRN-A1`, `VRN-B1`, `VRN-D1` from Kiss et al. 2014 | Complete Springer supplement was downloaded and the embedded workbook was converted; 676 samples have VRN diagnostic markers plus DEV49/DEV59 heading dates | Usable but low-confidence positive control: top-scored haplotype `1|1|1` contains all three literature spring states, but it has only 2 samples; strongest stable effect is `VRN-D1=1` (`0|0|1`) with earlier heading |
 | GW2 / TaGW2-A1 | Thousand grain weight | Jaiswal Hap5 promoter group: `SNP-988/SNP-739/SNP-593/SNP-494 = G/A/G/A`, with `SNP-494` as key expression-regulating SNP | Local SNP VCF misses `SNP-494`; remote SNP VCF contains it but Watkins complete samples are all `G` at `SNP-494`, expected `A` carriers = 0 | Gene-level signal exists for TaGW2-A1, but exact functional Hap5 is not validated in current samples |
-| GW2 / TaGW2-B1 | Thousand grain weight | Qin et al. 2014 favorable promoter haplotype `Hap-6B-1`, diagnostic pattern `-1709/-721/-83 = A/G/C` | Functional promoter positions resolved to `chr6B:291759688/291760676/291761314`, but the current WheatOmics remote merged SNP VCF has no usable records for these three sites; local `D:\Desktop\data\GW2` still has chr6B `.csi` only and no chr6B `.vcf.gz` | Data-blocked for exact B1 validation until a chr6B genotype source covering these promoter SNPs is available |
+| GW2 / TaGW2-B1 | Thousand grain weight | Qin et al. 2014 favorable promoter haplotype `Hap-6B-1`, diagnostic pattern `-1709/-721/-83 = A/G/C` | Complete WWWG2B chr6B `SNP_matrix_1047` VCF was downloaded. The corresponding records are at `chr6B:291759689/291760677/291761315`; built 816 Watkins TGW-overlap samples | Strongest current positive-control dataset for biological direction: exact `A|G|C` is `Hap1` (n=371) and has the highest TGW mean (`40.970 g`). But default scoring ranks rare `Hap5=C/A|G|C` (n=7) highest, so exact functional haplotype recovery is not perfect and scoring should be refined before unknown-gene nomination |
 | TaPIF4 | Heat-related grain size / plant architecture context | Author workflow classifies promoter coverage haplotypes from BAM depth, producing `PIF_hap.txt` | GitHub `QinZhen1995/CAU-TaSG` exposes scripts and `samlist`, not final per-sample `PIF_hap.txt` plus matching TGW/height table | Not suitable as current positive control unless raw BAM-derived coverage matrix or final haplotype table is obtained |
 
 ## Rht1 result
@@ -78,13 +78,25 @@ TaGW2-B1 follow-up:
 - Qin et al. 2014 reports the favorable natural promoter haplotype `Hap-6B-1`.
 - From Fig. 2B, the three diagnostic promoter sites are `-1709=A`, `-721=G`, and `-83=C`.
 - The local WheatOmics sequence header for `TraesCS6B02G215300` gives gene start `chr6B:291,761,229` and `CDS=169`, so ATG maps to `chr6B:291,761,397`.
-- Therefore the three diagnostic sites map to `chr6B:291,759,688`, `chr6B:291,760,676`, and `chr6B:291,761,314`.
-- Added `prepare_wheat2024_tagw2_b1_remote_snp.py` and manifest target `TaGW2-B1-remoteSNP` so this route is reproducible.
-- Running the script against the current WheatOmics remote merged SNP VCF blocked with: literature promoter SNPs are missing or not segregating at all three marker IDs.
-- The Earlham chr6B SNP URL currently returns a small HTML response (`Content-Type: text/html`, `Content-Length: 2261`) rather than the VCF body, and the local folder has only the `.csi` index. Thus B1 cannot yet validate scoring.
+- The first coordinate pass used `chr6B:291,759,688`, `chr6B:291,760,676`, and `chr6B:291,761,314`; the complete WWWG2B 1047 chr6B SNP VCF contains the corresponding records at `chr6B:291,759,689 C>A`, `chr6B:291,760,677 G>A`, and `chr6B:291,761,315 T>C`.
+- Added `download_wwwg2b_file.py` for resumable WWWG2B downloads and rebuilt `TaGW2-B1-remoteSNP` from the complete chr6B VCF (`2,117,273,732` bytes).
+- Output database: `star_gene_database/wheat_nature_2024/TaGW2-B1-remoteSNP`.
+- Output HTML: `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`.
+- Audit CSV: `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/literature_variant_audit.csv`.
+
+Observed TaGW2-B1 haplotypes:
+
+| Haplotype | Promoter state | n | TGW_mean | Score |
+|---|---:|---:|---:|---:|
+| Hap1 | `A|G|C` | 371 | 40.970 | 2.5746 |
+| Hap2 | `C|G|C` | 364 | 39.049 | 1.6105 |
+| Hap3 | `C|G|T` | 66 | 34.997 | 1.0380 |
+| Hap4 | `C|A|T` | 7 | 42.698 | 2.4566 |
+| Hap5 | `C/A|G|C` | 7 | 39.610 | 4.2581 |
+| Hap6 | `A|G|T/C` | 1 | 40.902 | 2.3763 |
 
 Interpretation:
-TaGW2-B1 is still the best GW2 biological target, but current genotype data do not cover its published diagnostic promoter haplotype. This is a data blocker, not a negative method result.
+TaGW2-B1 is the best current GW2 positive control for biological direction: exact Qin2014 `A|G|C` is a large haplotype and has the highest observed TGW mean among common haplotypes. But the default HaplotypeScorer top rank is rare `Hap5=C/A|G|C`, not exact `A|G|C`. The strict audit marks the Qin2014 haplotype as `contained_in_top_haplotype_not_exact`, with exact matching haplotypes `Hap1:371`. This supports using literature-positive controls, and also shows the scoring rule should penalize tiny heterozygous/ambiguous top-ranked haplotypes before unknown-gene discovery.
 
 ## VRN result
 
@@ -135,11 +147,11 @@ TaPIF4 is not currently usable as a clean positive control. It can become usable
 
 ## Ranking for proving scoring effectiveness
 
-1. VRN-Kiss2014: usable but still low-confidence; top-scored haplotype contains all three literature diagnostic states, but n=2. The `VRN-D1=1` component has a clearer effect.
-2. Rht-D1b: usable but weak; exact functional variant recovered, carrier count too low.
-3. GW2-A1: gene-level signal, but exact published Hap5 not recovered because `SNP-494 A` is absent.
-4. TaGW2-B1: biologically strong and exact promoter haplotype now mapped, but current VCF sources do not cover the three diagnostic SNPs.
+1. TaGW2-B1: strongest biological positive control so far. Exact Qin2014 `A|G|C` has the expected favorable TGW direction, but default top score is not the exact haplotype, exposing a scoring-rank issue.
+2. VRN-Kiss2014: usable but still low-confidence; top-scored haplotype contains all three literature diagnostic states, but n=2. The `VRN-D1=1` component has a clearer effect.
+3. Rht-D1b: usable but weak; exact functional variant recovered, carrier count too low.
+4. GW2-A1: gene-level signal, but exact published Hap5 not recovered because `SNP-494 A` is absent.
 5. TaPIF4: currently unsuitable, because public data expose scripts rather than the final per-sample haplotype/phenotype table.
 
-Best next data action:
-Obtain a chr6B genotype source covering the TaGW2-B1 promoter diagnostic SNPs, or refine VRN-Kiss2014 into marker-component tests so the robust `VRN-D1=1` signal can be compared against full-haplotype scoring.
+Best next method action:
+Refine the scorer/audit gate so exact literature haplotype recovery, phenotype direction, and minimum sample count matter more than rare heterozygous/ambiguous top-ranked haplotypes. Then rerun TaGW2-B1, VRN-Kiss2014, and Rht-D1b as the positive-control regression panel.

@@ -30,6 +30,8 @@ AUDIT_COLUMNS = [
     "top_haplotype_sample_count",
     "top_haplotype_carrier_count",
     "top_haplotype_contains_expected",
+    "top_haplotype_exact_expected",
+    "exact_matching_haplotypes",
     "validation_status",
     "covered_marker_count",
     "expected_marker_count",
@@ -90,8 +92,18 @@ def _allele_matches(observed: Any, expected: Any) -> bool:
     return expected_text in observed_parts
 
 
+def _allele_exactly_matches(observed: Any, expected: Any) -> bool:
+    if expected is None or expected == "":
+        return False
+    return str(observed or "").strip() == str(expected).strip()
+
+
 def _format_counts(counter: Counter) -> str:
     return ";".join(f"{allele}:{count}" for allele, count in sorted(counter.items()))
+
+
+def _format_hap_counts(counter: Counter) -> str:
+    return ";".join(f"{hap}:{count}" for hap, count in sorted(counter.items()) if hap)
 
 
 def _load_marker_context(database_path: Path) -> Dict[str, Any]:
@@ -197,6 +209,7 @@ def _variant_record(
     allele_counts: Counter = Counter()
     carrier_count = 0
     top_carrier_count = 0
+    exact_hap_counts: Counter = Counter()
     if covered and expected not in (None, ""):
         for sample_id, alleles in context["sample_alleles"].items():
             observed = _allele_for_marker(alleles, context["marker_to_index"], marker_id)
@@ -207,9 +220,12 @@ def _variant_record(
                 carrier_count += 1
                 if context["sample_haps"].get(sample_id) == top_hap:
                     top_carrier_count += 1
+            if _allele_exactly_matches(observed, expected):
+                exact_hap_counts[context["sample_haps"].get(sample_id)] += 1
 
     top_hap_count = int(context["hap_counts"].get(top_hap, 0)) if top_hap else 0
     top_contains = False
+    top_exact = False
     if covered and expected not in (None, "") and top_hap:
         top_allele = _allele_for_marker(
             context["hap_alleles"].get(top_hap, []),
@@ -217,6 +233,7 @@ def _variant_record(
             marker_id,
         )
         top_contains = _allele_matches(top_allele, expected)
+        top_exact = _allele_exactly_matches(top_allele, expected)
 
     segregating = len(allele_counts) > 1
     if not covered:
@@ -225,8 +242,10 @@ def _variant_record(
         status = "not_testable_no_expected_allele"
     elif not segregating:
         status = "present_not_segregating"
-    elif top_contains:
+    elif top_exact:
         status = "matched_top_haplotype"
+    elif top_contains:
+        status = "contained_in_top_haplotype_not_exact"
     else:
         status = "present_but_not_top"
 
@@ -252,6 +271,8 @@ def _variant_record(
         "top_haplotype_sample_count": top_hap_count,
         "top_haplotype_carrier_count": top_carrier_count,
         "top_haplotype_contains_expected": top_contains,
+        "top_haplotype_exact_expected": top_exact,
+        "exact_matching_haplotypes": _format_hap_counts(exact_hap_counts),
         "validation_status": status,
         "covered_marker_count": 1 if covered else 0,
         "expected_marker_count": 1,
@@ -277,10 +298,18 @@ def _haplotype_record(
     carrier_count = 0
     top_carrier_count = 0
     hap_counts: Counter = Counter()
+    exact_hap_counts: Counter = Counter()
     if covered:
         for sample_id, alleles in context["sample_alleles"].items():
             is_carrier = all(
                 _allele_matches(
+                    _allele_for_marker(alleles, context["marker_to_index"], marker),
+                    expected,
+                )
+                for marker, expected in expected_markers.items()
+            )
+            is_exact_carrier = all(
+                _allele_exactly_matches(
                     _allele_for_marker(alleles, context["marker_to_index"], marker),
                     expected,
                 )
@@ -292,13 +321,23 @@ def _haplotype_record(
                 hap_counts[sample_hap] += 1
                 if sample_hap == top_hap:
                     top_carrier_count += 1
+            if is_exact_carrier:
+                exact_hap_counts[context["sample_haps"].get(sample_id)] += 1
 
     top_hap_count = int(context["hap_counts"].get(top_hap, 0)) if top_hap else 0
     top_contains = False
+    top_exact = False
     if covered and top_hap:
         top_alleles = context["hap_alleles"].get(top_hap, [])
         top_contains = all(
             _allele_matches(
+                _allele_for_marker(top_alleles, context["marker_to_index"], marker),
+                expected,
+            )
+            for marker, expected in expected_markers.items()
+        )
+        top_exact = all(
+            _allele_exactly_matches(
                 _allele_for_marker(top_alleles, context["marker_to_index"], marker),
                 expected,
             )
@@ -311,8 +350,10 @@ def _haplotype_record(
         status = "missing_from_database"
     elif carrier_count == 0:
         status = "haplotype_not_observed"
-    elif top_contains:
+    elif top_exact:
         status = "matched_top_haplotype"
+    elif top_contains:
+        status = "contained_in_top_haplotype_not_exact"
     else:
         status = "present_but_not_top"
 
@@ -338,6 +379,8 @@ def _haplotype_record(
         "top_haplotype_sample_count": top_hap_count,
         "top_haplotype_carrier_count": top_carrier_count,
         "top_haplotype_contains_expected": top_contains,
+        "top_haplotype_exact_expected": top_exact,
+        "exact_matching_haplotypes": _format_hap_counts(exact_hap_counts),
         "validation_status": status,
         "covered_marker_count": len(expected_markers) - len(missing),
         "expected_marker_count": len(expected_markers),

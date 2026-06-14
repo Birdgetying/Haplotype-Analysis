@@ -515,7 +515,7 @@
           "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0 remote merged SNP VCF",
           "coordinates": {
             "chrom": "6B",
-            "start": 291759688,
+            "start": 291759689,
             "end": 291778752
           },
           "required_database_source": "wheatomics_remote_tagw2_b1_promoter_snp_vcf",
@@ -533,28 +533,28 @@
               "variant_name": "TaGW2-6B_-1709",
               "variant_class": "promoter_snp",
               "chrom": "chr6B",
-              "position": 291759688,
-              "marker_id": "chr6B_291759688",
+              "position": 291759689,
+              "marker_id": "chr6B_291759689",
               "expected_allele": "A",
-              "source_note": "Qin et al. 2014 Fig. 2B TaGW2-6B Hap-6B-1 diagnostic promoter SNP at -1709 relative to ATG."
+              "source_note": "Qin et al. 2014 Fig. 2B TaGW2-6B Hap-6B-1 diagnostic promoter SNP at -1709 relative to ATG; mapped to RefSeq v1.0 VCF coordinate chr6B:291759689."
             },
             {
               "variant_name": "TaGW2-6B_-721",
               "variant_class": "promoter_snp",
               "chrom": "chr6B",
-              "position": 291760676,
-              "marker_id": "chr6B_291760676",
+              "position": 291760677,
+              "marker_id": "chr6B_291760677",
               "expected_allele": "G",
-              "source_note": "Qin et al. 2014 Fig. 2B TaGW2-6B Hap-6B-1 diagnostic promoter SNP at -721 relative to ATG."
+              "source_note": "Qin et al. 2014 Fig. 2B TaGW2-6B Hap-6B-1 diagnostic promoter SNP at -721 relative to ATG; mapped to RefSeq v1.0 VCF coordinate chr6B:291760677."
             },
             {
               "variant_name": "TaGW2-6B_-83",
               "variant_class": "promoter_snp",
               "chrom": "chr6B",
-              "position": 291761314,
-              "marker_id": "chr6B_291761314",
+              "position": 291761315,
+              "marker_id": "chr6B_291761315",
               "expected_allele": "C",
-              "source_note": "Qin et al. 2014 Fig. 2B TaGW2-6B Hap-6B-1 diagnostic promoter SNP at -83 relative to ATG."
+              "source_note": "Qin et al. 2014 Fig. 2B TaGW2-6B Hap-6B-1 diagnostic promoter SNP at -83 relative to ATG; mapped to RefSeq v1.0 VCF coordinate chr6B:291761315."
             }
           ],
           "literature_haplotypes": [
@@ -562,9 +562,9 @@
               "haplotype_name": "Qin2014_Hap-6B-1",
               "variant_class": "promoter_haplotype",
               "expected_markers": {
-                "chr6B_291759688": "A",
-                "chr6B_291760676": "G",
-                "chr6B_291761314": "C"
+                "chr6B_291759689": "A",
+                "chr6B_291760677": "G",
+                "chr6B_291761315": "C"
               },
               "source_note": "Qin et al. 2014 reported Hap-6B-1 as the favorable TaGW2-6B promoter haplotype; diagnostic pattern A/G/C at -1709/-721/-83."
             }

@@ -597,9 +597,73 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(row["top_haplotype_sample_count"], 2)
             self.assertEqual(row["top_haplotype_carrier_count"], 2)
             self.assertTrue(row["top_haplotype_contains_expected"])
+            self.assertTrue(row["top_haplotype_exact_expected"])
             self.assertEqual(row["validation_status"], "matched_top_haplotype")
             self.assertTrue((result_dir / "literature_variant_audit.csv").exists())
             self.assertTrue((result_dir / "literature_variant_audit.json").exists())
+
+    def test_literature_audit_distinguishes_heterozygous_top_variant_match(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,C,A,0,False,0.5,0.0,promoter,m1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "A,3,Hap1,A\n"
+                "C/A,2,Hap2,C/A\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,A,Hap1\n"
+                "S2,A,Hap1\n"
+                "S3,A,Hap1\n"
+                "S4,C/A,Hap2\n"
+                "S5,C/A,Hap2\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({
+                    "Trait": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 2.0},
+                            "Hap2": {"total": 5.0},
+                        }
+                    }
+                }),
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_variants": [
+                        {
+                            "variant_name": "KnownSNP",
+                            "marker_id": "m1",
+                            "expected_allele": "A",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            row = records[0]
+            self.assertTrue(row["top_haplotype_contains_expected"])
+            self.assertFalse(row["top_haplotype_exact_expected"])
+            self.assertEqual(row["exact_matching_haplotypes"], "Hap1:3")
+            self.assertEqual(row["validation_status"], "contained_in_top_haplotype_not_exact")
 
     def test_literature_audit_reports_missing_and_nonsegregating_variants(self):
         from star_gene_literature_audit import run_literature_audit
@@ -776,6 +840,71 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(row["top_scored_haplotype"], "Hap2")
             self.assertFalse(row["top_haplotype_contains_expected"])
             self.assertEqual(row["validation_status"], "present_but_not_top")
+
+    def test_literature_audit_requires_exact_top_haplotype_for_group_match(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,C,A,0,False,0.5,0.0,promoter,m1\n"
+                "200,G,A,0,False,0.5,0.0,promoter,m2\n"
+                "300,T,C,0,False,0.5,0.0,promoter,m3\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "A|G|C,3,Hap1,A|G|C\n"
+                "C/A|G|C,2,Hap2,C/A|G|C\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,A|G|C,Hap1\n"
+                "S2,A|G|C,Hap1\n"
+                "S3,A|G|C,Hap1\n"
+                "S4,C/A|G|C,Hap2\n"
+                "S5,C/A|G|C,Hap2\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({
+                    "Trait": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 2.0},
+                            "Hap2": {"total": 5.0},
+                        }
+                    }
+                }),
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_haplotypes": [
+                        {
+                            "haplotype_name": "PublishedAGC",
+                            "expected_markers": {"m1": "A", "m2": "G", "m3": "C"},
+                            "source_note": "unit test strict haplotype",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            row = records[0]
+            self.assertTrue(row["top_haplotype_contains_expected"])
+            self.assertFalse(row["top_haplotype_exact_expected"])
+            self.assertEqual(row["exact_matching_haplotypes"], "Hap1:3")
+            self.assertEqual(row["validation_status"], "contained_in_top_haplotype_not_exact")
 
     def test_marker_database_cli(self):
         from build_star_gene_database import main as build_main
@@ -1231,9 +1360,9 @@ class StarGeneDataTests(unittest.TestCase):
                 "\n".join([
                     "##fileformat=VCFv4.2",
                     "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWATDE0001\tWATDE0002\tWATDE0003\tWATDE0004",
-                    "chr6B\t291759688\tchr6B_291759688\tC\tA\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
-                    "chr6B\t291760676\tchr6B_291760676\tA\tG\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
-                    "chr6B\t291761314\tchr6B_291761314\tT\tC\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
+                    "chr6B\t291759689\tchr6B_291759689\tC\tA\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
+                    "chr6B\t291760677\tchr6B_291760677\tG\tA\t.\tPASS\t.\tGT\t0/0\t1/1\t0/0\t1/1",
+                    "chr6B\t291761315\tchr6B_291761315\tT\tC\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
                     "",
                 ]),
                 encoding="utf-8",
@@ -1274,7 +1403,7 @@ class StarGeneDataTests(unittest.TestCase):
             variant_info = pd.read_csv(db_dir / "variant_info.csv")
             self.assertEqual(
                 variant_info["marker_id"].tolist(),
-                ["chr6B_291759688", "chr6B_291760676", "chr6B_291761314"],
+                ["chr6B_291759689", "chr6B_291760677", "chr6B_291761315"],
             )
             self.assertTrue((variant_info["annotation"] == "promoter_snp").all())
             hap_text = (db_dir / "haplotype_data.csv").read_text(encoding="utf-8")

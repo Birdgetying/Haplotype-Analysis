@@ -56,22 +56,22 @@ TAGW2_B1 = {
         {
             "name": "TaGW2-6B_-1709",
             "offset": -1709,
-            "position": 291_759_688,
-            "marker_id": "chr6B_291759688",
+            "position": 291_759_689,
+            "marker_id": "chr6B_291759689",
             "expected_allele": "A",
         },
         {
             "name": "TaGW2-6B_-721",
             "offset": -721,
-            "position": 291_760_676,
-            "marker_id": "chr6B_291760676",
+            "position": 291_760_677,
+            "marker_id": "chr6B_291760677",
             "expected_allele": "G",
         },
         {
             "name": "TaGW2-6B_-83",
             "offset": -83,
-            "position": 291_761_314,
-            "marker_id": "chr6B_291761314",
+            "position": 291_761_315,
+            "marker_id": "chr6B_291761315",
             "expected_allele": "C",
         },
     ],
@@ -152,9 +152,30 @@ def bcftools_base_command(bcftools: str) -> List[str]:
     return [bcftools]
 
 
-def read_vcf_header_samples(vcf: str, bcftools: str) -> List[str]:
+def path_for_bcftools(vcf: str, bcftools: str) -> str:
     if is_remote_vcf(vcf):
-        cmd = [*bcftools_base_command(bcftools), "view", "-h", vcf]
+        return vcf
+    if sys.platform == "win32" and bcftools == "bcftools":
+        path = Path(vcf).resolve()
+        drive = path.drive.rstrip(":").lower()
+        if drive:
+            rel = path.as_posix()[3:]
+            return f"/mnt/{drive}/{rel}"
+    return vcf
+
+
+def should_use_bcftools_for_local(vcf: str) -> bool:
+    if is_remote_vcf(vcf):
+        return True
+    path = Path(vcf)
+    if not str(path).endswith(".vcf.gz"):
+        return False
+    return path.with_suffix(path.suffix + ".csi").exists() or path.with_suffix(path.suffix + ".tbi").exists()
+
+
+def read_vcf_header_samples(vcf: str, bcftools: str) -> List[str]:
+    if should_use_bcftools_for_local(vcf):
+        cmd = [*bcftools_base_command(bcftools), "view", "-h", path_for_bcftools(vcf, bcftools)]
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding="utf-8")
         for line in completed.stdout.splitlines():
             if line.startswith("#CHROM"):
@@ -169,8 +190,8 @@ def read_vcf_header_samples(vcf: str, bcftools: str) -> List[str]:
 
 
 def fetch_vcf_records(vcf: str, region: str, bcftools: str) -> List[str]:
-    if is_remote_vcf(vcf):
-        cmd = [*bcftools_base_command(bcftools), "view", "-H", "-r", region, vcf]
+    if should_use_bcftools_for_local(vcf):
+        cmd = [*bcftools_base_command(bcftools), "view", "-H", "-r", region, path_for_bcftools(vcf, bcftools)]
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding="utf-8")
         return [line for line in completed.stdout.splitlines() if line and not line.startswith("#")]
 
