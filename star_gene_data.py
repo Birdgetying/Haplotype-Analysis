@@ -289,7 +289,11 @@ def _read_table(path: Path) -> List[Dict[str, str]]:
     with open(path, "r", encoding="utf-8", newline="") as f:
         sample = f.read(4096)
         f.seek(0)
-        dialect = csv.Sniffer().sniff(sample, delimiters="\t,")
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters="\t,")
+        except csv.Error:
+            delimiter = "\t" if sample.count("\t") >= sample.count(",") else ","
+            dialect = csv.excel_tab if delimiter == "\t" else csv.excel
         reader = csv.DictReader(f, dialect=dialect)
         return [dict(row) for row in reader]
 

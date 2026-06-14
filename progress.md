@@ -91,3 +91,13 @@
 - Key Hap8 result: two published local promoter SNPs alone show a weaker TGW_mean negative effect (`-3.18 g`, `P=7.99e-04`), while the Hap8 background/full Hap8 shows a stronger negative effect (`-7.55 g`, `P=3.36e-07`), and `Published+Background` is lower than `PublishedOnly` by `-7.09 g` (`P=1.87e-05`).
 - Country-origin check: the two-SNP state is strongly enriched in China (`32/66`, BH FDR `3.23e-14`), and Hap8 is mostly China (`18/25`). After within-country centering, full Hap8 remains lower for TGW_mean (`-4.74 g`, `P=1.33e-04`), so country structure is a confounder but does not fully explain the Hap8 background effect.
 - Checked INDEL/SV status. No chr6A INDEL/SV VCF is present locally under `D:\Desktop\data\GW2`. Earlham chr6A INDEL VCF HEAD reports `8,519,486,608` bytes and its `.csi` reports `462,684` bytes; range HEAD returned HTTP 200 rather than 206, and local tools `pysam/bcftools/tabix` are missing. Wrote reproducible download and HPC extraction instructions to `tagw2_hap8_indel_sv_download_instructions.md`.
+
+## 2026-06-14
+- Revisited TaGW2-A1 as the current GW2 positive-control target after the Rht-A1 route proved data-limited.
+- Confirmed local WSL has `bcftools 1.19` and `tabix 1.19`, so indexed VCF region queries are available from this machine.
+- Diagnosed a coordinate/contig mismatch in manual checks: the local chr6A WatSeq VCF contig is `chr6A`, while the earlier suggested command used `6A`; `bcftools -r 6A:...` returns empty even for present sites.
+- Verified local chr6A SNP VCF contains TaGW2-A1 promoter SNPs `SNP-988` (`chr6A:237733847 G>A`), `SNP-739` (`chr6A:237734096 G>A`), and `SNP-593` (`chr6A:237734242 A>G`) but does not contain Jaiswal `SNP-494` (`chr6A:237734341 G>A`).
+- Queried the remote WheatOmics merged SNP VCF at `https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/tracks/vcf/merge.SNP.Missing-unphasing.ID.ann.finalSID.allele2_retain.hard_retain.InbreedingCoeff_retain.clean.anno.vcf.gz`; it contains `SNP-494` and can be region-queried with `bcftools`.
+- Remote WheatOmics merged SNP VCF has 1051 samples, including 827 `WATDE*` samples, so it should be usable with the Watkins TGW phenotype workbook.
+- Extracted a TaGW2-A1 remote SNP micro-VCF (`192` records) to `external_data/wheat_nature_2024/tagw2_remote/TaGW2-A1.remote_wheatomics_237732651_237760058.vcf.gz`; it contains `chr6A:237734341 G>A`.
+- Earlham chr6A INDEL URL currently returns a small HTML `Request Rejected` page rather than gzip data, so it is not safe to start an automated large INDEL download from this machine at this moment.

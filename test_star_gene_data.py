@@ -4,6 +4,7 @@
 from pathlib import Path
 from contextlib import redirect_stdout
 from io import StringIO
+import csv
 import gzip
 import json
 import tempfile
@@ -226,6 +227,48 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertNotIn("-999.0", phenotype_data)
             self.assertIn("S2", phenotype_data)
             self.assertNotIn("S1", hap_samples)
+
+    def test_build_database_from_marker_matrix_reads_long_tsv_with_truncated_sniffer_sample(self):
+        from star_gene_data import build_database_from_marker_matrix
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            marker_path = tmp_path / "markers.tsv"
+            phenotype_path = tmp_path / "phenotypes.tsv"
+            out_root = tmp_path / "db"
+            marker_cols = [f"chr6A_{237732717 + i}" for i in range(190)]
+
+            with marker_path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+                writer.writerow(["SampleID", *marker_cols])
+                writer.writerow(["S1", *(["A"] * len(marker_cols))])
+                writer.writerow(["S2", *(["T"] * len(marker_cols))])
+                writer.writerow(["S3", *(["A"] * len(marker_cols))])
+                writer.writerow(["S4", *(["T"] * len(marker_cols))])
+            with phenotype_path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+                writer.writerow(["SampleID", "Trait"])
+                writer.writerow(["S1", 1.0])
+                writer.writerow(["S2", 2.0])
+                writer.writerow(["S3", 1.5])
+                writer.writerow(["S4", 2.5])
+
+            db_dir = build_database_from_marker_matrix(
+                marker_matrix=marker_path,
+                phenotype_table=phenotype_path,
+                output_root=out_root,
+                target_id="LongHeaderGene",
+                chrom="1",
+                start=1000,
+                end=2000,
+                phenotype_columns=["Trait"],
+                min_haplotype_count=1,
+            )
+
+            self.assertTrue((db_dir / "haplotype_samples.csv").exists())
+            with (db_dir / "variant_info.csv").open() as f:
+                variant_rows = list(csv.DictReader(f))
+            self.assertEqual(len(variant_rows), len(marker_cols))
 
     def test_build_database_infers_sv_length_from_marker_id(self):
         from star_gene_data import build_database_from_marker_matrix
