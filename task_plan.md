@@ -123,3 +123,20 @@ Current TaGW2-A1 audit configuration tracks the Jaiswal promoter SNP group:
 - `Jaiswal_Hap5` = `G/A/G/A` across the four markers
 
 The audit logic reports whether each literature marker is covered by the current database, whether the expected allele or full literature haplotype segregates in the analyzed samples, whether the top-scored haplotype contains it, and a strict `validation_status`. Monomorphic or absent expected alleles are not accepted as validation even if the top haplotype carries the reference/background state.
+
+### Phase 12: Wheat teacher star-gene triage
+Status: complete
+
+Teacher-provided wheat star-gene candidates were audited one by one: Rht1 for plant height, VRN for spring/winter growth habit, GW2 for grain weight, and TaPIF4 for grain weight/height context.
+
+Implemented `prepare_wheat2024_rht1_functional_snps.py` to build Rht-B1b/Rht-D1b functional-SNP positive-control databases from the WheatOmics merged SNP VCF and Watkins CFLN06 plant-height phenotypes. The exact Rht-B1b stop-gained SNP is `chr4B:30861571 C>T` (`c.190C>T`, `p.Gln64*`), and the exact Rht-D1b stop-gained SNP is `chr4D:18781242 G>T` (`c.181G>T`, `p.Glu61*`).
+
+Current Rht1 result: `Rht-B1b` is data-blocked in the Watkins phenotype-overlap samples because the expected T allele has 0 carriers. `Rht-D1b` builds and analyzes, but only 5 carriers are present. The top-scored haplotype (`Hap2`) contains the functional T allele and the direction is lower plant height, but the result is low-confidence (`R^2=0.006`, `P=0.0288`, `PVE=0.61%`), so it is a weak positive control rather than strong proof.
+
+Current VRN result: Watkins has `GrwHabit_E_sw-CFLN06`, but no verified diagnostic VRN structural/CNV marker table is available. VRN is promising only after obtaining `VRN-A1/VRN-B1/VRN-D1` diagnostic marker/SV/CNV genotypes.
+
+Current GW2 result remains unchanged but stricter: TaGW2-A1 shows gene-level signal, yet the exact Jaiswal Hap5 is not validated because `SNP-494 A` is absent in current complete Watkins samples. TaGW2-B1 remains high priority after obtaining the chr6B VCF main file and exact functional marker.
+
+Current TaPIF4 result: the public `QinZhen1995/CAU-TaSG` GitHub repository exposes promoter-haplotype scripts and `samlist`, but not the final per-sample `PIF_hap.txt`, `coverage.martix`, or matching phenotype table. It is not currently suitable as a positive control.
+
+Detailed report: `wheat_star_gene_positive_control_audit.md`.

@@ -1056,6 +1056,110 @@ class StarGeneDataTests(unittest.TestCase):
                 self.assertIn("marker_id", (db_dir / "variant_info.csv").read_text(encoding="utf-8"))
                 self.assertIn("WATDE0001", (db_dir / "haplotype_samples.csv").read_text(encoding="utf-8"))
 
+    def test_wheat_rht1_prepare_builds_functional_snp_databases(self):
+        import pandas as pd
+        from openpyxl import Workbook
+        from prepare_wheat2024_rht1_functional_snps import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vcf_path = tmp_path / "rht1.vcf"
+            vcf_path.write_text(
+                "\n".join([
+                    "##fileformat=VCFv4.2",
+                    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWATDE0001\tWATDE0002\tWATDE0003\tWATDE0004",
+                    "chr4B\t30861571\tchr4B_30861571\tC\tT\t.\t.\tANN=T|stop_gained|HIGH|TraesCS4B01G043100|TraesCS4B01G043100|transcript|TraesCS4B01G043100.1|protein_coding|1/1|c.190C>T|p.Gln64*|190/1866|190/1866|64/621||\tGT\t0/0\t1/1\t1/1\t0/0",
+                    "chr4D\t18781242\tchr4D_18781242\tG\tT\t.\t.\tANN=T|stop_gained|HIGH|TraesCS4D01G040400|TraesCS4D01G040400|transcript|TraesCS4D01G040400.1|protein_coding|1/1|c.181G>T|p.Glu61*|181/1872|181/1872|61/623||\tGT\t0/0\t1/1\t0/0\t1/1",
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+
+            phenotype_xlsx = tmp_path / "phenotypes.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "WGIN_Watkins_JIC_CFLN06"
+            ws.append(["StoreCode", "PH_M_cm-CFLN06", "GrwHabit_E_sw-CFLN06"])
+            ws.append(["WATDE0001", 120, "w"])
+            ws.append(["WATDE0002", 80, "s"])
+            ws.append(["WATDE0003", 85, "s"])
+            ws.append(["WATDE0004", 78, "w"])
+            wb.save(phenotype_xlsx)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            rc = prepare_main([
+                "--vcf", str(vcf_path),
+                "--phenotype-xlsx", str(phenotype_xlsx),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(intermediate_root),
+                "--target", "Rht-B1b",
+                "--target", "Rht-D1b",
+                "--min-haplotype-count", "1",
+            ])
+
+            self.assertEqual(rc, 0)
+            for target_id, marker_id in [
+                ("Rht-B1b", "chr4B_30861571"),
+                ("Rht-D1b", "chr4D_18781242"),
+            ]:
+                db_dir = output_root / target_id
+                self.assertTrue((db_dir / "gene_info.json").exists())
+                gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+                self.assertEqual(gene_info["source"], "wheatomics_remote_rht1_functional_snp_vcf")
+                self.assertIn("PlantHeight_CFLN06", (db_dir / "phenotype_data.csv").read_text(encoding="utf-8"))
+                variant_info = pd.read_csv(db_dir / "variant_info.csv")
+                self.assertEqual(variant_info.loc[0, "marker_id"], marker_id)
+                self.assertEqual(variant_info.loc[0, "annotation"], "stop_gained")
+                self.assertIn("T", (db_dir / "haplotype_data.csv").read_text(encoding="utf-8"))
+
+    def test_wheat_rht1_prepare_continues_when_one_functional_snp_is_not_segregating(self):
+        from openpyxl import Workbook
+        from prepare_wheat2024_rht1_functional_snps import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vcf_path = tmp_path / "rht1.vcf"
+            vcf_path.write_text(
+                "\n".join([
+                    "##fileformat=VCFv4.2",
+                    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWATDE0001\tWATDE0002\tWATDE0003\tWATDE0004",
+                    "chr4B\t30861571\tchr4B_30861571\tC\tT\t.\t.\tANN=T|stop_gained|HIGH|TraesCS4B01G043100|TraesCS4B01G043100|transcript|TraesCS4B01G043100.1|protein_coding|1/1|c.190C>T|p.Gln64*|190/1866|190/1866|64/621||\tGT\t0/0\t0/0\t0/0\t0/0",
+                    "chr4D\t18781242\tchr4D_18781242\tG\tT\t.\t.\tANN=T|stop_gained|HIGH|TraesCS4D01G040400|TraesCS4D01G040400|transcript|TraesCS4D01G040400.1|protein_coding|1/1|c.181G>T|p.Glu61*|181/1872|181/1872|61/623||\tGT\t0/0\t1/1\t0/0\t1/1",
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+
+            phenotype_xlsx = tmp_path / "phenotypes.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "WGIN_Watkins_JIC_CFLN06"
+            ws.append(["StoreCode", "PH_M_cm-CFLN06", "GrwHabit_E_sw-CFLN06"])
+            for sample, height in [
+                ("WATDE0001", 120),
+                ("WATDE0002", 80),
+                ("WATDE0003", 118),
+                ("WATDE0004", 78),
+            ]:
+                ws.append([sample, height, "s"])
+            wb.save(phenotype_xlsx)
+
+            output_root = tmp_path / "db"
+            rc = prepare_main([
+                "--vcf", str(vcf_path),
+                "--phenotype-xlsx", str(phenotype_xlsx),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(tmp_path / "intermediate"),
+                "--target", "Rht-B1b",
+                "--target", "Rht-D1b",
+                "--min-haplotype-count", "1",
+            ])
+
+            self.assertEqual(rc, 0)
+            self.assertFalse((output_root / "Rht-B1b" / "gene_info.json").exists())
+            self.assertTrue((output_root / "Rht-D1b" / "gene_info.json").exists())
+
     def test_tagw2_hap8_maps_published_promoter_offsets_to_refseq_positions(self):
         from analyze_tagw2_hap8_functional_groups import map_promoter_offset_to_position
 

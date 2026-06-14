@@ -287,6 +287,76 @@
           "notes": "Locus/haplotype-level positive control. The minimal first pass uses WWWG2B Figure 3g paper-defined Q7B-PH allele labels and plant-height source data; chr7B VCF extraction remains a later region-level validation."
         },
         {
+          "target_id": "Rht-B1b",
+          "gene_or_locus": "Rht-B1",
+          "target_type": "gene",
+          "aliases": ["TraesCS4B02G043100", "TraesCS4B01G043100", "Rht1", "Rht-B1b"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0 remote merged SNP VCF",
+          "coordinates": {
+            "chrom": "4B",
+            "start": 30861268,
+            "end": 30863723
+          },
+          "required_database_source": "wheatomics_remote_rht1_functional_snp_vcf",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "plant height",
+              "aliases": ["PlantHeight", "PH", "plant_height", "PlantHeight_CFLN06"],
+              "local_columns": ["PlantHeight_CFLN06"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "Rht-B1b_stop_gained",
+              "variant_class": "stop_gained",
+              "chrom": "chr4B",
+              "position": 30861571,
+              "marker_id": "chr4B_30861571",
+              "expected_allele": "T",
+              "source_note": "Canonical semi-dwarf Rht-B1b allele; WheatOmics annotation reports c.190C>T and p.Gln64* in TraesCS4B01G043100."
+            }
+          ],
+          "notes": "Functional-SNP positive control from the Rht-1 DELLA stop-gained allele, prepared by prepare_wheat2024_rht1_functional_snps.py from WheatOmics merged SNP VCF and Watkins CFLN06 plant-height phenotypes."
+        },
+        {
+          "target_id": "Rht-D1b",
+          "gene_or_locus": "Rht-D1",
+          "target_type": "gene",
+          "aliases": ["TraesCS4D02G040400", "TraesCS4D01G040400", "Rht1", "Rht-D1b"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0 remote merged SNP VCF",
+          "coordinates": {
+            "chrom": "4D",
+            "start": 18781062,
+            "end": 18782933
+          },
+          "required_database_source": "wheatomics_remote_rht1_functional_snp_vcf",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "plant height",
+              "aliases": ["PlantHeight", "PH", "plant_height", "PlantHeight_CFLN06"],
+              "local_columns": ["PlantHeight_CFLN06"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "Rht-D1b_stop_gained",
+              "variant_class": "stop_gained",
+              "chrom": "chr4D",
+              "position": 18781242,
+              "marker_id": "chr4D_18781242",
+              "expected_allele": "T",
+              "source_note": "Canonical semi-dwarf Rht-D1b allele; WheatOmics annotation reports c.181G>T and p.Glu61* in TraesCS4D01G040400."
+            }
+          ],
+          "notes": "Functional-SNP positive control from the Rht-1 DELLA stop-gained allele, prepared by prepare_wheat2024_rht1_functional_snps.py from WheatOmics merged SNP VCF and Watkins CFLN06 plant-height phenotypes."
+        },
+        {
           "target_id": "TaGW2-A1",
           "gene_or_locus": "TaGW2-A1",
           "target_type": "gene",
