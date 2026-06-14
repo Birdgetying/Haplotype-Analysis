@@ -572,6 +572,77 @@
           "notes": "TaGW2-B1 remote-SNP positive-control route. The literature natural promoter haplotype is testable only if these three diagnostic promoter SNPs are present and segregating in the current VCF/Watkins overlap."
         },
         {
+          "target_id": "VRN-Kiss2014",
+          "gene_or_locus": "VRN",
+          "target_type": "diagnostic_marker_panel",
+          "aliases": ["VRN1", "VRN-A1", "VRN-B1", "VRN-D1", "Kiss2014-VRN"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Kiss et al. 2014 supplementary diagnostic marker workbook",
+          "coordinates": {
+            "chrom": "diagnostic_marker_panel",
+            "start": 1,
+            "end": 3
+          },
+          "required_database_source": "kiss2014_vrn_diagnostic_markers",
+          "expected_direction": "unknown",
+          "traits": [
+            {
+              "name": "heading date DEV49 mean",
+              "aliases": ["DEV49", "DEV49_mean", "days to heading DEV49"],
+              "local_columns": ["DEV49_mean", "DEV49_2011", "DEV49_2012"],
+              "expected_direction": "unknown"
+            },
+            {
+              "name": "heading date DEV59 mean",
+              "aliases": ["DEV59", "DEV59_mean", "days to heading DEV59"],
+              "local_columns": ["DEV59_mean", "DEV59_2011", "DEV59_2012"],
+              "expected_direction": "unknown"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "VRN-A1_spring_diagnostic_marker",
+              "variant_class": "diagnostic_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 1,
+              "marker_id": "VRN-A1",
+              "expected_allele": "1",
+              "source_note": "Kiss et al. 2014 supplementary workbook encodes VRN-A1 spring/dominant diagnostic state as 1."
+            },
+            {
+              "variant_name": "VRN-B1_spring_diagnostic_marker",
+              "variant_class": "diagnostic_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 2,
+              "marker_id": "VRN-B1",
+              "expected_allele": "1",
+              "source_note": "Kiss et al. 2014 supplementary workbook encodes VRN-B1 spring/dominant diagnostic state as 1."
+            },
+            {
+              "variant_name": "VRN-D1_spring_diagnostic_marker",
+              "variant_class": "diagnostic_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 3,
+              "marker_id": "VRN-D1",
+              "expected_allele": "1",
+              "source_note": "Kiss et al. 2014 supplementary workbook encodes VRN-D1 spring/dominant diagnostic state as 1."
+            }
+          ],
+          "literature_haplotypes": [
+            {
+              "haplotype_name": "Kiss2014_all_three_VRN_spring_states",
+              "variant_class": "diagnostic_marker_haplotype",
+              "expected_markers": {
+                "VRN-A1": "1",
+                "VRN-B1": "1",
+                "VRN-D1": "1"
+              },
+              "source_note": "Diagnostic marker combination carrying spring/dominant states at VRN-A1, VRN-B1, and VRN-D1 in the Kiss et al. 2014 workbook coding."
+            }
+          ],
+          "notes": "Independent VRN positive-control route from Kiss et al. 2014: per-genotype VRN-A1/VRN-B1/VRN-D1 diagnostic marker states plus 2011/2012 heading dates. Prepared by prepare_wheat2024_vrn_kiss2014.py."
+        },
+        {
           "target_id": "TaGW2-D1",
           "gene_or_locus": "TaGW2-D1",
           "target_type": "gene",

@@ -214,6 +214,25 @@ DATA_FILES: List[DataFile] = [
     DataFile(
         paper_id="wheat_nature_2024",
         short_name="wheat2024",
+        key="wheat2024_vrn_kiss2014_supplement",
+        label="Kiss 2014 VRN diagnostic marker supplementary workbook",
+        source=(
+            "https://static-content.springer.com/esm/art%3A10.1007%2Fs11032-014-0034-2/"
+            "MediaObjects/11032_2014_34_MOESM1_ESM.doc"
+        ),
+        local_path="external_data/literature/vrn_kiss2014/11032_2014_34_MOESM1_ESM.doc",
+        size_hint="8,219,648 bytes",
+        is_large=False,
+        default_action="small_direct_download",
+        notes=(
+            "Springer static DOC contains an embedded Excel workbook with 683-genotype "
+            "VRN-A1/VRN-B1/VRN-D1/PPD diagnostic markers and heading phenotypes. "
+            "Use curl -L -C - for resumable download, then extract the embedded Workbook stream."
+        ),
+    ),
+    DataFile(
+        paper_id="wheat_nature_2024",
+        short_name="wheat2024",
         key="wheat2024_ngdc_gsa",
         label="NGDC/GSA raw WGS projects",
         source="PRJCA019636; CRA012590",
@@ -246,6 +265,11 @@ def iter_data_files(paper: Optional[str] = None) -> Iterable[DataFile]:
 def _powershell_download_command(data_file: DataFile) -> str:
     local_path = data_file.normalized_local_path
     parent = str(Path(local_path).parent).replace("\\", "/")
+    if data_file.default_action == "small_direct_download" and "static-content.springer.com" in data_file.source:
+        return (
+            f"New-Item -ItemType Directory -Force -Path '{parent}' | Out-Null; "
+            f"curl.exe -L -C - --retry 20 --retry-delay 20 -o '{local_path}' '{data_file.source}'"
+        )
     if data_file.default_action == "wwwg2b_onedrive_download":
         return (
             f"New-Item -ItemType Directory -Force -Path '{parent}' | Out-Null; "

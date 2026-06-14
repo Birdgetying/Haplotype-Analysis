@@ -19,7 +19,7 @@ If a functional variant is absent, monomorphic, or represented only by a nearby/
 |---|---|---|---|---|
 | Rht1 / Rht-D1b | Plant height | `chr4D:18781242 G>T`, `c.181G>T`, `p.Glu61*`, stop-gained in `TraesCS4D01G040400` | Present in WheatOmics merged SNP VCF; overlaps Watkins CFLN06 plant height for 802 samples, but only 5 carriers | Weak positive control: top-scored haplotype contains the functional T allele and height direction is lower, but carrier count is too small for strong proof |
 | Rht1 / Rht-B1b | Plant height | `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`, stop-gained in `TraesCS4B01G043100` | Present in WheatOmics merged SNP VCF, but 0 T carriers among Watkins phenotype-overlap samples | Data-blocked in Watkins panel; cannot validate scoring with this phenotype set |
-| VRN / spring-winter habit | Growth habit / flowering biology | VRN1 promoter and intron-1 variants, especially large deletions/CNV at `VRN-A1/VRN-B1/VRN-D1` | Watkins workbook has `GrwHabit_E_sw-CFLN06`, but no current diagnostic VRN marker table; ordinary SNP-only region data may miss intron deletion/CNV | Potentially good positive control, but not yet runnable without diagnostic marker/SV/CNV genotype calls |
+| VRN / Kiss2014 | Heading date / flowering biology | Diagnostic spring/dominant marker states at `VRN-A1`, `VRN-B1`, `VRN-D1` from Kiss et al. 2014 | Complete Springer supplement was downloaded and the embedded workbook was converted; 676 samples have VRN diagnostic markers plus DEV49/DEV59 heading dates | Usable but low-confidence positive control: top-scored haplotype `1|1|1` contains all three literature spring states, but it has only 2 samples; strongest stable effect is `VRN-D1=1` (`0|0|1`) with earlier heading |
 | GW2 / TaGW2-A1 | Thousand grain weight | Jaiswal Hap5 promoter group: `SNP-988/SNP-739/SNP-593/SNP-494 = G/A/G/A`, with `SNP-494` as key expression-regulating SNP | Local SNP VCF misses `SNP-494`; remote SNP VCF contains it but Watkins complete samples are all `G` at `SNP-494`, expected `A` carriers = 0 | Gene-level signal exists for TaGW2-A1, but exact functional Hap5 is not validated in current samples |
 | GW2 / TaGW2-B1 | Thousand grain weight | Qin et al. 2014 favorable promoter haplotype `Hap-6B-1`, diagnostic pattern `-1709/-721/-83 = A/G/C` | Functional promoter positions resolved to `chr6B:291759688/291760676/291761314`, but the current WheatOmics remote merged SNP VCF has no usable records for these three sites; local `D:\Desktop\data\GW2` still has chr6B `.csi` only and no chr6B `.vcf.gz` | Data-blocked for exact B1 validation until a chr6B genotype source covering these promoter SNPs is available |
 | TaPIF4 | Heat-related grain size / plant architecture context | Author workflow classifies promoter coverage haplotypes from BAM depth, producing `PIF_hap.txt` | GitHub `QinZhen1995/CAU-TaSG` exposes scripts and `samlist`, not final per-sample `PIF_hap.txt` plus matching TGW/height table | Not suitable as current positive control unless raw BAM-derived coverage matrix or final haplotype table is obtained |
@@ -88,19 +88,37 @@ TaGW2-B1 is still the best GW2 biological target, but current genotype data do n
 
 ## VRN result
 
-Local phenotype status:
-- The Watkins workbook has growth habit in `GrwHabit_E_sw-CFLN06`.
-- Most values are coded strings such as `ssss`, `wwww`, `wwss`, etc., which can be converted to spring/winter or mixed classes after defining a rule.
+Implemented and ran `prepare_wheat2024_vrn_kiss2014.py`.
 
-Data blocker:
-- The important VRN functional variants are often structural or copy-number variants, not just simple SNPs.
-- Current local data do not yet include a diagnostic VRN marker table or verified SV/CNV calls for `VRN-A1/VRN-B1/VRN-D1`.
+Data source:
+- Springer static supplement: `external_data/literature/vrn_kiss2014/11032_2014_34_MOESM1_ESM.doc`.
+- Extracted embedded workbook: `external_data/literature/vrn_kiss2014/Kiss2014_embedded_workbook.xls`.
+- Workbook sheets: `stepwise_reg2011_2012a` for DEV49 and `stepwise_reg2011_2012b` for DEV59.
+- Output database: `star_gene_database/wheat_nature_2024/VRN-Kiss2014`.
+- Output HTML: `star_gene_results/wheat_nature_2024/VRN-Kiss2014/VRN-Kiss2014.html`.
+- Audit CSV: `star_gene_results/wheat_nature_2024/VRN-Kiss2014/literature_variant_audit.csv`.
+
+Observed VRN diagnostic haplotypes:
+
+| Haplotype | VRN state (`A1|B1|D1`) | n | Interpretation |
+|---|---:|---:|---|
+| Hap1 | `0|0|0` | 575 | all three winter/non-dominant diagnostic states |
+| Hap2 | `0|0|1` | 31 | VRN-D1 spring/dominant diagnostic state only |
+| Hap3 | `0|1|0` | 27 | VRN-B1 spring/dominant diagnostic state only |
+| Hap4 | `1|0|0` | 24 | VRN-A1 spring/dominant diagnostic state only |
+| Hap5 | `1|1|0` | 12 | VRN-A1 plus VRN-B1 spring states |
+| Hap6 | `0|1|1` | 5 | VRN-B1 plus VRN-D1 spring states |
+| Hap7 | `1|1|1` | 2 | all three VRN spring states |
+
+Scoring/audit:
+- DEV49_mean: association P `1.01e-05`, PVE `4.83%`, score R² `0.0262`, score P `2.38e-05`, confidence `low`.
+- DEV59_mean: association P `0.00168`, PVE `3.13%`, score R² `0.0147`, score P `0.00159`, confidence `low`.
+- Top-scored haplotype is `Hap7 = 1|1|1`.
+- The literature audit marks `VRN-A1=1`, `VRN-B1=1`, `VRN-D1=1`, and the combined `1|1|1` diagnostic haplotype as `matched_top_haplotype`.
+- The clearest stable phenotype effect is `Hap2 = 0|0|1` (VRN-D1 spring state only): DEV49_mean effect `-3.36` days, P `0.0009`; DEV59_mean effect `-2.98` days, P `0.0022`.
 
 Interpretation:
-VRN is conceptually a strong positive control because the phenotype is categorical and large-effect. It should be the next target only after obtaining diagnostic marker/SV/CNV genotypes.
-
-Potential external route:
-Kiss et al. 2014 used diagnostic molecular markers for `VRN-A1`, `VRN-B1`, `VRN-D1`, `PPD-B1`, and `PPD-D1` in a 683-genotype worldwide wheat collection with heading phenotypes. This could become a strong independent VRN/heading positive control if the supplementary per-genotype marker table can be downloaded and converted. The Springer supplementary DOC download timed out from this machine in the current run, so it is not yet an available dataset.
+VRN-Kiss2014 is a useful positive control for the audit logic and scoring rank: the highest-scored haplotype contains the literature diagnostic spring states. It is not a strong proof by itself because the top all-three-spring haplotype has only 2 samples and the overall score R² is low. If we need a stronger VRN proof, the next refinement should test single-marker/component scores, especially `VRN-D1=1`, or use a population where the diagnostic haplotypes are less rare.
 
 ## TaPIF4 result
 
@@ -117,11 +135,11 @@ TaPIF4 is not currently usable as a clean positive control. It can become usable
 
 ## Ranking for proving scoring effectiveness
 
-1. Rht-D1b: usable but weak; exact functional variant recovered, carrier count too low.
-2. GW2-A1: gene-level signal, but exact published Hap5 not recovered because `SNP-494 A` is absent.
-3. TaGW2-B1: biologically strong and exact promoter haplotype now mapped, but current VCF sources do not cover the three diagnostic SNPs.
-4. VRN: promising, but blocked by missing diagnostic structural/CNV marker calls.
+1. VRN-Kiss2014: usable but still low-confidence; top-scored haplotype contains all three literature diagnostic states, but n=2. The `VRN-D1=1` component has a clearer effect.
+2. Rht-D1b: usable but weak; exact functional variant recovered, carrier count too low.
+3. GW2-A1: gene-level signal, but exact published Hap5 not recovered because `SNP-494 A` is absent.
+4. TaGW2-B1: biologically strong and exact promoter haplotype now mapped, but current VCF sources do not cover the three diagnostic SNPs.
 5. TaPIF4: currently unsuitable, because public data expose scripts rather than the final per-sample haplotype/phenotype table.
 
 Best next data action:
-Obtain a chr6B genotype source covering the TaGW2-B1 promoter diagnostic SNPs, or obtain a per-genotype VRN diagnostic marker table with matching heading/growth-habit phenotype.
+Obtain a chr6B genotype source covering the TaGW2-B1 promoter diagnostic SNPs, or refine VRN-Kiss2014 into marker-component tests so the robust `VRN-D1=1` signal can be compared against full-haplotype scoring.

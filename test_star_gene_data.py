@@ -62,6 +62,9 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("get_download_url_form_onedrive", command_text)
         self.assertIn("Watseq_Figure_3g_NIL_Q7B-PH_field_data.xlsx", command_text)
         self.assertIn("external_data/wheat_nature_2024/wwwg2b/q7b_ph", command_text)
+        self.assertIn("11032_2014_34_MOESM1_ESM.doc", command_text)
+        self.assertIn("static-content.springer.com", command_text)
+        self.assertIn("curl.exe -L -C -", command_text)
 
     def test_summarize_downloads_contains_status_and_target_paths(self):
         from star_gene_data import summarize_downloads
@@ -1159,6 +1162,62 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertFalse((output_root / "Rht-B1b" / "gene_info.json").exists())
             self.assertTrue((output_root / "Rht-D1b" / "gene_info.json").exists())
+
+    def test_wheat_vrn_kiss2014_prepare_builds_diagnostic_marker_database(self):
+        from openpyxl import Workbook
+        from prepare_wheat2024_vrn_kiss2014 import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_path = tmp_path / "kiss2014.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "stepwise_reg2011_2012a"
+            ws.append([
+                "Pedigre", "VRN-A1", "VRN-B1", "VRN-D1", "PPD-D1", "PPDB1",
+                "DEV49_2011", "DEV49_2012",
+            ])
+            ws.append(["WINTER-1", 0, 0, 0, 0, 0, 214, 216])
+            ws.append(["VRND-SPRING", 0, 0, 1, 0, 0, 205, 207])
+            ws.append(["VRNA-SPRING", 1, 0, 0, 0, 0, 212, 211])
+            ws.append(["VRNB-SPRING", 0, 1, 0, 0, 0, 213, 212])
+            ws2 = wb.create_sheet("stepwise_reg2011_2012b")
+            ws2.append([
+                "Pedigre", "VRN-A1", "VRN-B1", "VRN-D1", "PPD-D1", "PPDB1",
+                "DEV59_2011", "DEV59_2012",
+            ])
+            ws2.append(["WINTER-1", 0, 0, 0, 0, 0, 222, 224])
+            ws2.append(["VRND-SPRING", 0, 0, 1, 0, 0, 214, 216])
+            ws2.append(["VRNA-SPRING", 1, 0, 0, 0, 0, 220, 221])
+            ws2.append(["VRNB-SPRING", 0, 1, 0, 0, 0, 221, 220])
+            wb.save(source_path)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            rc = prepare_main([
+                "--source-workbook", str(source_path),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(intermediate_root),
+                "--min-haplotype-count", "1",
+            ])
+
+            self.assertEqual(rc, 0)
+            db_dir = output_root / "VRN-Kiss2014"
+            gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["source"], "kiss2014_vrn_diagnostic_markers")
+            self.assertEqual(gene_info["source_workbook"], str(source_path))
+            self.assertEqual(gene_info["marker_panel"], ["VRN-A1", "VRN-B1", "VRN-D1"])
+            self.assertTrue((intermediate_root / "VRN-Kiss2014" / "marker_matrix.tsv").exists())
+            self.assertTrue((intermediate_root / "VRN-Kiss2014" / "phenotype.tsv").exists())
+
+            variant_info = (db_dir / "variant_info.csv").read_text(encoding="utf-8")
+            self.assertIn("VRN-D1", variant_info)
+            self.assertIn("diagnostic_marker", variant_info)
+            phenotype_data = (db_dir / "phenotype_data.csv").read_text(encoding="utf-8")
+            self.assertIn("DEV49_mean", phenotype_data)
+            self.assertIn("DEV59_mean", phenotype_data)
+            hap_text = (db_dir / "haplotype_data.csv").read_text(encoding="utf-8")
+            self.assertIn("0|0|1", hap_text)
 
     def test_wheat_tagw2_b1_prepare_builds_remote_snp_database(self):
         import pandas as pd
