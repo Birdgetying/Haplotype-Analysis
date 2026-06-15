@@ -357,6 +357,56 @@
           "notes": "Functional-SNP positive control from the Rht-1 DELLA stop-gained allele, prepared by prepare_wheat2024_rht1_functional_snps.py from WheatOmics merged SNP VCF and Watkins CFLN06 plant-height phenotypes."
         },
         {
+          "target_id": "Rht-Zanke2014",
+          "gene_or_locus": "Rht1",
+          "target_type": "diagnostic_marker_panel",
+          "aliases": ["Rht-B1", "Rht-D1", "Rht-B1b", "Rht-D1b", "Zanke2014-Rht"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Zanke et al. 2014 PLOS ONE Table S2",
+          "coordinates": {
+            "chrom": "diagnostic_marker_panel",
+            "start": 1,
+            "end": 2
+          },
+          "required_database_source": "zanke2014_rht_candidate_gene_table_s2",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "plant height BLUE",
+              "aliases": ["PlantHeight_BLUE", "BLUES", "plant_height"],
+              "local_columns": ["PlantHeight_BLUE"],
+              "expected_direction": "decreases_trait"
+            },
+            {
+              "name": "plant height GAT 2012",
+              "aliases": ["PlantHeight_GAT_2012", "GAT_2012"],
+              "local_columns": ["PlantHeight_GAT_2012"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "Rht-B1b_diagnostic_marker",
+              "variant_class": "functional_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 1,
+              "marker_id": "Rht-B1",
+              "expected_allele": "B1b",
+              "source_note": "Zanke et al. 2014 Table S2 encodes the canonical Ellis et al. 2002 Rht-B1b mutant marker as the semi-dwarf Rht-B1 state."
+            },
+            {
+              "variant_name": "Rht-D1b_diagnostic_marker",
+              "variant_class": "functional_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 2,
+              "marker_id": "Rht-D1",
+              "expected_allele": "D1b",
+              "source_note": "Zanke et al. 2014 Table S2 encodes the canonical Ellis et al. 2002 Rht-D1b mutant marker as the semi-dwarf Rht-D1 state."
+            }
+          ],
+          "notes": "External Rht positive-control route from Zanke et al. 2014 PLOS ONE Table S2: per-variety Rht-B1/Rht-D1 candidate-gene marker states and multi-environment plant-height phenotypes. Prepared by prepare_wheat2024_rht_zanke2014.py."
+        },
+        {
           "target_id": "TaGW2-A1",
           "gene_or_locus": "TaGW2-A1",
           "target_type": "gene",
@@ -641,6 +691,129 @@
             }
           ],
           "notes": "Independent VRN positive-control route from Kiss et al. 2014: per-genotype VRN-A1/VRN-B1/VRN-D1 diagnostic marker states plus 2011/2012 heading dates. Prepared by prepare_wheat2024_vrn_kiss2014.py."
+        },
+        {
+          "target_id": "VRN-A1-Kiss2014",
+          "gene_or_locus": "VRN-A1",
+          "target_type": "diagnostic_marker",
+          "aliases": ["VRN-A1", "Kiss2014-VRN-A1"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Kiss et al. 2014 supplementary diagnostic marker workbook",
+          "coordinates": {
+            "chrom": "diagnostic_marker_panel",
+            "start": 1,
+            "end": 1
+          },
+          "required_database_source": "kiss2014_vrn_diagnostic_markers",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date DEV49 mean",
+              "aliases": ["DEV49", "DEV49_mean", "days to heading DEV49"],
+              "local_columns": ["DEV49_mean", "DEV49_2011", "DEV49_2012"],
+              "expected_direction": "decreases_trait"
+            },
+            {
+              "name": "heading date DEV59 mean",
+              "aliases": ["DEV59", "DEV59_mean", "days to heading DEV59"],
+              "local_columns": ["DEV59_mean", "DEV59_2011", "DEV59_2012"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "VRN-A1_spring_diagnostic_marker",
+              "variant_class": "diagnostic_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 1,
+              "marker_id": "VRN-A1",
+              "expected_allele": "1",
+              "source_note": "Kiss et al. 2014 supplementary workbook encodes VRN-A1 spring/dominant diagnostic state as 1."
+            }
+          ],
+          "notes": "Single-marker VRN-A1 validation target from Kiss et al. 2014. Use to separate common single-locus marker effects from the rare all-three-VRN haplotype."
+        },
+        {
+          "target_id": "VRN-B1-Kiss2014",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "diagnostic_marker",
+          "aliases": ["VRN-B1", "Kiss2014-VRN-B1"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Kiss et al. 2014 supplementary diagnostic marker workbook",
+          "coordinates": {
+            "chrom": "diagnostic_marker_panel",
+            "start": 1,
+            "end": 1
+          },
+          "required_database_source": "kiss2014_vrn_diagnostic_markers",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date DEV49 mean",
+              "aliases": ["DEV49", "DEV49_mean", "days to heading DEV49"],
+              "local_columns": ["DEV49_mean", "DEV49_2011", "DEV49_2012"],
+              "expected_direction": "decreases_trait"
+            },
+            {
+              "name": "heading date DEV59 mean",
+              "aliases": ["DEV59", "DEV59_mean", "days to heading DEV59"],
+              "local_columns": ["DEV59_mean", "DEV59_2011", "DEV59_2012"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "VRN-B1_spring_diagnostic_marker",
+              "variant_class": "diagnostic_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 1,
+              "marker_id": "VRN-B1",
+              "expected_allele": "1",
+              "source_note": "Kiss et al. 2014 supplementary workbook encodes VRN-B1 spring/dominant diagnostic state as 1."
+            }
+          ],
+          "notes": "Single-marker VRN-B1 validation target from Kiss et al. 2014. Use to separate common single-locus marker effects from the rare all-three-VRN haplotype."
+        },
+        {
+          "target_id": "VRN-D1-Kiss2014",
+          "gene_or_locus": "VRN-D1",
+          "target_type": "diagnostic_marker",
+          "aliases": ["VRN-D1", "Kiss2014-VRN-D1"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Kiss et al. 2014 supplementary diagnostic marker workbook",
+          "coordinates": {
+            "chrom": "diagnostic_marker_panel",
+            "start": 1,
+            "end": 1
+          },
+          "required_database_source": "kiss2014_vrn_diagnostic_markers",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date DEV49 mean",
+              "aliases": ["DEV49", "DEV49_mean", "days to heading DEV49"],
+              "local_columns": ["DEV49_mean", "DEV49_2011", "DEV49_2012"],
+              "expected_direction": "decreases_trait"
+            },
+            {
+              "name": "heading date DEV59 mean",
+              "aliases": ["DEV59", "DEV59_mean", "days to heading DEV59"],
+              "local_columns": ["DEV59_mean", "DEV59_2011", "DEV59_2012"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "VRN-D1_spring_diagnostic_marker",
+              "variant_class": "diagnostic_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 1,
+              "marker_id": "VRN-D1",
+              "expected_allele": "1",
+              "source_note": "Kiss et al. 2014 supplementary workbook encodes VRN-D1 spring/dominant diagnostic state as 1."
+            }
+          ],
+          "notes": "Single-marker VRN-D1 validation target from Kiss et al. 2014. This is the most stable VRN component in the current marker-panel analysis."
         },
         {
           "target_id": "TaGW2-D1",

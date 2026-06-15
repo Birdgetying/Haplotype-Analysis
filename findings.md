@@ -154,3 +154,10 @@
 - Current weak proof is Rht-D1b: the exact functional stop-gained T allele is recovered by the top haplotype and has the expected shorter-height direction, but only a few carriers overlap the phenotype.
 - VRN-Kiss2014 is marker-level validation, not causal-SV validation. It supports the audit workflow and shows the need to report rare-candidate rank separately from stable-common rank.
 - TaGW2-A1, Rht-B1b, TaGW2-D1, and TaPIF4 do not currently prove scoring effectiveness because the decisive allele is absent, no decisive marker is configured, or final sample-level haplotype/phenotype data are missing.
+
+## Three-Proof Positive-Control Set
+- `TaGW2-B1-remoteSNP__robust_discovery` is proof #1: exact Qin2014 favorable `Hap-6B-1 = A|G|C` is the raw top-ranked robust haplotype with n=371 and audit `matched_top_haplotype`.
+- `VRN-D1-Kiss2014__robust_discovery` is proof #2 at diagnostic-marker level: single-marker `VRN-D1=1` is top-ranked (`Hap2`, n=38), audit `matched_top_haplotype`, with DEV49 score regression P `2.98e-07` and DEV59 P `7.49e-05`.
+- `Rht-Zanke2014__robust_discovery` is proof #3 under direction-aware validation: Zanke et al. 2014 Table S2 provides 368 varieties with Rht-B1/Rht-D1 marker states and plant-height phenotypes. Raw robust top is the high-plant-height wild-type haplotype, but the stable low-phenotype directional top is `Hap1=B1a|D1b` (n=214, BLUE mean `82.540 cm`), and the literature audit now reports `Rht-D1b_diagnostic_marker` as `matched_directional_top_haplotype`.
+- The Rht result is also an algorithmic finding: for decreases-trait genes, raw "highest total score" is not necessarily the desired biological allele. The validation summary now records `directional_top_haplotype` fields, and the literature audit records `directional_validation_status`.
+- TaPIF4 remains blocked. `Supplementary_Data_5_accessions_haplotypes.xlsx` contains 331 accessions and TaPIF4 haplotype labels, but no matching phenotype table. The official `MOESM11` Source Data ZIP is 82,112,605 bytes; repeated curl downloads were incomplete/corrupt in this session, so it was not used as evidence.

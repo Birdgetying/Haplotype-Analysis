@@ -103,6 +103,33 @@ class StarGeneDataTests(unittest.TestCase):
 
         self.assertEqual(args.score_mode, "robust_discovery")
 
+    def test_direction_aware_top_haplotype_uses_expected_decrease(self):
+        from star_gene_validation import StarGeneValidator
+
+        runner = StarGeneValidator(
+            manifest={"papers": []},
+            database_root=Path("star_gene_database"),
+            results_root=Path("star_gene_results"),
+            check_only=True,
+        )
+        score_results = {
+            "per_haplotype": {
+                "TallHap": {"total": 2.0, "mean_phenotype": 100.0},
+                "ShortHap": {"total": 1.0, "mean_phenotype": 80.0},
+                "TinyShortHap": {"total": 3.0, "mean_phenotype": 70.0},
+            },
+            "per_sample": [
+                {"sample_id": "S1", "haplotype": "TallHap", "score": 2.0, "phenotype": 100.0},
+                {"sample_id": "S2", "haplotype": "TallHap", "score": 2.0, "phenotype": 102.0},
+                {"sample_id": "S3", "haplotype": "ShortHap", "score": 1.0, "phenotype": 80.0},
+                {"sample_id": "S4", "haplotype": "ShortHap", "score": 1.0, "phenotype": 78.0},
+                {"sample_id": "S5", "haplotype": "TinyShortHap", "score": 3.0, "phenotype": 70.0},
+            ],
+        }
+
+        self.assertEqual(runner.pick_directional_top_haplotype(score_results, "increases_trait")[0], "TallHap")
+        self.assertEqual(runner.pick_directional_top_haplotype(score_results, "decreases_trait")[0], "ShortHap")
+
     def test_score_tooltips_use_viewport_coordinates(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
@@ -695,6 +722,65 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(row["validation_status"], "matched_top_haplotype")
             self.assertTrue((result_dir / "literature_variant_audit.csv").exists())
             self.assertTrue((result_dir / "literature_variant_audit.json").exists())
+
+    def test_literature_audit_reports_directional_top_match(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "1,D1a,D1b,0,False,0.5,0.0,functional_marker,Rht-D1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "D1a,20,HapTall,D1a\n"
+                "D1b,30,HapShort,D1b\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,D1a,HapTall\n"
+                "S2,D1b,HapShort\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({"Trait": {"per_haplotype": {"HapTall": {"total": 5.0}, "HapShort": {"total": 1.0}}}}),
+                encoding="utf-8",
+            )
+            (result_dir.parent.parent / "validation_summary.csv").parent.mkdir(parents=True, exist_ok=True)
+            (result_dir.parent.parent / "validation_summary.csv").write_text(
+                "target_id,result_path,directional_top_haplotype,directional_top_haplotype_score,directional_top_haplotype_sample_count\n"
+                f"RhtTest,{result_dir},HapShort,1.0,30\n",
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "RhtTest",
+                    "literature_variants": [
+                        {
+                            "variant_name": "Rht-D1b",
+                            "marker_id": "Rht-D1",
+                            "expected_allele": "D1b",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            row = records[0]
+            self.assertEqual(row["validation_status"], "present_but_not_top")
+            self.assertEqual(row["directional_top_haplotype"], "HapShort")
+            self.assertTrue(row["directional_top_haplotype_exact_expected"])
+            self.assertEqual(row["directional_validation_status"], "matched_directional_top_haplotype")
 
     def test_literature_audit_distinguishes_heterozygous_top_variant_match(self):
         from star_gene_literature_audit import run_literature_audit
@@ -1386,6 +1472,57 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertFalse((output_root / "Rht-B1b" / "gene_info.json").exists())
             self.assertTrue((output_root / "Rht-D1b" / "gene_info.json").exists())
 
+    def test_wheat_rht_zanke2014_prepare_builds_external_marker_database(self):
+        import pandas as pd
+        from openpyxl import Workbook
+        from prepare_wheat2024_rht_zanke2014 import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_path = tmp_path / "zanke_table_s2.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Table_S2"
+            ws.append(["Table S2: List of varieties, genotyping data of candidate genes and phenotypic data."])
+            ws.append([None, None, None, "Ellis et al., 2002, TAG", None, "Ellis et al., 2002, TAG"])
+            ws.append([
+                "Variety name", "GW no.", "habit", "Rht-B1", None, "Rht-D1", None,
+                "Rht8", None, None, None, None, None, None, "Ppd-D1 wildtype",
+                "Ppd-D1a mutant", "09.AND.PH", "09.SEL.PH", "09.WOH.PH",
+                "10.AND.PH", "10.JAN.PH", "10.SAU.PH", "10.SEL.PH",
+                "10.WOH.PH", "BLUES", "GAT_2012",
+            ])
+            ws.append([
+                None, None, None, "mutant (dwarfed)", "wild type (tall)",
+                "4D-mutant (DF-MR2)", "4D-wild type (DF2-WR2)",
+            ])
+            ws.append(["Tall1", "GW0001", "winter", None, 1, None, 1, None, None, None, None, None, None, None, 1, None, 110, 112, 108, 111, 109, 113, 107, 110, 110, 111])
+            ws.append(["B1short", "GW0002", "winter", 1, None, None, 1, None, None, None, None, None, None, None, 1, None, 88, 90, 86, 89, 87, 91, 85, 88, 88, 89])
+            ws.append(["D1short", "GW0003", "spring", None, 1, 1, None, None, None, None, None, None, None, None, 1, None, 82, 84, 80, 83, 81, 85, 79, 82, 82, 83])
+            ws.append(["DoubleShort", "GW0004", "spring", 1, None, 1, None, None, None, None, None, None, None, None, 1, None, 70, 72, 68, 71, 69, 73, 67, 70, 70, 71])
+            ws.append(["Sum", None, None, 2, 2, 2, 2])
+            wb.save(source_path)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            rc = prepare_main([
+                "--source-workbook", str(source_path),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(intermediate_root),
+                "--min-haplotype-count", "1",
+            ])
+
+            self.assertEqual(rc, 0)
+            db_dir = output_root / "Rht-Zanke2014"
+            gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["source"], "zanke2014_rht_candidate_gene_table_s2")
+            self.assertEqual(gene_info["marker_panel"], ["Rht-B1", "Rht-D1"])
+            variant_info = pd.read_csv(db_dir / "variant_info.csv")
+            self.assertEqual(variant_info["marker_id"].tolist(), ["Rht-B1", "Rht-D1"])
+            self.assertTrue((variant_info["annotation"] == "functional_marker").all())
+            self.assertIn("PlantHeight_BLUE", (db_dir / "phenotype_data.csv").read_text(encoding="utf-8"))
+            self.assertIn("B1b|Rht-D1a", (db_dir / "haplotype_data.csv").read_text(encoding="utf-8"))
+
     def test_wheat_vrn_kiss2014_prepare_builds_diagnostic_marker_database(self):
         from openpyxl import Workbook
         from prepare_wheat2024_vrn_kiss2014 import main as prepare_main
@@ -1441,6 +1578,112 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("DEV59_mean", phenotype_data)
             hap_text = (db_dir / "haplotype_data.csv").read_text(encoding="utf-8")
             self.assertIn("0|0|1", hap_text)
+
+    def test_wheat_vrn_kiss2014_prepare_builds_single_marker_targets(self):
+        from openpyxl import Workbook
+        from prepare_wheat2024_vrn_kiss2014 import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_path = tmp_path / "kiss2014.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "stepwise_reg2011_2012a"
+            ws.append([
+                "Pedigre", "VRN-A1", "VRN-B1", "VRN-D1", "PPD-D1", "PPDB1",
+                "DEV49_2011", "DEV49_2012",
+            ])
+            ws.append(["WINTER-1", 0, 0, 0, 0, 0, 214, 216])
+            ws.append(["VRND-SPRING", 0, 0, 1, 0, 0, 205, 207])
+            ws.append(["VRNA-SPRING", 1, 0, 0, 0, 0, 212, 211])
+            ws.append(["VRNB-SPRING", 0, 1, 0, 0, 0, 213, 212])
+            ws2 = wb.create_sheet("stepwise_reg2011_2012b")
+            ws2.append([
+                "Pedigre", "VRN-A1", "VRN-B1", "VRN-D1", "PPD-D1", "PPDB1",
+                "DEV59_2011", "DEV59_2012",
+            ])
+            ws2.append(["WINTER-1", 0, 0, 0, 0, 0, 222, 224])
+            ws2.append(["VRND-SPRING", 0, 0, 1, 0, 0, 214, 216])
+            ws2.append(["VRNA-SPRING", 1, 0, 0, 0, 0, 220, 221])
+            ws2.append(["VRNB-SPRING", 0, 1, 0, 0, 0, 221, 220])
+            wb.save(source_path)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            rc = prepare_main([
+                "--source-workbook", str(source_path),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(intermediate_root),
+                "--min-haplotype-count", "1",
+                "--single-marker-targets",
+            ])
+
+            self.assertEqual(rc, 0)
+            for marker in ["VRN-A1", "VRN-B1", "VRN-D1"]:
+                db_dir = output_root / f"{marker}-Kiss2014"
+                self.assertTrue((db_dir / "gene_info.json").exists())
+                gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+                self.assertEqual(gene_info["gene_symbol"], marker)
+                self.assertEqual(gene_info["marker_panel"], [marker])
+                variant_info = (db_dir / "variant_info.csv").read_text(encoding="utf-8")
+                self.assertIn(marker, variant_info)
+                self.assertNotIn("|", (db_dir / "haplotype_data.csv").read_text(encoding="utf-8"))
+
+    def test_precomputed_single_marker_haplotypes_load_as_strings(self):
+        import pandas as pd
+        from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db" / "SingleMarker"
+            db_dir.mkdir(parents=True)
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,maf,missing_rate,len_diff,is_sv,annotation,marker_id\n"
+                "1,0,1,0.25,0,0,False,diagnostic_marker,Marker1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "0,2,Hap1,0\n"
+                "1,2,Hap2,1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,0,Hap1\n"
+                "S2,1,Hap2\n",
+                encoding="utf-8",
+            )
+            (db_dir / "phenotype_data.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name,Trait\n"
+                "S1,0,Hap1,10\n"
+                "S2,1,Hap2,20\n",
+                encoding="utf-8",
+            )
+            (db_dir / "gene_info.json").write_text(
+                json.dumps({"gene_id": "SingleMarker", "chrom": "diagnostic_marker_panel", "start": 1, "end": 1}),
+                encoding="utf-8",
+            )
+
+            analyzer = HaplotypePhenotypeAnalyzer(
+                vcf_file=str(tmp_path / "missing.vcf"),
+                phenotype_file=str(db_dir / "phenotype_data.csv"),
+                output_dir=str(tmp_path / "out"),
+            )
+            analyzer.analyze_gene(
+                chrom="diagnostic_marker_panel",
+                start=1,
+                end=1,
+                gene_id="SingleMarker",
+                phenotype_cols=["Trait"],
+                database_dir=str(tmp_path / "db"),
+            )
+
+            loaded = pd.read_csv(db_dir / "haplotype_samples.csv")
+            self.assertIn(loaded["Haplotype_Seq"].dtype.kind, "iu")
+            self.assertTrue((tmp_path / "out" / "SingleMarker.html").exists())
+            scores = json.loads((tmp_path / "out" / "haplotype_scores.json").read_text(encoding="utf-8"))
+            self.assertIn("Trait", scores)
 
     def test_wheat_tagw2_b1_prepare_builds_remote_snp_database(self):
         import pandas as pd

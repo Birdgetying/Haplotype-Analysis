@@ -71,6 +71,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Minimum sample count for retaining a haplotype")
     parser.add_argument("--include-ppd-in-haplotype", action="store_true",
                         help="Use VRN plus PPD markers for haplotype definition")
+    parser.add_argument("--single-marker-targets", action="store_true",
+                        help="Also build one-marker targets for VRN-A1, VRN-B1, and VRN-D1")
     return parser
 
 
@@ -185,13 +187,15 @@ def update_metadata(
     source_workbook: Path,
     marker_columns: Sequence[str],
     table: pd.DataFrame,
+    target_id: str,
+    gene_symbol: str = "VRN",
 ) -> None:
     gene_info_path = db_dir / "gene_info.json"
     with gene_info_path.open("r", encoding="utf-8") as f:
         gene_info = json.load(f)
     gene_info.update({
-        "gene_id": TARGET_ID,
-        "gene_symbol": "VRN",
+        "gene_id": target_id,
+        "gene_symbol": gene_symbol,
         "chrom": "diagnostic_marker_panel",
         "start": 1,
         "end": len(marker_columns),
@@ -240,6 +244,29 @@ def build_vrn_database(
 ) -> Path:
     table = load_kiss2014_table(source_workbook, dev49_sheet=dev49_sheet, dev59_sheet=dev59_sheet)
     marker_columns = ALL_DIAGNOSTIC_MARKERS if include_ppd_in_haplotype else VRN_MARKERS
+    db_dir = build_vrn_database_from_table(
+        table=table,
+        source_workbook=source_workbook,
+        output_root=output_root,
+        intermediate_root=intermediate_root,
+        target_id=target_id,
+        marker_columns=marker_columns,
+        min_haplotype_count=min_haplotype_count,
+        gene_symbol="VRN",
+    )
+    return db_dir
+
+
+def build_vrn_database_from_table(
+    table: pd.DataFrame,
+    source_workbook: Path,
+    output_root: Path,
+    intermediate_root: Path,
+    target_id: str,
+    marker_columns: Sequence[str],
+    min_haplotype_count: int,
+    gene_symbol: str,
+) -> Path:
     marker_output, phenotype_output = write_precomputed_inputs(
         table=table,
         intermediate_root=intermediate_root,
@@ -262,8 +289,34 @@ def build_vrn_database(
         sample_column="SampleID",
         min_haplotype_count=min_haplotype_count,
     )
-    update_metadata(db_dir, source_workbook, marker_columns, table)
+    update_metadata(db_dir, source_workbook, marker_columns, table, target_id=target_id, gene_symbol=gene_symbol)
     return db_dir
+
+
+def build_single_marker_databases(
+    source_workbook: Path,
+    output_root: Path,
+    intermediate_root: Path,
+    min_haplotype_count: int,
+    dev49_sheet: str = DEV49_SHEET,
+    dev59_sheet: str = DEV59_SHEET,
+) -> list[Path]:
+    table = load_kiss2014_table(source_workbook, dev49_sheet=dev49_sheet, dev59_sheet=dev59_sheet)
+    db_dirs = []
+    for marker in VRN_MARKERS:
+        db_dirs.append(
+            build_vrn_database_from_table(
+                table=table,
+                source_workbook=source_workbook,
+                output_root=output_root,
+                intermediate_root=intermediate_root,
+                target_id=f"{marker}-Kiss2014",
+                marker_columns=[marker],
+                min_haplotype_count=min_haplotype_count,
+                gene_symbol=marker,
+            )
+        )
+    return db_dirs
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -287,6 +340,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"[INFO] Source workbook: {source_workbook}")
     print(f"[INFO] Built {args.target_id}: {variant_rows} markers, {phenotype_rows} samples -> {db_dir}")
     print(f"[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 --target {args.target_id}")
+    if args.single_marker_targets:
+        single_dirs = build_single_marker_databases(
+            source_workbook=source_workbook,
+            output_root=output_root,
+            intermediate_root=intermediate_root,
+            min_haplotype_count=args.min_haplotype_count,
+            dev49_sheet=args.dev49_sheet,
+            dev59_sheet=args.dev59_sheet,
+        )
+        for single_dir in single_dirs:
+            print(f"[INFO] Built single-marker target: {single_dir.name} -> {single_dir}")
+        print("[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 "
+              "--target VRN-A1-Kiss2014 --target VRN-B1-Kiss2014 --target VRN-D1-Kiss2014")
     return 0
 
 

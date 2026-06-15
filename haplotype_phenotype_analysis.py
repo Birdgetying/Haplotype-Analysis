@@ -7369,8 +7369,9 @@ class ReportGenerator:
         
         # ==== 基因结构：使用真实的外显子和 CDS 坐标 ====
         # 计算各区域在 SVG 中的位置
+        region_span = max(1, region_end - region_start)
         def pos_to_x(pos):
-            return gene_area_start + ((pos - region_start) / (region_end - region_start)) * gene_area_width
+            return gene_area_start + ((pos - region_start) / region_span) * gene_area_width
         
         # 基因起止在 SVG 中的位置
         gene_x1 = pos_to_x(g_start)
@@ -7458,7 +7459,7 @@ class ReportGenerator:
         # 斜线从真实位置连到序列列、与老师参考图一致
         var_types_found = set()  # 记录找到的变异类型
         for idx, pos in enumerate(display_positions):
-            rel_pct = (pos - region_start) / (region_end - region_start)
+            rel_pct = (pos - region_start) / region_span
             gene_x = gene_area_start + rel_pct * gene_area_width  # 真实物理位置
             
             # 计算表格中序列列的实际位置
@@ -11726,8 +11727,9 @@ document.addEventListener('keydown', (e) => {{
         exon_h = gene_h
         var_top_y = axis_y - 8
 
+        region_span = max(1, region_end - region_start)
         def pos_to_x(pos):
-            return gene_area_start + ((pos - region_start) / (region_end - region_start)) * gene_area_width
+            return gene_area_start + ((pos - region_start) / region_span) * gene_area_width
 
         gene_x1 = pos_to_x(g_start)
         gene_x2 = pos_to_x(g_end)
@@ -11809,7 +11811,7 @@ document.addEventListener('keydown', (e) => {{
             'INS': '#e74c3c', 'DEL': '#3498db', 'SV': '#e91e63', 'other': '#95a5a6'
         }
         for idx, pos in enumerate(variant_positions):
-            rel_pct = (pos - region_start) / (region_end - region_start)
+            rel_pct = (pos - region_start) / region_span
             gene_x = gene_area_start + rel_pct * gene_area_width
             table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2
             ann = (snp_effects or {}).get(pos, 'other')
@@ -12759,7 +12761,7 @@ class HaplotypePhenotypeAnalyzer:
                 
                 if os.path.exists(hap_sample_path) and os.path.exists(variant_info_path):
                     # 加载单倍型样本数据
-                    hap_sample_df = pd.read_csv(hap_sample_path)
+                    hap_sample_df = pd.read_csv(hap_sample_path, dtype={'Haplotype_Seq': str})
                     # 加载变异信息
                     variant_info_df = pd.read_csv(variant_info_path)
                     
@@ -13298,7 +13300,7 @@ class HaplotypePhenotypeAnalyzer:
                 hap_data_path = os.path.join(gene_db_dir, 'haplotype_data.csv')
                 if os.path.exists(hap_data_path):
                     try:
-                        preloaded_data['hap_df'] = pd.read_csv(hap_data_path)
+                        preloaded_data['hap_df'] = pd.read_csv(hap_data_path, dtype={'Haplotype_Seq': str})
                         logger.info(f"[数据库] 已加载 haplotype_data: {len(preloaded_data['hap_df'])} 个单倍型")
                     except Exception as e:
                         logger.warning(f"[数据库] 加载 haplotype_data 失败: {e}")
@@ -13307,7 +13309,7 @@ class HaplotypePhenotypeAnalyzer:
                 hap_samples_path = os.path.join(gene_db_dir, 'haplotype_samples.csv')
                 if os.path.exists(hap_samples_path):
                     try:
-                        preloaded_data['hap_sample_df'] = pd.read_csv(hap_samples_path)
+                        preloaded_data['hap_sample_df'] = pd.read_csv(hap_samples_path, dtype={'Haplotype_Seq': str})
                         logger.info(f"[数据库] 已加载 haplotype_samples: {len(preloaded_data['hap_sample_df'])} 个样本")
                     except Exception as e:
                         logger.warning(f"[数据库] 加载 haplotype_samples 失败: {e}")

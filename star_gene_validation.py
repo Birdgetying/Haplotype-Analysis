@@ -46,6 +46,8 @@ SUMMARY_COLUMNS = [
     'slope', 'pve', 'confidence_level', 'low_confidence',
     'circularity_warning', 'top_scored_haplotype',
     'top_scored_haplotype_score', 'top_haplotype_sample_count',
+    'directional_top_haplotype', 'directional_top_haplotype_score',
+    'directional_top_haplotype_mean', 'directional_top_haplotype_sample_count',
     'expected_direction', 'direction_consistency', 'data_status',
     'database_path', 'result_path', 'integrated_html', 'haplotype_score_html',
     'analysis_report_html', 'haplotype_score_json_path', 'score_mode', 'notes',
@@ -646,7 +648,7 @@ class StarGeneValidator:
         try:
             from star_gene_literature_audit import run_literature_audit
 
-            records = run_literature_audit(paper, target, database_path, result_path)
+            records = run_literature_audit(paper, target, database_path, result_path, summary_rows=rows)
             note = f'literature_audit_records={len(records)}'
             if records:
                 note += f'; literature_audit={result_path / "literature_variant_audit.csv"}'
@@ -708,6 +710,9 @@ class StarGeneValidator:
             top_count = sum(1 for sample in per_sample if str(sample.get('haplotype')) == str(top_hap))
 
         expected_direction = normalize_direction(trait.get('expected_direction') or target.get('expected_direction'))
+        directional_top_hap, directional_top_score, directional_top_mean, directional_top_count = (
+            self.pick_directional_top_haplotype(score_results, expected_direction)
+        )
         direction_consistency = self.direction_consistency(expected_direction, score_results, top_hap)
 
         integrated_html = result_path / f'{target_id}.html'
@@ -733,6 +738,10 @@ class StarGeneValidator:
             'top_scored_haplotype': top_hap,
             'top_scored_haplotype_score': top_score,
             'top_haplotype_sample_count': top_count,
+            'directional_top_haplotype': directional_top_hap,
+            'directional_top_haplotype_score': directional_top_score,
+            'directional_top_haplotype_mean': directional_top_mean,
+            'directional_top_haplotype_sample_count': directional_top_count,
             'expected_direction': expected_direction,
             'direction_consistency': direction_consistency,
             'integrated_html': str(integrated_html) if integrated_html.exists() else None,
@@ -752,6 +761,58 @@ class StarGeneValidator:
                 best_hap = hap
                 best_score = score
         return best_hap, best_score
+
+    def pick_directional_top_haplotype(self, score_results: Dict[str, Any],
+                                       expected_direction: str) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[int]]:
+        """Pick a phenotype-direction-aware top haplotype without using literature allele labels."""
+        expected_direction = normalize_direction(expected_direction)
+        per_haplotype = score_results.get('per_haplotype') or {}
+        per_sample = score_results.get('per_sample') or []
+        if not per_haplotype:
+            return None, None, None, None
+        if expected_direction == 'unknown':
+            hap, score = self.pick_top_haplotype(per_haplotype)
+            return hap, score, None, None
+
+        stats_by_hap: Dict[str, Dict[str, float]] = {}
+        for sample in per_sample:
+            hap = str(sample.get('haplotype'))
+            pheno = _safe_float(sample.get('phenotype'))
+            if not hap or pheno is None:
+                continue
+            entry = stats_by_hap.setdefault(hap, {'n': 0.0, 'sum': 0.0})
+            entry['n'] += 1.0
+            entry['sum'] += pheno
+
+        candidates: List[Tuple[str, float, float, int]] = []
+        for hap, values in per_haplotype.items():
+            score = _safe_float((values or {}).get('total'))
+            if score is None:
+                continue
+            entry = stats_by_hap.get(str(hap), {})
+            n = int(entry.get('n', 0.0) or 0)
+            if n:
+                mean = float(entry['sum'] / n)
+            else:
+                mean = _safe_float((values or {}).get('mean_phenotype'))
+            if mean is None:
+                continue
+            candidates.append((str(hap), score, mean, n))
+
+        if not candidates:
+            hap, score = self.pick_top_haplotype(per_haplotype)
+            return hap, score, None, None
+        counts = [item[3] for item in candidates if item[3] > 0]
+        if counts:
+            sorted_counts = sorted(counts)
+            median_count = sorted_counts[len(sorted_counts) // 2]
+            min_count = min(10, max(2, median_count))
+            stable_candidates = [item for item in candidates if item[3] >= min_count]
+            if stable_candidates:
+                candidates = stable_candidates
+        if expected_direction == 'decreases_trait':
+            return min(candidates, key=lambda item: (item[2], -item[1]))
+        return max(candidates, key=lambda item: (item[2], item[1]))
 
     def direction_consistency(self, expected_direction: str, score_results: Dict[str, Any],
                               top_hap: Optional[str]) -> str:

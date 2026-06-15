@@ -182,3 +182,23 @@ Updated `star_gene_validation_record.md` with a dedicated checklist that links e
 - TaGW2-A1: Jaiswal Hap5/SNP-494 is not validated because the expected `SNP-494 A` allele is absent in current complete Watkins samples.
 - Rht-B1b: exact stop-gained marker is present in the source VCF but has 0 phenotype-overlap carriers.
 - TaPIF4/TaSG-D1-TaPIF4: literature mechanism and promoter InDel classes were checked, but public GitHub currently exposes scripts/samlist rather than final per-sample promoter haplotypes plus matching phenotypes.
+
+### Phase 16: Three-positive-control proof set and direction-aware validation
+
+Status: complete
+
+Implemented the additional proof route needed for the teacher's "at least 3" requirement and documented the resulting evidence:
+
+- Proof #1 remains `TaGW2-B1-remoteSNP__robust_discovery`: exact Qin2014 `Hap-6B-1=A|G|C` is robust top-ranked and audit-matched.
+- Proof #2 is `VRN-D1-Kiss2014__robust_discovery`: single-marker `VRN-D1=1` is robust top-ranked with significant DEV49/DEV59 heading-date score regressions.
+- Proof #3 is `Rht-Zanke2014__robust_discovery` under direction-aware validation: Zanke et al. 2014 PLOS ONE Table S2 provides Rht-B1/Rht-D1 marker genotypes and plant heights for 368 varieties. The raw top robust score is a high-plant-height wild-type haplotype, but the stable low-phenotype directional top is `Hap1=B1a|D1b` (n=214), and literature audit now marks `Rht-D1b` as `matched_directional_top_haplotype`.
+
+Code changes in this phase:
+
+- Added `prepare_wheat2024_rht_zanke2014.py`.
+- Added manifest target `Rht-Zanke2014`.
+- Added `directional_top_haplotype*` fields to validation summary.
+- Added `directional_validation_status` and related fields to `literature_variant_audit.csv/json`.
+- Added tests for Rht Zanke2014 preparation, direction-aware top selection, and direction-aware literature audit.
+
+TaPIF4 was checked but not used as a proof. `Supplementary_Data_5` has TaPIF4 haplotypes for 331 accessions but no matching phenotype table; the official Source Data ZIP is reachable but downloads were incomplete/corrupt during this session.

@@ -31,6 +31,13 @@ AUDIT_COLUMNS = [
     "top_haplotype_carrier_count",
     "top_haplotype_contains_expected",
     "top_haplotype_exact_expected",
+    "directional_top_haplotype",
+    "directional_top_haplotype_score",
+    "directional_top_haplotype_sample_count",
+    "directional_top_haplotype_carrier_count",
+    "directional_top_haplotype_contains_expected",
+    "directional_top_haplotype_exact_expected",
+    "directional_validation_status",
     "exact_matching_haplotypes",
     "validation_status",
     "covered_marker_count",
@@ -183,6 +190,65 @@ def _pick_top_haplotype(result_path: Path) -> Tuple[Optional[str], Optional[floa
     return best_hap, best_score
 
 
+def _pick_directional_top_haplotype(
+    result_path: Path,
+    target_id: str,
+    summary_rows: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Tuple[Optional[str], Optional[float], Optional[int]]:
+    rows = list(summary_rows or [])
+    if not rows:
+        rows = _read_summary_rows(result_path)
+    return _pick_directional_top_haplotype_from_rows(result_path, target_id, rows)
+
+
+def _read_summary_rows(result_path: Path) -> List[Dict[str, Any]]:
+    summary_path = result_path.parents[1] / "validation_summary.csv"
+    if not summary_path.exists():
+        return []
+    try:
+        with summary_path.open("r", encoding="utf-8", newline="") as f:
+            return list(csv.DictReader(f))
+    except Exception:
+        return []
+
+
+def _pick_directional_top_haplotype_from_rows(
+    result_path: Path,
+    target_id: str,
+    rows: Sequence[Dict[str, Any]],
+) -> Tuple[Optional[str], Optional[float], Optional[int]]:
+
+    best_hap = None
+    best_score = None
+    best_count = None
+    try:
+        result_text = str(result_path.resolve())
+    except Exception:
+        result_text = str(result_path)
+    for row in rows:
+        if str(row.get("target_id") or "") != str(target_id):
+            continue
+        row_result_path = str(row.get("result_path") or "").strip()
+        if row_result_path:
+            try:
+                row_result_path = str(Path(row_result_path).resolve())
+            except Exception:
+                pass
+            if row_result_path != result_text:
+                continue
+        hap = str(row.get("directional_top_haplotype") or "").strip()
+        if not hap:
+            continue
+        score = _safe_float(row.get("directional_top_haplotype_score"))
+        count_value = _safe_float(row.get("directional_top_haplotype_sample_count"))
+        count = int(count_value) if count_value is not None else None
+        if best_hap is None or (count or 0) > (best_count or 0):
+            best_hap = hap
+            best_score = score
+            best_count = count
+    return best_hap, best_score, best_count
+
+
 def _allele_for_marker(alleles: Sequence[str], marker_to_index: Dict[str, int], marker_id: str) -> Optional[str]:
     index = marker_to_index.get(marker_id)
     if index is None or index >= len(alleles):
@@ -197,6 +263,9 @@ def _variant_record(
     context: Dict[str, Any],
     top_hap: Optional[str],
     top_score: Optional[float],
+    directional_top_hap: Optional[str],
+    directional_top_score: Optional[float],
+    directional_top_count: Optional[int],
 ) -> Dict[str, Any]:
     paper_id = paper.get("paper_id") or paper.get("short_name") or ""
     target_id = target.get("target_id") or target.get("gene_or_locus") or ""
@@ -209,6 +278,7 @@ def _variant_record(
     allele_counts: Counter = Counter()
     carrier_count = 0
     top_carrier_count = 0
+    directional_top_carrier_count = 0
     exact_hap_counts: Counter = Counter()
     if covered and expected not in (None, ""):
         for sample_id, alleles in context["sample_alleles"].items():
@@ -220,10 +290,14 @@ def _variant_record(
                 carrier_count += 1
                 if context["sample_haps"].get(sample_id) == top_hap:
                     top_carrier_count += 1
+                if context["sample_haps"].get(sample_id) == directional_top_hap:
+                    directional_top_carrier_count += 1
             if _allele_exactly_matches(observed, expected):
                 exact_hap_counts[context["sample_haps"].get(sample_id)] += 1
 
     top_hap_count = int(context["hap_counts"].get(top_hap, 0)) if top_hap else 0
+    if directional_top_count is None:
+        directional_top_count = int(context["hap_counts"].get(directional_top_hap, 0)) if directional_top_hap else 0
     top_contains = False
     top_exact = False
     if covered and expected not in (None, "") and top_hap:
@@ -234,6 +308,17 @@ def _variant_record(
         )
         top_contains = _allele_matches(top_allele, expected)
         top_exact = _allele_exactly_matches(top_allele, expected)
+
+    directional_top_contains = False
+    directional_top_exact = False
+    if covered and expected not in (None, "") and directional_top_hap:
+        directional_top_allele = _allele_for_marker(
+            context["hap_alleles"].get(directional_top_hap, []),
+            context["marker_to_index"],
+            marker_id,
+        )
+        directional_top_contains = _allele_matches(directional_top_allele, expected)
+        directional_top_exact = _allele_exactly_matches(directional_top_allele, expected)
 
     segregating = len(allele_counts) > 1
     if not covered:
@@ -248,6 +333,15 @@ def _variant_record(
         status = "contained_in_top_haplotype_not_exact"
     else:
         status = "present_but_not_top"
+
+    directional_status = ""
+    if directional_top_hap:
+        if directional_top_exact and segregating:
+            directional_status = "matched_directional_top_haplotype"
+        elif directional_top_contains and segregating:
+            directional_status = "contained_in_directional_top_haplotype_not_exact"
+        elif covered and expected not in (None, "") and segregating:
+            directional_status = "present_but_not_directional_top"
 
     return {
         "record_type": "variant",
@@ -272,6 +366,13 @@ def _variant_record(
         "top_haplotype_carrier_count": top_carrier_count,
         "top_haplotype_contains_expected": top_contains,
         "top_haplotype_exact_expected": top_exact,
+        "directional_top_haplotype": directional_top_hap or "",
+        "directional_top_haplotype_score": directional_top_score if directional_top_score is not None else "",
+        "directional_top_haplotype_sample_count": directional_top_count if directional_top_count is not None else "",
+        "directional_top_haplotype_carrier_count": directional_top_carrier_count,
+        "directional_top_haplotype_contains_expected": directional_top_contains,
+        "directional_top_haplotype_exact_expected": directional_top_exact,
+        "directional_validation_status": directional_status,
         "exact_matching_haplotypes": _format_hap_counts(exact_hap_counts),
         "validation_status": status,
         "covered_marker_count": 1 if covered else 0,
@@ -287,6 +388,9 @@ def _haplotype_record(
     context: Dict[str, Any],
     top_hap: Optional[str],
     top_score: Optional[float],
+    directional_top_hap: Optional[str],
+    directional_top_score: Optional[float],
+    directional_top_count: Optional[int],
 ) -> Dict[str, Any]:
     paper_id = paper.get("paper_id") or paper.get("short_name") or ""
     target_id = target.get("target_id") or target.get("gene_or_locus") or ""
@@ -297,6 +401,7 @@ def _haplotype_record(
 
     carrier_count = 0
     top_carrier_count = 0
+    directional_top_carrier_count = 0
     hap_counts: Counter = Counter()
     exact_hap_counts: Counter = Counter()
     if covered:
@@ -321,10 +426,14 @@ def _haplotype_record(
                 hap_counts[sample_hap] += 1
                 if sample_hap == top_hap:
                     top_carrier_count += 1
+                if sample_hap == directional_top_hap:
+                    directional_top_carrier_count += 1
             if is_exact_carrier:
                 exact_hap_counts[context["sample_haps"].get(sample_id)] += 1
 
     top_hap_count = int(context["hap_counts"].get(top_hap, 0)) if top_hap else 0
+    if directional_top_count is None:
+        directional_top_count = int(context["hap_counts"].get(directional_top_hap, 0)) if directional_top_hap else 0
     top_contains = False
     top_exact = False
     if covered and top_hap:
@@ -344,6 +453,25 @@ def _haplotype_record(
             for marker, expected in expected_markers.items()
         )
 
+    directional_top_contains = False
+    directional_top_exact = False
+    if covered and directional_top_hap:
+        directional_top_alleles = context["hap_alleles"].get(directional_top_hap, [])
+        directional_top_contains = all(
+            _allele_matches(
+                _allele_for_marker(directional_top_alleles, context["marker_to_index"], marker),
+                expected,
+            )
+            for marker, expected in expected_markers.items()
+        )
+        directional_top_exact = all(
+            _allele_exactly_matches(
+                _allele_for_marker(directional_top_alleles, context["marker_to_index"], marker),
+                expected,
+            )
+            for marker, expected in expected_markers.items()
+        )
+
     if not expected_markers:
         status = "not_testable_no_expected_allele"
     elif not covered:
@@ -356,6 +484,15 @@ def _haplotype_record(
         status = "contained_in_top_haplotype_not_exact"
     else:
         status = "present_but_not_top"
+
+    directional_status = ""
+    if directional_top_hap:
+        if directional_top_exact and carrier_count > 0 and carrier_count < len(context["sample_alleles"]):
+            directional_status = "matched_directional_top_haplotype"
+        elif directional_top_contains and carrier_count > 0 and carrier_count < len(context["sample_alleles"]):
+            directional_status = "contained_in_directional_top_haplotype_not_exact"
+        elif covered and carrier_count > 0 and carrier_count < len(context["sample_alleles"]):
+            directional_status = "present_but_not_directional_top"
 
     return {
         "record_type": "haplotype",
@@ -380,6 +517,13 @@ def _haplotype_record(
         "top_haplotype_carrier_count": top_carrier_count,
         "top_haplotype_contains_expected": top_contains,
         "top_haplotype_exact_expected": top_exact,
+        "directional_top_haplotype": directional_top_hap or "",
+        "directional_top_haplotype_score": directional_top_score if directional_top_score is not None else "",
+        "directional_top_haplotype_sample_count": directional_top_count if directional_top_count is not None else "",
+        "directional_top_haplotype_carrier_count": directional_top_carrier_count,
+        "directional_top_haplotype_contains_expected": directional_top_contains,
+        "directional_top_haplotype_exact_expected": directional_top_exact,
+        "directional_validation_status": directional_status,
         "exact_matching_haplotypes": _format_hap_counts(exact_hap_counts),
         "validation_status": status,
         "covered_marker_count": len(expected_markers) - len(missing),
@@ -393,6 +537,7 @@ def run_literature_audit(
     target: Dict[str, Any],
     database_path: Path,
     result_path: Path,
+    summary_rows: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Write literature functional-variant audit files for one target result."""
     variants = list(target.get("literature_variants") or [])
@@ -406,11 +551,21 @@ def run_literature_audit(
 
     context = _load_marker_context(database_path)
     top_hap, top_score = _pick_top_haplotype(result_path)
+    target_id = target.get("target_id") or target.get("gene_or_locus") or ""
+    directional_top_hap, directional_top_score, directional_top_count = (
+        _pick_directional_top_haplotype(result_path, str(target_id), summary_rows=summary_rows)
+    )
     records: List[Dict[str, Any]] = []
     for variant in variants:
-        records.append(_variant_record(paper, target, variant, context, top_hap, top_score))
+        records.append(_variant_record(
+            paper, target, variant, context, top_hap, top_score,
+            directional_top_hap, directional_top_score, directional_top_count,
+        ))
     for haplotype in haplotypes:
-        records.append(_haplotype_record(paper, target, haplotype, context, top_hap, top_score))
+        records.append(_haplotype_record(
+            paper, target, haplotype, context, top_hap, top_score,
+            directional_top_hap, directional_top_score, directional_top_count,
+        ))
 
     csv_path = result_path / "literature_variant_audit.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as f:
