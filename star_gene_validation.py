@@ -307,6 +307,8 @@ class StarGeneValidator:
         entries = merge_path_entries(paper, target)
         database_path = self.database_root / str(paper_id) / str(target_id)
         result_path = self.results_root / str(paper_id) / str(target_id)
+        if self.score_mode != 'default':
+            result_path = result_path.with_name(f"{result_path.name}__{self.score_mode}")
 
         notes: List[str] = []
         missing_required: List[str] = []
@@ -526,12 +528,12 @@ class StarGeneValidator:
     def run_target(self, paper: Dict[str, Any], target: Dict[str, Any], check: Dict[str, Any]) -> List[Dict[str, Any]]:
         if self.check_only:
             return check.get('rows') or [check['row']]
-        if self.score_mode != 'default':
+        if self.score_mode not in ('default', 'robust_discovery'):
             rows = []
             for base_row in check.get('rows') or [check['row']]:
                 row = dict(base_row)
                 row['data_status'] = 'skipped_non_default_score_mode_not_wired'
-                row['notes'] = (row.get('notes') or '') + '; minimal framework does not change HaplotypeScorer formula; use score_mode=default'
+                row['notes'] = (row.get('notes') or '') + '; score mode is not wired for analyzer execution'
                 rows.append(row)
             return rows
         if check['status'] not in ['ready_for_analysis', 'ready_for_analysis_check_only']:
@@ -598,6 +600,7 @@ class StarGeneValidator:
                 phenotype_file=str(pheno_path) if pheno_path and pheno_path.exists() else None,
                 output_dir=str(result_path),
                 gtf_file=str(gtf_path) if gtf_path and gtf_path.exists() else None,
+                score_mode=self.score_mode,
             )
             phenotype_cols = []
             for _, selected_col in selected_traits:
@@ -839,8 +842,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help='placeholder flag for future large downloads; no downloads are implemented in this minimal framework')
     parser.add_argument('--accept-license', action='store_true',
                         help='confirm external data terms before any future download path is enabled')
-    parser.add_argument('--score-mode', choices=['default', 'no_finemap', 'functional_only'], default='default',
-                        help='sensitivity-analysis label; only default is executed by the minimal framework')
+    parser.add_argument('--score-mode', choices=['default', 'no_finemap', 'functional_only', 'robust_discovery'],
+                        default='default',
+                        help='haplotype scoring mode; robust_discovery penalizes tiny/ambiguous haplotypes for discovery ranking')
     parser.add_argument('--print-downloads', action='store_true',
                         help='print lightweight data-source notes and copyable download commands, then exit')
     parser.add_argument('--include-large-downloads', action='store_true',

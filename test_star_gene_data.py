@@ -90,6 +90,19 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("maize2019_sv_382254", stdout.getvalue())
 
+    def test_cli_accepts_robust_discovery_score_mode(self):
+        from star_gene_validation import build_arg_parser
+
+        args = build_arg_parser().parse_args([
+            "--check-only",
+            "--paper",
+            "wheat2024",
+            "--score-mode",
+            "robust_discovery",
+        ])
+
+        self.assertEqual(args.score_mode, "robust_discovery")
+
     def test_score_tooltips_use_viewport_coordinates(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
@@ -106,6 +119,87 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("clientY", block)
             self.assertNotIn("pageX", block)
             self.assertNotIn("pageY", block)
+
+    def test_robust_discovery_penalizes_tiny_ambiguous_haplotypes(self):
+        import pandas as pd
+        from haplotype_phenotype_analysis import HaplotypeScorer
+
+        rows = []
+        rows.extend(
+            {
+                "SampleID": f"H1_{i}",
+                "Hap_Name": "Hap1",
+                "Haplotype_Seq": "A|G|C",
+                "TGW_mean": 41.0 + (0.1 if i % 2 else -0.1),
+            }
+            for i in range(40)
+        )
+        rows.extend(
+            {
+                "SampleID": f"H2_{i}",
+                "Hap_Name": "Hap2",
+                "Haplotype_Seq": "C|G|C",
+                "TGW_mean": 39.0 + (0.1 if i % 2 else -0.1),
+            }
+            for i in range(35)
+        )
+        rows.extend(
+            {
+                "SampleID": f"H5_{i}",
+                "Hap_Name": "Hap5",
+                "Haplotype_Seq": "C/A|G|C",
+                "TGW_mean": 40.6 + (0.1 if i % 2 else -0.1),
+            }
+            for i in range(3)
+        )
+        hap_sample_df = pd.DataFrame(rows)
+        variant_positions = [291759689, 291760677, 291761315]
+        variant_info = {
+            291759689: {"ref": "C", "alt": "A", "maf": 0.48, "annotation": "promoter"},
+            291760677: {"ref": "G", "alt": "A", "maf": 0.01, "annotation": "promoter"},
+            291761315: {"ref": "T", "alt": "C", "maf": 0.47, "annotation": "promoter"},
+        }
+        gwas_data = [
+            {"pos": 291759689, "pvalue": 1e-8},
+            {"pos": 291760677, "pvalue": 1e-4},
+            {"pos": 291761315, "pvalue": 1e-6},
+        ]
+        effect_results = {
+            "haplotype_effects": [
+                {"haplotype": "Hap1", "cohens_d": 0.9, "n_samples": 40},
+                {"haplotype": "Hap2", "cohens_d": 0.4, "n_samples": 35},
+                {"haplotype": "Hap5", "cohens_d": 2.5, "n_samples": 3},
+            ]
+        }
+
+        robust = HaplotypeScorer(
+            hap_sample_df,
+            variant_positions,
+            variant_info=variant_info,
+            snp_effects={pos: "promoter" for pos in variant_positions},
+            gwas_data=gwas_data,
+            effect_results=effect_results,
+            phenotype_col="TGW_mean",
+            score_mode="robust_discovery",
+        ).score_all()
+        default = HaplotypeScorer(
+            hap_sample_df,
+            variant_positions,
+            variant_info=variant_info,
+            snp_effects={pos: "promoter" for pos in variant_positions},
+            gwas_data=gwas_data,
+            effect_results=effect_results,
+            phenotype_col="TGW_mean",
+        ).score_all()
+
+        self.assertEqual(robust["score_mode"], "robust_discovery")
+        self.assertNotIn("sample_reliability", default["per_haplotype"]["Hap5"])
+        self.assertLess(robust["per_haplotype"]["Hap5"]["sample_reliability"], 0.2)
+        self.assertLess(robust["per_haplotype"]["Hap5"]["ambiguity_factor"], 1.0)
+        self.assertGreater(
+            robust["per_haplotype"]["Hap1"]["total"],
+            robust["per_haplotype"]["Hap5"]["total"],
+        )
 
     def test_pca_plot_handles_two_variant_haplotypes(self):
         import pandas as pd

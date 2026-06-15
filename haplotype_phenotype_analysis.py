@@ -4437,13 +4437,37 @@ class HaplotypeScorer:
         'genetic_distinct': 0.5,
     }
 
+    ROBUST_DISCOVERY_COMPONENT_WEIGHTS = {
+        'variant_effect': 0.8,
+        'burden': 0.35,
+        'eb_effect': 0.55,
+        'multi_omics': 0.5,
+        'fine_mapping': 0.6,
+        'effect_size': 1.0,
+        'genetic_distinct': 0.2,
+    }
+    ROBUST_DISCOVERY_RELIABILITY_K = 20.0
+    ROBUST_DISCOVERY_MODES = {'default', 'robust_discovery'}
+    ROBUST_RELIABILITY_COMPONENTS = {
+        'burden', 'eb_effect', 'multi_omics', 'fine_mapping',
+        'effect_size', 'genetic_distinct'
+    }
+    ROBUST_AMBIGUITY_COMPONENTS = {
+        'variant_effect', 'burden', 'eb_effect', 'genetic_distinct'
+    }
+
     def __init__(self, hap_sample_df, variant_positions, variant_info=None,
                  snp_effects=None, gwas_data=None, exons=None, cds=None,
                  gene_start=None, gene_end=None, phenotype_col='phenotype',
                  component_weights=None, maf_threshold=0.05,
                  ld_r2_matrix=None,
                  effect_results=None, promoter_start=None, promoter_end=None,
-                 strand='+', pve=None):
+                 strand='+', pve=None, score_mode='default'):
+        if score_mode not in self.ROBUST_DISCOVERY_MODES:
+            raise ValueError(
+                f"Unsupported score_mode={score_mode!r}; "
+                f"expected one of {sorted(self.ROBUST_DISCOVERY_MODES)}"
+            )
         self.hap_sample_df = hap_sample_df
         self.variant_positions = list(variant_positions) if variant_positions else []
         self.variant_info = variant_info or {}
@@ -4458,7 +4482,13 @@ class HaplotypeScorer:
         self.strand = strand
         self.phenotype_col = phenotype_col
         self.maf_threshold = maf_threshold
-        self.component_weights = component_weights or self.DEFAULT_COMPONENT_WEIGHTS
+        self.score_mode = score_mode
+        if component_weights is not None:
+            self.component_weights = dict(component_weights)
+        elif self.score_mode == 'robust_discovery':
+            self.component_weights = dict(self.ROBUST_DISCOVERY_COMPONENT_WEIGHTS)
+        else:
+            self.component_weights = dict(self.DEFAULT_COMPONENT_WEIGHTS)
         self.ld_r2_matrix = ld_r2_matrix  # n×n LD r² matrix, 与 variant_positions 顺序一致
         self.effect_results = effect_results or {}
         self.pve = pve  # Phenotypic Variance Explained (0-1), 用于置信度校准
@@ -4599,6 +4629,82 @@ class HaplotypeScorer:
                 seq_map[hap] = rows['Haplotype_Seq'].iloc[0].replace('|', '')
         self._cached_seq_map = seq_map
         return seq_map
+
+    def _get_hap_seq_tokens(self):
+        """构建 {hap_name: [allele_token, ...]} 映射，保留 C/A 这类模糊状态。"""
+        if hasattr(self, '_cached_seq_tokens'):
+            return self._cached_seq_tokens
+        seq_tokens = {}
+        if 'Haplotype_Seq' not in self.hap_sample_df.columns:
+            self._cached_seq_tokens = seq_tokens
+            return seq_tokens
+        for hap in self.unique_haps:
+            rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
+            if len(rows) == 0:
+                continue
+            raw_seq = rows['Haplotype_Seq'].iloc[0]
+            if pd.isna(raw_seq):
+                continue
+            seq_tokens[hap] = [tok.strip().upper() for tok in str(raw_seq).split('|')]
+        self._cached_seq_tokens = seq_tokens
+        return seq_tokens
+
+    def _get_hap_counts(self):
+        """返回每个单倍型的样本数。"""
+        if hasattr(self, '_cached_hap_counts'):
+            return self._cached_hap_counts
+        counts = self.hap_sample_df.groupby(self.hap_col).size().to_dict()
+        self._cached_hap_counts = {hap: int(counts.get(hap, 0)) for hap in self.unique_haps}
+        return self._cached_hap_counts
+
+    def _sample_reliability(self, hap):
+        """样本量可靠性，n/(n+k)，用于抑制极小单倍型的发现排名。"""
+        n = self._get_hap_counts().get(hap, 0)
+        k = float(self.ROBUST_DISCOVERY_RELIABILITY_K)
+        return float(n / (n + k)) if n > 0 else 0.0
+
+    @staticmethod
+    def _is_ambiguous_allele_token(token):
+        token = str(token).strip().upper()
+        if not token or token in {'N', '.', 'NA', 'NAN', '?'}:
+            return True
+        if any(sep in token for sep in ['/', '\\', ',', ';']):
+            return True
+        if len(token) > 1 and not (token.startswith('<') and token.endswith('>')):
+            return True
+        return False
+
+    def _ambiguity_factor(self, hap):
+        """模糊/杂合状态惩罚因子，1=无惩罚，越低表示越不可信。"""
+        tokens = self._get_hap_seq_tokens().get(hap, [])
+        if not tokens:
+            return 1.0
+        ambiguous = sum(1 for token in tokens if self._is_ambiguous_allele_token(token))
+        if ambiguous == 0:
+            return 1.0
+        frac = ambiguous / max(len(tokens), 1)
+        return float(max(0.2, 1.0 - 0.8 * frac))
+
+    def _apply_robust_discovery_adjustments(self, norm_components):
+        """发现模式的降噪：样本量可靠性 + 模糊序列惩罚 + 去冗余权重。"""
+        adjusted = {}
+        reliability = {}
+        ambiguity = {}
+        for hap in self.unique_haps:
+            rel = self._sample_reliability(hap)
+            amb = self._ambiguity_factor(hap)
+            reliability[hap] = rel
+            ambiguity[hap] = amb
+        for comp_name, comp_scores in norm_components.items():
+            adjusted[comp_name] = {}
+            for hap, score in comp_scores.items():
+                value = float(score or 0.0)
+                if comp_name in self.ROBUST_RELIABILITY_COMPONENTS:
+                    value *= reliability.get(hap, 1.0)
+                if comp_name in self.ROBUST_AMBIGUITY_COMPONENTS:
+                    value *= ambiguity.get(hap, 1.0)
+                adjusted[comp_name][hap] = value
+        return adjusted, reliability, ambiguity
 
     def _build_ld_blocks(self):
         """构建LD block索引: 将r²≥阈值的位点归入同一block
@@ -5566,15 +5672,22 @@ class HaplotypeScorer:
 
         # Winsorize + MinMax 归一化各组件
         norm_components = {k: self._winsorize_normalize(v) for k, v in raw_components.items()}
+        robust_reliability = {}
+        robust_ambiguity = {}
+        score_components = norm_components
+        if self.score_mode == 'robust_discovery':
+            score_components, robust_reliability, robust_ambiguity = (
+                self._apply_robust_discovery_adjustments(norm_components)
+            )
 
         # 加权求和得到每个单倍型的总分 (不二次归一化)
         hap_total = {}
         for hap in self.unique_haps:
             total = 0.0
             for comp_name in self.component_weights:
-                if comp_name in norm_components:
+                if comp_name in score_components:
                     w = self.component_weights[comp_name]
-                    total += w * norm_components[comp_name].get(hap, 0.0)
+                    total += w * score_components[comp_name].get(hap, 0.0)
             hap_total[hap] = total
 
         # PVE 置信度校准
@@ -5594,10 +5707,15 @@ class HaplotypeScorer:
 
         # 构建 per_haplotype 输出
         per_haplotype = {}
+        hap_counts = self._get_hap_counts()
         for hap in self.unique_haps:
             entry = {}
-            for comp_name in sorted(norm_components.keys()):
-                entry[comp_name] = round(norm_components[comp_name].get(hap, 0), 4)
+            for comp_name in sorted(score_components.keys()):
+                entry[comp_name] = round(score_components[comp_name].get(hap, 0), 4)
+            if self.score_mode == 'robust_discovery':
+                entry['haplotype_sample_count'] = hap_counts.get(hap, 0)
+                entry['sample_reliability'] = round(robust_reliability.get(hap, 1.0), 4)
+                entry['ambiguity_factor'] = round(robust_ambiguity.get(hap, 1.0), 4)
             entry['total'] = round(hap_total.get(hap, 0), 4)
             per_haplotype[hap] = entry
 
@@ -5643,6 +5761,7 @@ class HaplotypeScorer:
             print(f"[WARNING] Possible circularity: PVE={self.pve:.3f}<0.10 but score-phenotype R^2={r_squared:.3f}>0.5")
 
         return {
+            'score_mode': self.score_mode,
             'per_sample': per_sample,
             'per_haplotype': per_haplotype,
             'r_squared': r_squared,
@@ -5688,7 +5807,8 @@ class ReportGenerator:
                                  variant_info: dict = None,
                                  variant_pvalues: dict = None,
                                  effect_results: dict = None,
-                                 all_phenotype_results: dict = None) -> dict:
+                                 all_phenotype_results: dict = None,
+                                 score_mode: str = 'default') -> dict:
         """计算并缓存所有表型的 HaplotypeScorer 输出，不依赖HTML生成。"""
         if hap_sample_df is None or len(hap_sample_df) == 0:
             return {'all_score_data': {}, 'score_results': {},
@@ -5898,7 +6018,8 @@ class ReportGenerator:
                     effect_results=pheno_effect if pheno_effect else effect_results,
                     promoter_start=promoter_start, promoter_end=promoter_end,
                     strand=strand,
-                    pve=pheno_pve
+                    pve=pheno_pve,
+                    score_mode=score_mode,
                 )
                 all_score_data[score_pheno] = scorer.score_all()
             except Exception:
@@ -6794,6 +6915,7 @@ class ReportGenerator:
                 variant_pvalues=variant_pvalues,
                 effect_results=effect_results,
                 all_phenotype_results=all_phenotype_results,
+                score_mode=getattr(self, 'score_mode', 'default'),
             )
             all_score_data = score_bundle.get('all_score_data', {})
         score_results = all_score_data.get(
@@ -12494,18 +12616,21 @@ drawBoxCharts();
 class HaplotypePhenotypeAnalyzer:
     """单倍型-表型关联分析主流程"""
     
-    def __init__(self, vcf_file: str, phenotype_file: str, output_dir: str = None, gtf_file: str = None):
+    def __init__(self, vcf_file: str, phenotype_file: str, output_dir: str = None,
+                 gtf_file: str = None, score_mode: str = 'default'):
         """
         Args:
             vcf_file: VCF文件路径
             phenotype_file: 表型文件路径
             output_dir: 输出目录
             gtf_file: GTF注释文件路径（用于解析外显子/CDS坐标）
+            score_mode: 单倍型评分模式，默认保持历史公式
         """
         self.vcf_file = vcf_file
         self.phenotype_file = phenotype_file
         self.output_dir = output_dir or DataConfig.OUTPUT_DIR
         self.gtf_file = gtf_file or DataConfig.GTF_PATH
+        self.score_mode = score_mode
         
         # 加载表型数据
         self.phenotype_df = self._load_phenotype()
@@ -12520,6 +12645,7 @@ class HaplotypePhenotypeAnalyzer:
             except Exception as e:
                 print(f"[WARNING] 初始化 HaplotypeExtractor 失败: {e}，将依赖数据库数据")
         self.reporter = ReportGenerator(self.output_dir)
+        self.reporter.score_mode = self.score_mode
         
         # 分析结果缓存
         self.hap_df = None
@@ -13797,6 +13923,7 @@ class HaplotypePhenotypeAnalyzer:
                 variant_pvalues=variant_pvalues,
                 effect_results=first_effect,
                 all_phenotype_results=all_results.get('phenotype_results', {}),
+                score_mode=getattr(self, 'score_mode', 'default'),
             )
             all_results['haplotype_scores'] = score_bundle.get('all_score_data', {})
             all_results['haplotype_score_json_path'] = score_bundle.get('score_json_path')

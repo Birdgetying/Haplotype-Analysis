@@ -82,6 +82,7 @@ TaGW2-B1 follow-up:
 - Added `download_wwwg2b_file.py` for resumable WWWG2B downloads and rebuilt `TaGW2-B1-remoteSNP` from the complete chr6B VCF (`2,117,273,732` bytes).
 - Output database: `star_gene_database/wheat_nature_2024/TaGW2-B1-remoteSNP`.
 - Output HTML: `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`.
+- Robust discovery HTML: `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
 - Audit CSV: `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/literature_variant_audit.csv`.
 
 Observed TaGW2-B1 haplotypes:
@@ -97,6 +98,19 @@ Observed TaGW2-B1 haplotypes:
 
 Interpretation:
 TaGW2-B1 is the best current GW2 positive control for biological direction: exact Qin2014 `A|G|C` is a large haplotype and has the highest observed TGW mean among common haplotypes. But the default HaplotypeScorer top rank is rare `Hap5=C/A|G|C`, not exact `A|G|C`. The strict audit marks the Qin2014 haplotype as `contained_in_top_haplotype_not_exact`, with exact matching haplotypes `Hap1:371`. This supports using literature-positive controls, and also shows the scoring rule should penalize tiny heterozygous/ambiguous top-ranked haplotypes before unknown-gene discovery.
+
+Robust discovery rerun:
+
+| Haplotype | Promoter state | n | TGW_mean | Robust score | Reliability | Ambiguity factor |
+|---|---:|---:|---:|---:|---:|---:|
+| Hap1 | `A|G|C` | 371 | 40.970 | 1.8132 | 0.9488 | 1.0000 |
+| Hap2 | `C|G|C` | 364 | 39.049 | 1.2259 | 0.9479 | 1.0000 |
+| Hap5 | `C/A|G|C` | 7 | 39.610 | 0.9733 | 0.2593 | 0.7333 |
+| Hap3 | `C|G|T` | 66 | 34.997 | 0.8220 | 0.7674 | 1.0000 |
+| Hap4 | `C|A|T` | 7 | 42.698 | 0.6665 | 0.2593 | 1.0000 |
+| Hap6 | `A|G|T/C` | 1 | 40.902 | 0.3438 | 0.0476 | 0.7333 |
+
+With `--score-mode robust_discovery`, the top-scored haplotype becomes exact Qin2014 `Hap1=A|G|C`, and `Qin2014_Hap-6B-1` changes to `matched_top_haplotype` in `literature_variant_audit.csv`. This is a stronger proof for using haplotype scoring as a discovery screen because the scoring formula itself still does not use the literature haplotype label.
 
 ## VRN result
 
@@ -154,4 +168,4 @@ TaPIF4 is not currently usable as a clean positive control. It can become usable
 5. TaPIF4: currently unsuitable, because public data expose scripts rather than the final per-sample haplotype/phenotype table.
 
 Best next method action:
-Refine the scorer/audit gate so exact literature haplotype recovery, phenotype direction, and minimum sample count matter more than rare heterozygous/ambiguous top-ranked haplotypes. Then rerun TaGW2-B1, VRN-Kiss2014, and Rht-D1b as the positive-control regression panel.
+Rerun `robust_discovery` on VRN-Kiss2014 and Rht-D1b, then compare default vs robust across the positive-control panel. If robust keeps GW2-B1 correct but suppresses rare true positives too strongly, report separate stable-common and rare-candidate ranks instead of forcing one score to serve both use cases.
