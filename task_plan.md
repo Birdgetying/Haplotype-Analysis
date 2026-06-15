@@ -169,3 +169,16 @@ Implemented `prepare_wheat2024_vrn_kiss2014.py` and manifest target `VRN-Kiss201
 Current VRN result: DEV49_mean association P `1.01e-05`, PVE `4.83%`, score R² `0.0262`, score P `2.38e-05`; DEV59_mean association P `0.00168`, PVE `3.13%`, score R² `0.0147`, score P `0.00159`. The top-scored haplotype is `Hap7 = 1|1|1`, and the literature audit marks all three VRN spring diagnostic states plus the combined `1|1|1` diagnostic haplotype as `matched_top_haplotype`. However, `Hap7` has only 2 samples, so this is a positive algorithmic check but not strong population-statistical proof. The most stable effect is `Hap2 = 0|0|1` (VRN-D1 spring state only), which heads earlier than `Hap1 = 0|0|0` by `-3.36` days for DEV49 and `-2.98` days for DEV59.
 
 Next action: rerun the robust discovery mode on VRN-Kiss2014 and Rht-D1b, then compare default vs robust across the positive-control panel. If robust keeps GW2-B1 correct but over-penalizes rare true positives such as VRN all-spring haplotype, the next refinement should report both a stable common-haplotype rank and a rare-candidate rank instead of forcing one ranking to serve both purposes.
+
+### Phase 15: Literature decisive-variant checklist
+
+Status: complete
+
+Updated `star_gene_validation_record.md` with a dedicated checklist that links each teacher star-gene target to the exact literature validation object and the current score result. The checklist now separates strong proof, weak proof, marker-level proof, and data-blocked cases:
+
+- TaGW2-B1/TaGW2-6B: strongest positive control. Qin2014 `Hap-6B-1` (`A/G/C` at `-1709/-721/-83`) is covered and segregating; robust discovery ranks exact `Hap1=A|G|C` first.
+- Rht-D1b: exact stop-gained `chr4D:18781242 G>T`, `c.181G>T`, `p.Glu61*` is recovered by the top haplotype, but carrier count is too small for strong proof.
+- VRN-Kiss2014: diagnostic marker-level validation only; the exact causal VRN structural variants are not encoded, and robust mode favors the more stable `VRN-D1=1` signal.
+- TaGW2-A1: Jaiswal Hap5/SNP-494 is not validated because the expected `SNP-494 A` allele is absent in current complete Watkins samples.
+- Rht-B1b: exact stop-gained marker is present in the source VCF but has 0 phenotype-overlap carriers.
+- TaPIF4/TaSG-D1-TaPIF4: literature mechanism and promoter InDel classes were checked, but public GitHub currently exposes scripts/samlist rather than final per-sample promoter haplotypes plus matching phenotypes.
