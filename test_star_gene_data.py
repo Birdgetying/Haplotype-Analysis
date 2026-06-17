@@ -147,6 +147,86 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertNotIn("pageX", block)
             self.assertNotIn("pageY", block)
 
+    def test_haplotype_score_html_embeds_default_and_robust_modes(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+
+        def score_bundle(mode, score):
+            return {
+                "score_mode": mode,
+                "per_sample": [
+                    {"sample_id": "S1", "haplotype": "Hap1", "score": score, "phenotype": 10.0},
+                    {"sample_id": "S2", "haplotype": "Hap2", "score": score + 1.0, "phenotype": 12.0},
+                ],
+                "per_haplotype": {
+                    "Hap1": {"total": score, "sample_reliability": 0.9},
+                    "Hap2": {"total": score + 1.0, "sample_reliability": 0.8},
+                },
+                "component_weights": {"variant_effect": 1.0},
+                "r_squared": 0.5,
+                "regression_pvalue": 0.01,
+                "slope": 1.0,
+                "intercept": 9.0,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            robust_dir = Path(tmp) / "GeneA__robust_discovery"
+            default_dir = Path(tmp) / "GeneA"
+            robust_dir.mkdir()
+            default_dir.mkdir()
+            (default_dir / "haplotype_scores.json").write_text(
+                json.dumps({"Trait": score_bundle("default", 1.0)}),
+                encoding="utf-8",
+            )
+
+            generator = ReportGenerator(output_dir=str(robust_dir))
+            generator._cached_all_haplotype_scores = {"Trait": score_bundle("robust_discovery", 2.0)}
+            generator._cached_haplotype_score = generator._cached_all_haplotype_scores["Trait"]
+
+            html_path = generator.generate_haplotype_score_html(gene_id="GeneA", phenotype_col="Trait")
+            html = Path(html_path).read_text(encoding="utf-8")
+
+            self.assertIn("var allScoreModeData", html)
+            self.assertIn('"default"', html)
+            self.assertIn('"robust_discovery"', html)
+            self.assertIn('"current_mode": "robust_discovery"', html)
+            self.assertIn('"score": 2.0', html)
+            self.assertIn('"score": 1.0', html)
+            self.assertIn("switchScoreMode('default')", html)
+            self.assertIn("switchScoreMode('robust_discovery')", html)
+            self.assertIn("mode-toggle-btn", html)
+
+    def test_integrated_html_has_score_mode_toggle_wiring(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("var allScoreModeData", integrated_block)
+        self.assertIn("function switchScoreMode", integrated_block)
+        self.assertIn("switchScoreMode('default')", integrated_block)
+        self.assertIn("switchScoreMode('robust_discovery')", integrated_block)
+        self.assertIn("mode-toggle-btn", integrated_block)
+
+    def test_score_mode_collection_prefers_score_json_over_stale_report_mode(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+
+        with tempfile.TemporaryDirectory() as tmp:
+            generator = ReportGenerator(output_dir=str(Path(tmp) / "GeneA__robust_discovery"))
+            generator.score_mode = "default"
+
+            collected = generator._collect_score_mode_data({
+                "Trait": {
+                    "score_mode": "robust_discovery",
+                    "per_sample": [],
+                    "per_haplotype": {},
+                }
+            })
+
+            self.assertEqual(collected["current_mode"], "robust_discovery")
+            self.assertIn("robust_discovery", collected["modes"])
+            self.assertNotIn("default", collected["modes"])
+
     def test_robust_discovery_penalizes_tiny_ambiguous_haplotypes(self):
         import pandas as pd
         from haplotype_phenotype_analysis import HaplotypeScorer

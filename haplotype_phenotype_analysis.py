@@ -5795,6 +5795,47 @@ class ReportGenerator:
         self._cached_all_haplotype_scores = {}
         self._cached_haplotype_score_json_path = None
 
+    def _collect_score_mode_data(self, all_score_data: dict = None) -> dict:
+        """Collect current and sibling default/robust score JSON for HTML toggles."""
+        current_scores = _json_safe(all_score_data or self._cached_all_haplotype_scores or {})
+        configured_mode = getattr(self, 'score_mode', None)
+        inferred_mode = None
+        if isinstance(current_scores, dict):
+            for score_data in current_scores.values():
+                if isinstance(score_data, dict) and score_data.get('score_mode'):
+                    inferred_mode = score_data.get('score_mode')
+                    break
+        out_dir = os.path.abspath(self.output_dir)
+        base_name = os.path.basename(out_dir)
+        if inferred_mode is None and base_name.endswith('__robust_discovery'):
+            inferred_mode = 'robust_discovery'
+        current_mode = inferred_mode or configured_mode or 'default'
+        mode_data = {current_mode: current_scores}
+
+        parent = os.path.dirname(out_dir)
+        if base_name.endswith('__robust_discovery'):
+            sibling_names = {'default': base_name[:-len('__robust_discovery')]}
+        else:
+            sibling_names = {'robust_discovery': base_name + '__robust_discovery'}
+
+        for mode, sibling_name in sibling_names.items():
+            if mode in mode_data:
+                continue
+            score_path = os.path.join(parent, sibling_name, 'haplotype_scores.json')
+            if not os.path.exists(score_path):
+                continue
+            try:
+                with open(score_path, 'r', encoding='utf-8') as f:
+                    mode_data[mode] = _json_safe(json.load(f))
+            except Exception as e:
+                print(f"[WARNING] Failed to load {mode} score mode data from {score_path}: {e}")
+
+        return {
+            'current_mode': current_mode,
+            'available_modes': sorted(mode_data.keys()),
+            'modes': mode_data,
+        }
+
     def compute_haplotype_scores(self, hap_sample_df: pd.DataFrame,
                                  variant_positions: list,
                                  region_start: int, region_end: int,
@@ -6926,6 +6967,10 @@ class ReportGenerator:
         haplotype_score_json = json.dumps(
             _json_safe(all_score_data), cls=NumpyEncoder, allow_nan=False
         )
+        score_mode_data = self._collect_score_mode_data(all_score_data)
+        score_mode_json = json.dumps(
+            score_mode_data, cls=NumpyEncoder, allow_nan=False
+        )
         # ==================== 评分模型计算结束 ====================
 
         # 准备网络图数据
@@ -7159,6 +7204,13 @@ class ReportGenerator:
         .score-legend-item {{ display: flex; align-items: center; gap: 4px; }}
         .score-legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
         .score-stats {{ font-size: 10px; color: #555; padding: 2px 12px; }}
+        .score-mode-controls {{ display: flex; align-items: center; gap: 6px; padding: 6px 12px 4px; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }}
+        .score-mode-label {{ font-size: 10px; color: #666; font-weight: 600; }}
+        .mode-toggle-btn {{ padding: 4px 10px; border: 1px solid #d8dde3; border-radius: 4px; background: white; color: #4a5568; cursor: pointer; font-size: 10px; }}
+        .mode-toggle-btn:hover:not(:disabled) {{ border-color: #3498db; color: #2475a8; }}
+        .mode-toggle-btn.active {{ background: #3498db; border-color: #3498db; color: white; }}
+        .mode-toggle-btn:disabled {{ background: #f3f4f6; color: #a0a7b0; cursor: not-allowed; }}
+        .score-mode-status {{ font-size: 10px; color: #777; }}
         .ld-right-panel {{ flex: 1; overflow: visible; }}
         .footer {{ background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
                   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
@@ -7747,6 +7799,12 @@ class ReportGenerator:
 	<div class="score-section">
 	    <div class="score-panel" id="haplotype-score-panel">
 	        <div class="score-title">Haplotype Score vs Phenotype</div>
+	        <div class="score-mode-controls">
+	            <span class="score-mode-label">Score mode:</span>
+	            <button id="mode-btn-default" class="mode-toggle-btn" onclick="switchScoreMode('default')">Original</button>
+	            <button id="mode-btn-robust_discovery" class="mode-toggle-btn" onclick="switchScoreMode('robust_discovery')">Robust</button>
+	            <span id="score-mode-status" class="score-mode-status"></span>
+	        </div>
 	        <div id="score-scatter-viz" style="width:100%;height:330px;"></div>
 	        <div class="score-stats" id="score-stats"></div>
 	        <div class="score-legend" id="score-legend"></div>
@@ -7924,7 +7982,10 @@ var networkEdges = {network_edges_json};
 var regionStart  = {region_start};
 var regionEnd    = {region_end};
 var allHaplotypeScoreData = {haplotype_score_json};
-var haplotypeScoreData = allHaplotypeScoreData['{pheno_first_for_js}'];
+var allScoreModeData = {score_mode_json};
+var currentScoreMode = allScoreModeData.current_mode || 'default';
+var currentPhenotype = '{pheno_first_for_js}';
+var haplotypeScoreData = getScoreData(currentScoreMode, currentPhenotype);
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
 var hasPromoter  = {has_promoter_variants_json};
@@ -7943,8 +8004,12 @@ var allPhenoNames = {all_pheno_names_json};
 
 // ==================== 表型切换功能 ====================
 function switchPhenotype(pheno) {{
+    currentPhenotype = pheno;
     // 更新score数据引用
-    if (allHaplotypeScoreData && allHaplotypeScoreData[pheno]) {{
+    var selectedScoreData = getScoreData(currentScoreMode, currentPhenotype);
+    if (selectedScoreData) {{
+        haplotypeScoreData = selectedScoreData;
+    }} else if (allHaplotypeScoreData && allHaplotypeScoreData[pheno]) {{
         haplotypeScoreData = allHaplotypeScoreData[pheno];
     }}
     // 重绘评分图
@@ -7953,6 +8018,39 @@ function switchPhenotype(pheno) {{
     }}
     // 重绘表型列（效应+箱线图）
     renderPhenotypeColumn(pheno);
+}}
+
+function getScoreData(mode, pheno) {{
+    var modeScores = (allScoreModeData && allScoreModeData.modes) ? allScoreModeData.modes[mode] : null;
+    if (!modeScores) return null;
+    return modeScores[pheno] || modeScores[Object.keys(modeScores)[0]] || null;
+}}
+
+function switchScoreMode(mode) {{
+    if (!allScoreModeData || !allScoreModeData.modes || !allScoreModeData.modes[mode]) return;
+    currentScoreMode = mode;
+    var selectedScoreData = getScoreData(currentScoreMode, currentPhenotype);
+    if (selectedScoreData) {{
+        haplotypeScoreData = selectedScoreData;
+        drawHaplotypeScorePlot(haplotypeScoreData);
+    }}
+    updateScoreModeControls();
+}}
+
+function updateScoreModeControls() {{
+    ['default', 'robust_discovery'].forEach(function(mode) {{
+        var btn = document.getElementById('mode-btn-' + mode);
+        if (!btn) return;
+        var available = !!(allScoreModeData && allScoreModeData.modes && allScoreModeData.modes[mode]);
+        btn.disabled = !available;
+        btn.classList.toggle('active', mode === currentScoreMode);
+        btn.title = available ? ('Show ' + mode + ' scoring') : ('Run ' + mode + ' mode to enable this comparison');
+    }});
+    var status = document.getElementById('score-mode-status');
+    if (status) {{
+        var availableModes = allScoreModeData && allScoreModeData.modes ? Object.keys(allScoreModeData.modes) : [];
+        status.textContent = availableModes.length > 1 ? 'Switch updates score plot only.' : 'Other mode unavailable.';
+    }}
 }}
 
 function renderPhenotypeColumn(pheno) {{
@@ -9127,6 +9225,7 @@ function drawGWASPlot(data) {
 function drawHaplotypeScorePlot(scoreData) {
     if (!scoreData || !scoreData.per_sample || scoreData.per_sample.length === 0) {
         console.log('[ScorePlot] No score data available, skipping');
+        updateScoreModeControls();
         return;
     }
 
@@ -9305,6 +9404,7 @@ function drawHaplotypeScorePlot(scoreData) {
     updateScoreLegend(scoreData, hapColor);
     updateScoreStats(scoreData);
     updateScoreTitle(scoreData);
+    updateScoreModeControls();
 }
 
 function updateScoreLegend(scoreData, hapColor) {
@@ -9339,7 +9439,7 @@ function updateScoreStats(scoreData) {
             parts.push(compNames[key] + ': w=' + weights[key].toFixed(1));
         }
     }
-    var statsText = 'Components: ' + parts.join(' | ');
+    var statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode) + ' | Components: ' + parts.join(' | ');
 
     // PVE 置信度标注
     var level = scoreData.confidence_level;
@@ -9368,7 +9468,8 @@ function updateScoreTitle(scoreData) {
     } else if (level === 'high') {
         badge = ' <span style=\'font-size:10px;color:#27ae60;\'>[High Confidence]</span>';
     }
-    titleEl.innerHTML = 'Haplotype Score vs Phenotype' + badge;
+    var modeLabel = scoreData.score_mode || currentScoreMode || 'default';
+    titleEl.innerHTML = 'Haplotype Score vs Phenotype <span style=\'font-size:10px;color:#666;\'>[' + modeLabel + ']</span>' + badge;
 }
 
 function exportSVG() {{
@@ -9493,6 +9594,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{hap_order_cluster}', hap_order_cluster_json)
         html = html.replace('{gwas_data_json}',     gwas_data_json)
         html = html.replace('{haplotype_score_json}', haplotype_score_json)
+        html = html.replace('{score_mode_json}', score_mode_json)
         html = html.replace('{all_pheno_data_for_js}', all_pheno_data_for_js)
         html = html.replace('{all_pheno_names_json}', all_pheno_names_json)
         html = html.replace('{pheno_first_for_js}', pheno_first_for_js)
@@ -12207,7 +12309,15 @@ draw();
             print("[WARNING] 评分数据为空，跳过单倍型评分图生成")
             return ""
 
-        score_json = json.dumps(score_results, cls=NumpyEncoder)
+        all_score_mode_data = self._collect_score_mode_data(
+            getattr(self, '_cached_all_haplotype_scores', {}) or {phenotype_col or 'phenotype': score_results}
+        )
+        score_mode_json = json.dumps(all_score_mode_data, cls=NumpyEncoder, allow_nan=False)
+        current_mode = all_score_mode_data.get('current_mode', score_results.get('score_mode', 'default'))
+        initial_pheno = phenotype_col
+        if not initial_pheno:
+            current_scores = all_score_mode_data.get('modes', {}).get(current_mode, {})
+            initial_pheno = next(iter(current_scores.keys()), 'phenotype') if isinstance(current_scores, dict) else 'phenotype'
         gene_label = gene_id or "Gene"
 
         html = f'''<!DOCTYPE html>
@@ -12229,6 +12339,13 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
 .legend-item {{ display: flex; align-items: center; gap: 4px; }}
 .legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
 .stats-area {{ padding: 8px 20px 16px; font-size: 11px; color: #555; }}
+.mode-switch {{ display: flex; align-items: center; gap: 8px; padding: 12px 20px 0; font-size: 11px; }}
+.mode-switch-label {{ color: #555; font-weight: 600; }}
+.mode-toggle-btn {{ padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff; color: #555; cursor: pointer; font-size: 11px; }}
+.mode-toggle-btn:hover:not(:disabled) {{ border-color: #d35400; color: #d35400; }}
+.mode-toggle-btn.active {{ background: #d35400; border-color: #d35400; color: #fff; }}
+.mode-toggle-btn:disabled {{ background: #f2f2f2; color: #aaa; cursor: not-allowed; }}
+.mode-status {{ color: #777; }}
 .tooltip {{ position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 7px 11px; border-radius: 5px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }}
 </style>
 </head>
@@ -12236,7 +12353,13 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
 <div class="container">
 <div class="header">
     <h1>Haplotype Score vs Phenotype — {gene_label}</h1>
-    <div class="header-info">R² = {score_results.get('r_squared', 'N/A')} | p = {score_results.get('regression_pvalue', 'N/A')}</div>
+    <div class="header-info" id="header-info">R² = {score_results.get('r_squared', 'N/A')} | p = {score_results.get('regression_pvalue', 'N/A')}</div>
+</div>
+<div class="mode-switch">
+    <span class="mode-switch-label">Score mode:</span>
+    <button id="mode-btn-default" class="mode-toggle-btn" onclick="switchScoreMode('default')">Original</button>
+    <button id="mode-btn-robust_discovery" class="mode-toggle-btn" onclick="switchScoreMode('robust_discovery')">Robust</button>
+    <span class="mode-status" id="mode-status"></span>
 </div>
 <div class="plot-container"><div id="score-viz"></div></div>
 <div class="stats-area" id="stats"></div>
@@ -12245,9 +12368,56 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
 <div class="tooltip" id="tooltip"></div>
 
 <script>
-var scoreData = {score_json};
+var allScoreModeData = {score_mode_json};
+var currentScoreMode = allScoreModeData.current_mode || 'default';
+var currentPhenotype = {json.dumps(initial_pheno)};
+var scoreData = getScoreData(currentScoreMode, currentPhenotype);
 
+function getScoreData(mode, pheno) {{
+    var modeScores = (allScoreModeData.modes || {{}})[mode] || {{}};
+    return modeScores[pheno] || modeScores[Object.keys(modeScores)[0]] || null;
+}}
+
+function updateModeButtons() {{
+    ['default', 'robust_discovery'].forEach(function(mode) {{
+        var btn = document.getElementById('mode-btn-' + mode);
+        if (!btn) return;
+        var available = !!((allScoreModeData.modes || {{}})[mode]);
+        btn.disabled = !available;
+        btn.classList.toggle('active', mode === currentScoreMode);
+        btn.title = available ? ('Show ' + mode + ' scoring') : ('Run ' + mode + ' mode to enable this comparison');
+    }});
+    var status = document.getElementById('mode-status');
+    if (status) {{
+        var availableModes = Object.keys(allScoreModeData.modes || {{}});
+        status.textContent = availableModes.length > 1 ? 'Switch updates scores, regression, ranking and tooltips.' : 'Other mode is not available yet.';
+    }}
+}}
+
+function switchScoreMode(mode) {{
+    if (!((allScoreModeData.modes || {{}})[mode])) return;
+    currentScoreMode = mode;
+    scoreData = getScoreData(currentScoreMode, currentPhenotype);
+    renderScorePlot(scoreData);
+}}
+
+function formatMetric(v, digits) {{
+    if (v === null || v === undefined || isNaN(v)) return 'N/A';
+    return Number(v).toPrecision ? Number(v).toPrecision(digits || 4) : String(v);
+}}
+
+function renderScorePlot(scoreData) {{
 var container = d3.select('#score-viz');
+container.selectAll('*').remove();
+if (!scoreData) {{
+    container.append('p').style('color','#999').style('text-align','center').style('padding','60px').text('No score data for this mode');
+    updateModeButtons();
+    return;
+}}
+var headerInfo = document.getElementById('header-info');
+if (headerInfo) {{
+    headerInfo.textContent = 'Mode = ' + (scoreData.score_mode || currentScoreMode) + ' | R² = ' + formatMetric(scoreData.r_squared, 4) + ' | p = ' + formatMetric(scoreData.regression_pvalue, 4);
+}}
 var samples = (scoreData.per_sample || []).filter(function(d) {{
     return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
 }});
@@ -12361,9 +12531,13 @@ if (samples.length < 2) {{
     for (var k in compNames) {{ if (weights[k] !== undefined) parts.push(compNames[k] + ': w=' + weights[k].toFixed(1)); }}
     var statsText = 'Components: ' + parts.join(' | ');
     if (scoreData.pve != null) statsText += ' | PVE=' + (scoreData.pve * 100).toFixed(1) + '%';
+    statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode) + ' | ' + statsText;
     if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
     document.getElementById('stats').textContent = statsText;
+    updateModeButtons();
 }}
+}}
+renderScorePlot(scoreData);
 </script>
 </body>
 </html>'''

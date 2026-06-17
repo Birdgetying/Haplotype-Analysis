@@ -107,6 +107,27 @@ This is the strongest current positive control for the improved discovery
 scoring mode. The scoring formula did not use the literature haplotype label;
 the literature comparison was applied only after ranking.
 
+2026-06-17 report UI rerun:
+Both score modes were rerun to refresh the HTML reports after adding the
+in-page score-mode toggle.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+HTML verification:
+Each integrated report and each standalone `haplotype_score.html` embeds both
+`default` and `robust_discovery` score JSON when the sibling mode result
+directory exists. The default report opens in `default`; the robust report opens
+in `robust_discovery`. Switching changes only the score plot/statistics/title
+and does not use the literature haplotype as a scoring input.
+
 ### VRN-Kiss2014
 
 Literature positive control:
