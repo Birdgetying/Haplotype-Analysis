@@ -221,6 +221,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("Candidate rule", integrated_block)
         self.assertIn("Top local marker", integrated_block)
         self.assertIn("postGwasEvidence", integrated_block)
+        self.assertIn("html = html.replace('{post_gwas_evidence_json}', post_gwas_evidence_json)", integrated_block)
 
     def test_summarize_post_gwas_evidence_uses_local_variant_context(self):
         from haplotype_phenotype_analysis import _summarize_post_gwas_evidence

@@ -128,6 +128,34 @@ directory exists. The default report opens in `default`; the robust report opens
 in `robust_discovery`. Switching changes only the score plot/statistics/title
 and does not use the literature haplotype as a scoring input.
 
+2026-06-20 Post-GWAS evidence panel rerun:
+The integrated HTML was refreshed after adding the local Post-GWAS evidence
+panel. The report generator now embeds `post_gwas_evidence_json` into the
+JavaScript data block, so the panel can render without stopping the downstream
+score-mode JavaScript.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Top-scored haplotypes:
+Default mode still ranks rare ambiguous `Hap5=C/A|G|C` first, n=7, total
+score `4.2581`, so it does not exactly match Qin2014 `Hap-6B-1`.
+Robust mode ranks exact literature `Hap1=A|G|C` first, n=371, total score
+`1.8132`, sample reliability `0.9488`, matching the functional haplotype.
+
+HTML verification:
+Both regenerated integrated reports contain `Local Post-GWAS Evidence`,
+`Strict local support`, the top local marker `6B:291,759,689`, and the
+Original/Robust score-mode controls. Static HTML inspection confirmed no
+unreplaced `{post_gwas_evidence_json}` placeholder remains.
+
 ### VRN-Kiss2014
 
 Literature positive control:

@@ -9848,6 +9848,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{hap_order_count}',   hap_order_count_json)
         html = html.replace('{hap_order_cluster}', hap_order_cluster_json)
         html = html.replace('{gwas_data_json}',     gwas_data_json)
+        html = html.replace('{post_gwas_evidence_json}', post_gwas_evidence_json)
         html = html.replace('{haplotype_score_json}', haplotype_score_json)
         html = html.replace('{score_mode_json}', score_mode_json)
         html = html.replace('{all_pheno_data_for_js}', all_pheno_data_for_js)
