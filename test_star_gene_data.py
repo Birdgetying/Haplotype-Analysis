@@ -223,6 +223,24 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("postGwasEvidence", integrated_block)
         self.assertIn("html = html.replace('{post_gwas_evidence_json}', post_gwas_evidence_json)", integrated_block)
 
+    def test_integrated_post_gwas_panel_is_not_between_gwas_and_gene_structure(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        evidence_idx = integrated_block.index('<section class="post-gwas-evidence"')
+        top_section_idx = integrated_block.index('<div class="top-section">')
+        gene_svg_idx = integrated_block.index('gene-structure-svg')
+
+        self.assertLess(
+            evidence_idx,
+            top_section_idx,
+            "Post-GWAS evidence should sit outside the GWAS-to-gene guide-line corridor.",
+        )
+        self.assertLess(top_section_idx, gene_svg_idx)
+
     def test_summarize_post_gwas_evidence_uses_local_variant_context(self):
         from haplotype_phenotype_analysis import _summarize_post_gwas_evidence
 

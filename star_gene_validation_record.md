@@ -156,6 +156,14 @@ Both regenerated integrated reports contain `Local Post-GWAS Evidence`,
 Original/Robust score-mode controls. Static HTML inspection confirmed no
 unreplaced `{post_gwas_evidence_json}` placeholder remains.
 
+2026-06-20 Post-GWAS evidence layout rerun:
+The same default and robust commands were rerun after moving the evidence
+panel above the network/GWAS row. This keeps the panel outside the
+GWAS-to-gene guide-line corridor, so marker connector lines no longer cross
+the evidence cards. Browser geometry check on the robust report confirmed
+the DOM order `post-gwas-evidence`, `top-section`, `main-data-section`, with
+the evidence panel ending above the GWAS panel.
+
 ### VRN-Kiss2014
 
 Literature positive control:

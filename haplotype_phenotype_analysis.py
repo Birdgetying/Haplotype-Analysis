@@ -7398,7 +7398,7 @@ class ReportGenerator:
                            background: rgba(255,255,255,0.9); padding: 2px 6px;
                            border-radius: 3px; z-index: 1; }}
         .post-gwas-evidence {{ border: 1px solid #dfe6ee; border-radius: 6px; background: #fbfcfe;
-                              padding: 10px 12px; margin-top: 10px; }}
+                              padding: 10px 12px; margin: 0 0 10px 0; }}
         .post-gwas-evidence-head {{ display: flex; align-items: center; justify-content: space-between;
                                    gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }}
         .post-gwas-evidence h2 {{ font-size: 13px; color: #2c3e50; margin: 0; letter-spacing: 0; }}
@@ -7563,19 +7563,6 @@ class ReportGenerator:
     <div class="content-wrapper">
     <div class="content" id="zoomContent">
         <div class="integrated-view">
-            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
-            <div class="top-section">
-                <div class="network-panel">
-                    <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| Click node to copy samples</span></div>
-                    <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">Copy Mode</button>
-                    <div id="network-viz" style="width:100%;height:100%;"></div>
-                </div>
-                <div class="gene-gwas-panel">
-                    <div class="gene-gwas-title">GWAS P-values</div>
-                    <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
-                </div>
-            </div>
-
             <section class="post-gwas-evidence" id="post-gwas-evidence">
                 <div class="post-gwas-evidence-head">
                     <h2>Local Post-GWAS Evidence</h2>
@@ -7609,6 +7596,19 @@ class ReportGenerator:
                 </div>
                 <div class="evidence-note">{rule_note}</div>
             </section>
+
+            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
+            <div class="top-section">
+                <div class="network-panel">
+                    <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| Click node to copy samples</span></div>
+                    <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">Copy Mode</button>
+                    <div id="network-viz" style="width:100%;height:100%;"></div>
+                </div>
+                <div class="gene-gwas-panel">
+                    <div class="gene-gwas-title">GWAS P-values</div>
+                    <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
+                </div>
+            </div>
             
             <!-- 下方区域：原有的效应图、箱线图、单倍型序列 -->
             <div class="main-data-section">
