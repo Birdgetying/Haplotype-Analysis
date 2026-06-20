@@ -164,6 +164,44 @@ the evidence cards. Browser geometry check on the robust report confirmed
 the DOM order `post-gwas-evidence`, `top-section`, `main-data-section`, with
 the evidence panel ending above the GWAS panel.
 
+2026-06-20 GWAS/LD alignment layout rerun:
+The same default and robust commands were rerun after tightening the GWAS
+guide-line and LD-triangle alignment in the integrated HTML. This was a
+layout-only rerun; the discovery scores and literature validation conclusion
+were not changed.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Top-scored haplotypes:
+Default mode still ranks rare ambiguous `Hap5=C/A|G|C` first, n=7, total
+score `4.2581`. Robust mode still ranks exact Qin2014 `Hap1=A|G|C` first,
+n=371, total score `1.8132`, sample reliability `0.9488`, matching the
+functional haplotype.
+
+HTML verification:
+Browser geometry on the robust report showed no remaining `{gwas_*}`
+placeholders and no console errors. The GWAS vertical lines now end at the
+panel bottom within ~1 px, the gene-structure upward guide lines start at the
+GWAS panel bottom instead of crossing above the border, the LD canvas left
+edge matches the first visible sequence column (`0 px` delta), and the LD
+right edge is within `1 px` of the last visible sequence column. The score
+panel now leaves a fixed `15 px` gap before the sequence columns, preventing
+the score chart width from pushing the LD triangle to the right.
+
+Reliability limits:
+The biological validation remains limited to the available 3 promoter SNPs
+and 816 Watkins TGW-overlap samples; the current report still has no external
+GWAS file input. Literature variants are used only for post-ranking audit,
+not as discovery-scoring inputs.
+
 ### VRN-Kiss2014
 
 Literature positive control:

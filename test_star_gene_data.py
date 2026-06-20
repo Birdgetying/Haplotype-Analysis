@@ -241,6 +241,25 @@ class StarGeneDataTests(unittest.TestCase):
         )
         self.assertLess(top_section_idx, gene_svg_idx)
 
+    def test_integrated_report_guide_lines_and_ld_align_to_sequence_columns(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("gwas_bottom_extension = gwas_panel_h - gwas_mt - gwas_i_h", integrated_block)
+        self.assertIn("top_section_to_gene_gap = 10", integrated_block)
+        self.assertIn("up_line_extension = var_top_y + top_section_to_gene_gap", integrated_block)
+        self.assertIn("score_panel_w = max(360, gene_area_start - score_gap)", integrated_block)
+        self.assertIn("flex: 0 0 {score_panel_w}px", integrated_block)
+        self.assertIn("canvasW_screen = Math.max(canvasW_screen, cellW * ncAbs);", integrated_block)
+        self.assertNotIn("canvasW_screen = Math.max(canvasW_screen, 100);", integrated_block)
+        self.assertIn("html = html.replace('{gwas_svg_h}', str(gwas_svg_h))", integrated_block)
+        self.assertIn("html = html.replace('{gwas_mt}', str(gwas_mt))", integrated_block)
+        self.assertIn("html = html.replace('{gwas_mr}', str(gwas_mr))", integrated_block)
+        self.assertIn("html = html.replace('{gwas_mb}', str(gwas_mb))", integrated_block)
+
     def test_summarize_post_gwas_evidence_uses_local_variant_context(self):
         from haplotype_phenotype_analysis import _summarize_post_gwas_evidence
 

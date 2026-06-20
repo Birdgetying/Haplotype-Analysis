@@ -7295,8 +7295,16 @@ class ReportGenerator:
         # GWAS图左边距（GWAS SVG内部基因区域起始的x坐标，固定86与01b88e0对齐公式一致）
         # 对齐公式：network_w + 14(margin-left) + 86(gwasLeftMargin) = gene_area_start
         gwas_left_margin = 86
-        # GWAS图底部连线延伸长度：基于GWAS面板高度(280) - SVG绘图区(180) + 裕量
-        gwas_bottom_extension = 120
+        gwas_panel_h = 280
+        gwas_svg_h = 180
+        gwas_mt = 26
+        gwas_mr = 98
+        gwas_mb = 34
+        gwas_i_h = gwas_svg_h - gwas_mt - gwas_mb
+        # GWAS图底部连线只延伸到GWAS面板底部，避免上下留白不均
+        gwas_bottom_extension = gwas_panel_h - gwas_mt - gwas_i_h
+        score_gap = 15
+        score_panel_w = max(360, gene_area_start - score_gap)
 
         # 网络图面板宽度：随协变量列数扩展，保持 GWAS X 轴与基因结构图对齐
         network_w = 350 + n_cov_cols * 180
@@ -7376,7 +7384,7 @@ class ReportGenerator:
         .integrated-view {{ display: flex; flex-direction: column; gap: 10px; }}
         .top-section {{ display: flex; flex-direction: row; align-items: flex-start; gap: 0; }}
         .main-data-section {{ }}
-        .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: 280px;
+        .network-panel {{ width: {network_w}px; min-width: {network_w}px; height: {gwas_panel_h}px;
                          border: 1px solid #e0e0e0; border-radius: 6px;
                          background: #fafafa; position: relative; overflow: hidden; flex-shrink: 0; }}
         .network-panel-title {{ position: absolute; top: 8px; left: 10px;
@@ -7391,7 +7399,7 @@ class ReportGenerator:
         .network-mode-btn:hover {{ background: #3498db; color: white; }}
         .network-mode-btn.active {{ background: #3498db; color: white; }}
         /* GWAS面板：14px间距 → left edge = network_w+14，内部ml=86 → gene area起始 = network_w+100 = gene_area_start */
-        .gene-gwas-panel {{ flex: 1; height: 280px; margin-left: 14px; border: 1px solid #e0e0e0;
+        .gene-gwas-panel {{ flex: 1; height: {gwas_panel_h}px; margin-left: 14px; border: 1px solid #e0e0e0;
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px;
                            font-size: 12px; font-weight: 600; color: #2c3e50;
@@ -7415,8 +7423,8 @@ class ReportGenerator:
         .evidence-metric strong {{ display: block; font-size: 14px; color: #203040; line-height: 1.25; }}
         .evidence-metric span {{ display: block; font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.35; }}
         .evidence-note {{ font-size: 10px; color: #6b7280; margin-top: 8px; line-height: 1.35; }}
-        .score-section {{ display: flex; gap: 15px; margin-top: 12px; }}
-        .score-panel {{ flex: 0 0 470px; min-width: 470px; border: 1px solid #e0e0e0;
+        .score-section {{ display: flex; gap: {score_gap}px; margin-top: 12px; }}
+        .score-panel {{ flex: 0 0 {score_panel_w}px; min-width: {score_panel_w}px; border: 1px solid #e0e0e0;
             border-radius: 6px; background: #fafafa; padding-bottom: 6px; }}
         .score-title {{ font-size: 12px; font-weight: 600; color: #2c3e50;
             padding: 8px 12px; border-bottom: 1px solid #e8e8e8; }}
@@ -7632,9 +7640,9 @@ class ReportGenerator:
         gene_h = 18       # 基因结构高度
         var_top_y = axis_y - 8   # 变异小竖线顶部 y
         line_end_y = svg_height - 2  # 斜线终点 y（再往下一点，与表格更好地对齐）
-        # 变异向上延伸线长度：基于GWAS面板高度(280px) + 裕量，确保能到达GWAS图区域
-        _gwas_panel_h = 280
-        up_line_extension = _gwas_panel_h + 40
+        # 变异向上延伸线只接到上方GWAS面板底部，避免穿出面板边框
+        top_section_to_gene_gap = 10
+        up_line_extension = var_top_y + top_section_to_gene_gap
                 
         html += f'<svg id="gene-structure-svg" data-gene-start="{gene_area_start}" data-gene-width="{gene_area_width}" width="{svg_width}" height="{svg_height}" style="display:block;margin:0;overflow:visible;">\n'
         
@@ -8804,7 +8812,7 @@ function drawLDTriangle() {
     var canvasH = Math.ceil(paddingTop + (ncAbs - 1) * halfCell + paddingBottom);
 
     var canvasW_screen = Math.ceil(absLastX - absFirstX + cellW);
-    canvasW_screen = Math.max(canvasW_screen, 100);
+    canvasW_screen = Math.max(canvasW_screen, cellW * ncAbs);
 
     // Step C: canvas尺寸必须用CSS像素（屏幕像素/zoomFactor），而非屏幕像素
     // 否则zoom<1时buffer太小→右半菱形被截断
@@ -9308,9 +9316,9 @@ function drawGWASPlot(data) {
     if (!container) return;
     // GWAS图SVG宽度与基因结构图总宽度相同，绘图区域宽度与基因区域宽度一致
     var W = svgTotalWidth || (container.clientWidth || 680);
-    var H = 180;
+    var H = {gwas_svg_h};
     var ml = gwasLeftMargin || 54;  // 左边距 = gene_area_start，与基因结构图基因区域起始对齐
-    var mr = 98, mt = 26, mb = 34;
+    var mr = {gwas_mr}, mt = {gwas_mt}, mb = {gwas_mb};
     var iW = geneAreaWidth || (W - ml - mr);  // 内区宽度 = 基因区域宽度，确保与基因结构图比例一致
     var iH = H - mt - mb;
 
@@ -9867,6 +9875,10 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{gwas_plot_width}',    str(gwas_plot_width))
         html = html.replace('{gwas_left_margin}',   str(gwas_left_margin))
         html = html.replace('{gwas_bottom_extension}', str(gwas_bottom_extension))
+        html = html.replace('{gwas_svg_h}', str(gwas_svg_h))
+        html = html.replace('{gwas_mt}', str(gwas_mt))
+        html = html.replace('{gwas_mr}', str(gwas_mr))
+        html = html.replace('{gwas_mb}', str(gwas_mb))
         _lead_js = str(lead_pos) if lead_pos is not None else "null"
         _exon_json = json.dumps([[int(a[0]), int(a[1])] for a in (exons or [])])
         _glabel = json.dumps(gene_id or chrom or "Gene")
