@@ -91,6 +91,21 @@ def _json_safe(obj):
     return obj
 
 
+def _script_json_dumps(obj) -> str:
+    """Serialize JSON safely for direct embedding inside an inline script."""
+    return json.dumps(_json_safe(obj), cls=NumpyEncoder, allow_nan=False).replace(
+        "<", "\\u003c"
+    ).replace(
+        ">", "\\u003e"
+    ).replace(
+        "&", "\\u0026"
+    ).replace(
+        "\u2028", "\\u2028"
+    ).replace(
+        "\u2029", "\\u2029"
+    )
+
+
 def _safe_str(val, default=''):
     """Convert a potentially NaN (float) value from CSV loading to string."""
     if not isinstance(val, str):
@@ -7127,9 +7142,7 @@ class ReportGenerator:
             promoter_start=promoter_start,
             promoter_end=promoter_end,
         )
-        post_gwas_evidence_json = json.dumps(
-            _json_safe(post_gwas_evidence), cls=NumpyEncoder, allow_nan=False
-        )
+        post_gwas_evidence_json = _script_json_dumps(post_gwas_evidence)
         candidate_rule = post_gwas_evidence.get('candidate_rule', {})
         top_marker = post_gwas_evidence.get('top_marker') or {}
         status_labels = {
@@ -7159,6 +7172,7 @@ class ReportGenerator:
             f"{k}={v}" for k, v in sorted(post_gwas_evidence.get('position_counts', {}).items())
         ) or 'NA'
         gwas_threshold_label = f"{post_gwas_evidence.get('gwas_threshold', 1e-5):.0e}".replace("e-0", "e-").replace("e+0", "e+")
+        evidence_phenotype_label = actual_pheno_col
         rule_note = candidate_rule.get('note', '')
 
         # 准备网络图数据
@@ -7393,7 +7407,7 @@ class ReportGenerator:
         .evidence-badge.strict {{ color: #0f6b4f; background: #e8f7ef; border-color: #bde7d0; }}
         .evidence-badge.diagnostic {{ color: #805200; background: #fff4d8; border-color: #f1d184; }}
         .evidence-badge.muted {{ color: #596575; background: #eef2f6; border-color: #d7dde5; }}
-        .post-gwas-grid {{ display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 8px; }}
+        .post-gwas-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }}
         .evidence-metric {{ min-height: 58px; border: 1px solid #edf1f5; border-radius: 6px;
                            background: white; padding: 8px 9px; }}
         .evidence-metric label {{ display: block; font-size: 9px; color: #7b8794; text-transform: uppercase;
@@ -7564,7 +7578,7 @@ class ReportGenerator:
 
             <section class="post-gwas-evidence" id="post-gwas-evidence">
                 <div class="post-gwas-evidence-head">
-                    <h2>Post-GWAS Evidence</h2>
+                    <h2>Local Post-GWAS Evidence</h2>
                     <span class="evidence-badge {evidence_status_class}">{evidence_status_label}</span>
                 </div>
                 <div class="post-gwas-grid">
@@ -7576,6 +7590,11 @@ class ReportGenerator:
                     <div class="evidence-metric">
                         <label>Top local marker</label>
                         <strong>{top_marker_html}</strong>
+                    </div>
+                    <div class="evidence-metric">
+                        <label>Evidence phenotype</label>
+                        <strong>{evidence_phenotype_label}</strong>
+                        <span>Switching phenotype updates score/effect plots only.</span>
                     </div>
                     <div class="evidence-metric">
                         <label>Variant classes</label>

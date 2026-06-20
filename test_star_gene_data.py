@@ -252,6 +252,30 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(evidence["position_counts"]["body"], 1)
         self.assertEqual(evidence["position_counts"]["outside"], 1)
 
+    def test_script_json_dumps_escapes_script_breakout(self):
+        from haplotype_phenotype_analysis import _script_json_dumps
+
+        dumped = _script_json_dumps({
+            "annotation": "</script><script>alert(1)</script>",
+            "ref": "A&B",
+            "alt": "<DEL>",
+        })
+
+        self.assertNotIn("</script>", dumped.lower())
+        self.assertIn("\\u003c/script\\u003e", dumped)
+        self.assertIn("\\u0026", dumped)
+
+    def test_integrated_post_gwas_panel_labels_bound_phenotype(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("Local Post-GWAS Evidence", integrated_block)
+        self.assertIn("Evidence phenotype", integrated_block)
+        self.assertIn("Switching phenotype updates score/effect plots only", integrated_block)
+
     def test_score_mode_collection_prefers_score_json_over_stale_report_mode(self):
         from haplotype_phenotype_analysis import ReportGenerator
 
