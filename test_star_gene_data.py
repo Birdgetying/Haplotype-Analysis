@@ -208,6 +208,50 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("switchScoreMode('robust_discovery')", integrated_block)
         self.assertIn("mode-toggle-btn", integrated_block)
 
+    def test_integrated_html_has_local_post_gwas_evidence_panel(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("def _summarize_post_gwas_evidence", source)
+        self.assertIn("post-gwas-evidence", integrated_block)
+        self.assertIn("Post-GWAS Evidence", integrated_block)
+        self.assertIn("Candidate rule", integrated_block)
+        self.assertIn("Top local marker", integrated_block)
+        self.assertIn("postGwasEvidence", integrated_block)
+
+    def test_summarize_post_gwas_evidence_uses_local_variant_context(self):
+        from haplotype_phenotype_analysis import _summarize_post_gwas_evidence
+
+        evidence = _summarize_post_gwas_evidence(
+            variant_positions=[90, 110, 206],
+            variant_pvalues={90: 1e-3, 110: 1e-6, 206: 0.2},
+            variant_info={
+                90: {"ref": "A", "alt": "G", "maf": 0.20, "missing_rate": 0.01, "annotation": "promoter"},
+                110: {"ref": "C", "alt": "T", "maf": 0.35, "missing_rate": 0.02, "annotation": "missense"},
+                206: {"ref": "A", "alt": "<DEL>", "is_sv": True, "maf": 0.08, "missing_rate": 0.05},
+            },
+            snp_effects={90: "promoter", 110: "missense", 206: "SV"},
+            gene_start=100,
+            gene_end=200,
+            promoter_start=50,
+            promoter_end=99,
+            flank_bp=5,
+            gwas_threshold=1e-5,
+        )
+
+        self.assertEqual(evidence["top_marker"]["pos"], 110)
+        self.assertEqual(evidence["top_marker"]["candidate_status"], "strict_local_gwas_window")
+        self.assertEqual(evidence["candidate_rule"]["status"], "strict_local_gwas_window")
+        self.assertEqual(evidence["candidate_rule"]["significant_in_window"], 1)
+        self.assertEqual(evidence["variant_type_counts"]["SNP"], 2)
+        self.assertEqual(evidence["variant_type_counts"]["SV"], 1)
+        self.assertEqual(evidence["position_counts"]["promoter"], 1)
+        self.assertEqual(evidence["position_counts"]["body"], 1)
+        self.assertEqual(evidence["position_counts"]["outside"], 1)
+
     def test_score_mode_collection_prefers_score_json_over_stale_report_mode(self):
         from haplotype_phenotype_analysis import ReportGenerator
 

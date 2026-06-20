@@ -2035,6 +2035,150 @@ def compute_variant_phenotype_pvalues(
     return out
 
 
+def _infer_local_variant_type(pos: int, variant_info: dict = None, snp_effects: dict = None) -> str:
+    """Infer a compact SNP/INDEL/SV label from local variant metadata."""
+    variant_info = variant_info or {}
+    snp_effects = snp_effects or {}
+    info = variant_info.get(pos, variant_info.get(str(pos), {})) or {}
+    ann = snp_effects.get(pos, snp_effects.get(str(pos), info.get("annotation", "")))
+    ann_l = str(ann or "").lower()
+
+    if ann_l in ("sv", "del/sv", "cnv", "inv", "bnd"):
+        return "SV"
+    if ann_l in ("indel", "ins", "del", "insertion", "deletion"):
+        return "INDEL"
+
+    ref = _safe_str(info.get("ref", ""))
+    alt = _safe_str(info.get("alt", ""))
+    is_symbolic = alt.startswith("<") and alt.endswith(">")
+    if bool(info.get("is_sv", False)) or is_symbolic:
+        return "SV"
+
+    len_diff = info.get("len_diff", None)
+    try:
+        len_diff = abs(int(len_diff)) if len_diff is not None else abs(len(ref) - len(alt))
+    except (TypeError, ValueError):
+        len_diff = abs(len(ref) - len(alt))
+    if len_diff >= 50:
+        return "SV"
+    if len_diff > 0 or (ref and alt and len(ref) != len(alt)):
+        return "INDEL"
+    return "SNP"
+
+
+def _summarize_post_gwas_evidence(
+    variant_positions: list,
+    variant_pvalues: dict = None,
+    variant_info: dict = None,
+    snp_effects: dict = None,
+    gene_start: int = None,
+    gene_end: int = None,
+    promoter_start: int = None,
+    promoter_end: int = None,
+    flank_bp: int = 5000,
+    gwas_threshold: float = 1e-5,
+) -> dict:
+    """
+    Build a local, reproducible Post-GWAS evidence summary for report display.
+
+    This uses only data already available to the local analysis. It does not call
+    external PostGWAS services and does not feed evidence back into scoring.
+    """
+    variant_pvalues = variant_pvalues or {}
+    variant_info = variant_info or {}
+    snp_effects = snp_effects or {}
+    positions = [int(p) for p in (variant_positions or [])]
+
+    def pvalue_for(pos):
+        val = variant_pvalues.get(pos, variant_pvalues.get(str(pos), 1.0))
+        try:
+            val = float(val)
+        except (TypeError, ValueError):
+            val = 1.0
+        if not np.isfinite(val) or val <= 0:
+            return 1.0
+        return float(np.clip(val, 1e-300, 1.0))
+
+    def context_for(pos):
+        if promoter_start is not None and promoter_end is not None:
+            if min(promoter_start, promoter_end) <= pos <= max(promoter_start, promoter_end):
+                return "promoter"
+        if gene_start is not None and gene_end is not None:
+            if min(gene_start, gene_end) <= pos <= max(gene_start, gene_end):
+                return "body"
+            if min(gene_start, gene_end) - flank_bp <= pos <= max(gene_start, gene_end) + flank_bp:
+                return "flank"
+        return "outside"
+
+    records = []
+    for pos in positions:
+        info = variant_info.get(pos, variant_info.get(str(pos), {})) or {}
+        pval = pvalue_for(pos)
+        vtype = _infer_local_variant_type(pos, variant_info, snp_effects)
+        context = context_for(pos)
+        in_candidate_window = context in ("promoter", "body", "flank")
+        is_significant = pval <= gwas_threshold
+        status = "not_significant"
+        if is_significant and in_candidate_window:
+            status = "strict_local_gwas_window"
+        elif is_significant:
+            status = "diagnostic_local_gwas_outside_window"
+
+        records.append({
+            "pos": pos,
+            "pvalue": pval,
+            "minus_log10_p": float(-np.log10(max(pval, 1e-300))),
+            "variant_type": vtype,
+            "position_context": context,
+            "candidate_status": status,
+            "maf": info.get("maf"),
+            "missing_rate": info.get("missing_rate"),
+            "annotation": snp_effects.get(pos, snp_effects.get(str(pos), info.get("annotation", ""))),
+            "ref": info.get("ref"),
+            "alt": info.get("alt"),
+        })
+
+    variant_type_counts = {}
+    position_counts = {}
+    for rec in records:
+        variant_type_counts[rec["variant_type"]] = variant_type_counts.get(rec["variant_type"], 0) + 1
+        position_counts[rec["position_context"]] = position_counts.get(rec["position_context"], 0) + 1
+
+    significant = [r for r in records if r["pvalue"] <= gwas_threshold]
+    significant_in_window = [
+        r for r in significant
+        if r["position_context"] in ("promoter", "body", "flank")
+    ]
+    top_marker = min(records, key=lambda r: r["pvalue"]) if records else None
+    if significant_in_window:
+        status = "strict_local_gwas_window"
+        note = "Local marker evidence supports the gene/promoter window."
+    elif significant:
+        status = "diagnostic_local_gwas_outside_window"
+        note = "Significant local markers exist, but they fall outside the gene/promoter window."
+    else:
+        status = "no_local_gwas_signal"
+        note = "No local marker passes the configured evidence threshold."
+
+    return {
+        "source": "local_report_inputs",
+        "gwas_threshold": gwas_threshold,
+        "flank_bp": flank_bp,
+        "n_variants": len(records),
+        "n_significant": len(significant),
+        "variant_type_counts": variant_type_counts,
+        "position_counts": position_counts,
+        "top_marker": top_marker,
+        "candidate_rule": {
+            "status": status,
+            "significant_in_window": len(significant_in_window),
+            "significant_total": len(significant),
+            "note": note,
+        },
+        "records": sorted(records, key=lambda r: r["pvalue"])[:20],
+    }
+
+
 def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
     """返回每位样本在 Haplotype_Seq 第 idx 个位点的碱基字符（object 数组）。"""
     out = np.empty(len(merged_df), dtype=object)
@@ -6973,6 +7117,50 @@ class ReportGenerator:
         )
         # ==================== 评分模型计算结束 ====================
 
+        post_gwas_evidence = _summarize_post_gwas_evidence(
+            variant_positions=display_positions,
+            variant_pvalues=variant_pvalues,
+            variant_info=variant_info,
+            snp_effects=snp_effects,
+            gene_start=g_start,
+            gene_end=g_end,
+            promoter_start=promoter_start,
+            promoter_end=promoter_end,
+        )
+        post_gwas_evidence_json = json.dumps(
+            _json_safe(post_gwas_evidence), cls=NumpyEncoder, allow_nan=False
+        )
+        candidate_rule = post_gwas_evidence.get('candidate_rule', {})
+        top_marker = post_gwas_evidence.get('top_marker') or {}
+        status_labels = {
+            'strict_local_gwas_window': 'Strict local support',
+            'diagnostic_local_gwas_outside_window': 'Diagnostic outside window',
+            'no_local_gwas_signal': 'No local signal',
+        }
+        evidence_status = candidate_rule.get('status', 'no_local_gwas_signal')
+        evidence_status_label = status_labels.get(evidence_status, evidence_status)
+        evidence_status_class = (
+            'strict' if evidence_status == 'strict_local_gwas_window'
+            else 'diagnostic' if evidence_status == 'diagnostic_local_gwas_outside_window'
+            else 'muted'
+        )
+        top_marker_html = (
+            f"{chrom}:{int(top_marker.get('pos')):,} "
+            f"<span>{top_marker.get('variant_type', 'NA')} · "
+            f"P={top_marker.get('pvalue', 1.0):.2e} · "
+            f"{top_marker.get('position_context', 'NA')}</span>"
+            if top_marker else
+            "No marker data <span>Local per-position tests were not available.</span>"
+        )
+        variant_type_summary = ', '.join(
+            f"{k}={v}" for k, v in sorted(post_gwas_evidence.get('variant_type_counts', {}).items())
+        ) or 'NA'
+        position_summary = ', '.join(
+            f"{k}={v}" for k, v in sorted(post_gwas_evidence.get('position_counts', {}).items())
+        ) or 'NA'
+        gwas_threshold_label = f"{post_gwas_evidence.get('gwas_threshold', 1e-5):.0e}".replace("e-0", "e-").replace("e+0", "e+")
+        rule_note = candidate_rule.get('note', '')
+
         # 准备网络图数据
         # 先计算lead_haplotype（在两种情况下都需要）
         hap_names_list = list(top_haps)
@@ -7195,6 +7383,24 @@ class ReportGenerator:
                            font-size: 12px; font-weight: 600; color: #2c3e50;
                            background: rgba(255,255,255,0.9); padding: 2px 6px;
                            border-radius: 3px; z-index: 1; }}
+        .post-gwas-evidence {{ border: 1px solid #dfe6ee; border-radius: 6px; background: #fbfcfe;
+                              padding: 10px 12px; margin-top: 10px; }}
+        .post-gwas-evidence-head {{ display: flex; align-items: center; justify-content: space-between;
+                                   gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }}
+        .post-gwas-evidence h2 {{ font-size: 13px; color: #2c3e50; margin: 0; letter-spacing: 0; }}
+        .evidence-badge {{ font-size: 10px; font-weight: 700; border-radius: 999px; padding: 4px 9px;
+                          border: 1px solid transparent; white-space: nowrap; }}
+        .evidence-badge.strict {{ color: #0f6b4f; background: #e8f7ef; border-color: #bde7d0; }}
+        .evidence-badge.diagnostic {{ color: #805200; background: #fff4d8; border-color: #f1d184; }}
+        .evidence-badge.muted {{ color: #596575; background: #eef2f6; border-color: #d7dde5; }}
+        .post-gwas-grid {{ display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 8px; }}
+        .evidence-metric {{ min-height: 58px; border: 1px solid #edf1f5; border-radius: 6px;
+                           background: white; padding: 8px 9px; }}
+        .evidence-metric label {{ display: block; font-size: 9px; color: #7b8794; text-transform: uppercase;
+                                 font-weight: 700; margin-bottom: 4px; letter-spacing: 0; }}
+        .evidence-metric strong {{ display: block; font-size: 14px; color: #203040; line-height: 1.25; }}
+        .evidence-metric span {{ display: block; font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.35; }}
+        .evidence-note {{ font-size: 10px; color: #6b7280; margin-top: 8px; line-height: 1.35; }}
         .score-section {{ display: flex; gap: 15px; margin-top: 12px; }}
         .score-panel {{ flex: 0 0 470px; min-width: 470px; border: 1px solid #e0e0e0;
             border-radius: 6px; background: #fafafa; padding-bottom: 6px; }}
@@ -7355,6 +7561,35 @@ class ReportGenerator:
                     <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
                 </div>
             </div>
+
+            <section class="post-gwas-evidence" id="post-gwas-evidence">
+                <div class="post-gwas-evidence-head">
+                    <h2>Post-GWAS Evidence</h2>
+                    <span class="evidence-badge {evidence_status_class}">{evidence_status_label}</span>
+                </div>
+                <div class="post-gwas-grid">
+                    <div class="evidence-metric">
+                        <label>Candidate rule</label>
+                        <strong>{candidate_rule.get('significant_in_window', 0)} in window</strong>
+                        <span>GWAS P &lt; {gwas_threshold_label}; gene/promoter ±{int(post_gwas_evidence.get('flank_bp', 5000)):,} bp</span>
+                    </div>
+                    <div class="evidence-metric">
+                        <label>Top local marker</label>
+                        <strong>{top_marker_html}</strong>
+                    </div>
+                    <div class="evidence-metric">
+                        <label>Variant classes</label>
+                        <strong>{variant_type_summary}</strong>
+                        <span>{post_gwas_evidence.get('n_variants', 0)} markers shown in this report</span>
+                    </div>
+                    <div class="evidence-metric">
+                        <label>Position context</label>
+                        <strong>{position_summary}</strong>
+                        <span>Local evidence only; no external eQTL is used in scoring.</span>
+                    </div>
+                </div>
+                <div class="evidence-note">{rule_note}</div>
+            </section>
             
             <!-- 下方区域：原有的效应图、箱线图、单倍型序列 -->
             <div class="main-data-section">
@@ -7853,6 +8088,7 @@ class ReportGenerator:
 <div id="d3-tooltip" style="position:fixed;pointer-events:none;background:rgba(44,62,80,0.92);color:#fff;padding:7px 11px;border-radius:5px;font-size:11px;display:none;z-index:9999;"></div>
 
 <script>
+var postGwasEvidence = {post_gwas_evidence_json};
 // ==================== 缩放功能 ====================
 var zc = document.getElementById('zoomContent');
 var zs = document.getElementById('zoomSlider');
