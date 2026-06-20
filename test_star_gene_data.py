@@ -325,6 +325,8 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("_build_variant_haplotype_bridge", source)
         self.assertIn("_render_evidence_confidence_flags", source)
         self.assertIn("evidence-detail-layout", integrated_block)
+        self.assertIn("evidence-detail-disclosure", integrated_block)
+        self.assertIn("<details class=\"evidence-detail-disclosure\">", integrated_block)
         self.assertIn("Top Variant Evidence", integrated_block)
         self.assertIn("Variant-Haplotype Bridge", integrated_block)
         self.assertIn("Confidence Flags", integrated_block)
@@ -435,6 +437,31 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(bridge[0]["haplotypes"], ["Hap2", "Hap3"])
         self.assertEqual(bridge[0]["sample_count"], 2)
         self.assertEqual(bridge[0]["best_score_haplotype"], "Hap2")
+
+    def test_variant_haplotype_bridge_uses_total_score_field(self):
+        from haplotype_phenotype_analysis import _build_variant_haplotype_bridge
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3"],
+            "Hap_Name": ["Hap1", "Hap2", "Hap3"],
+            "Haplotype_Seq": ["A", "G", "G"],
+            "Trait": [10.0, 20.0, 30.0],
+        })
+
+        bridge = _build_variant_haplotype_bridge(
+            records=[{"pos": 100, "ref": "A", "alt": "G", "pvalue": 1e-6}],
+            display_positions=[100],
+            display_orig_indices=[0],
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            top_haps=["Hap1", "Hap2", "Hap3"],
+            phenotype_col="Trait",
+            score_results={"per_haplotype": {"Hap2": {"total": 0.7}, "Hap3": {"total": 0.5}}},
+        )
+
+        self.assertEqual(bridge[0]["best_score_haplotype"], "Hap2")
+        self.assertEqual(bridge[0]["best_score"], 0.7)
 
     def test_variant_haplotype_bridge_prefers_annotated_alt_allele(self):
         from haplotype_phenotype_analysis import _build_variant_haplotype_bridge

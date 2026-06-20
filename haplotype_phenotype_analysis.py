@@ -2359,7 +2359,7 @@ def _build_variant_haplotype_bridge(
         best_score = None
         for hap in carrier_haps:
             score_entry = per_hap_score.get(hap, {}) or {}
-            score_val = score_entry.get("overall_score", score_entry.get("score"))
+            score_val = score_entry.get("overall_score", score_entry.get("score", score_entry.get("total")))
             try:
                 score_val = float(score_val)
             except (TypeError, ValueError):
@@ -7767,8 +7767,20 @@ class ReportGenerator:
         .evidence-metric strong {{ display: block; font-size: 14px; color: #203040; line-height: 1.25; }}
         .evidence-metric span {{ display: block; font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.35; }}
         .evidence-note {{ font-size: 10px; color: #6b7280; margin-top: 8px; line-height: 1.35; }}
+        .evidence-detail-disclosure {{ margin-top: 8px; }}
+        .evidence-detail-disclosure summary {{ display: flex; align-items: center; justify-content: space-between;
+                                              gap: 10px; cursor: pointer; user-select: none; list-style: none;
+                                              border: 1px solid #e3e8ef; border-radius: 6px; background: white;
+                                              padding: 7px 10px; font-size: 11px; font-weight: 700; color: #2c3e50; }}
+        .evidence-detail-disclosure summary::-webkit-details-marker {{ display: none; }}
+        .evidence-detail-disclosure summary::after {{ content: "Show"; font-size: 9px; color: #526174;
+                                                     background: #f3f6fa; border: 1px solid #e1e8f0;
+                                                     border-radius: 999px; padding: 2px 7px; }}
+        .evidence-detail-disclosure[open] summary {{ border-radius: 6px 6px 0 0; border-bottom-color: #edf1f5; }}
+        .evidence-detail-disclosure[open] summary::after {{ content: "Hide"; }}
         .evidence-detail-layout {{ display: grid; grid-template-columns: minmax(420px, 1.45fr) minmax(320px, 1fr);
-                                  gap: 10px; margin-top: 10px; align-items: start; }}
+                                  gap: 10px; padding: 10px; border: 1px solid #e3e8ef; border-top: 0;
+                                  border-radius: 0 0 6px 6px; background: white; align-items: start; }}
         .evidence-detail-panel {{ border: 1px solid #e3e8ef; border-radius: 6px; background: white; overflow: hidden; }}
         .evidence-detail-panel h3 {{ margin: 0; padding: 8px 10px; font-size: 11px; color: #2c3e50;
                                     border-bottom: 1px solid #edf1f5; background: #f7f9fc; letter-spacing: 0; }}
@@ -7981,24 +7993,27 @@ class ReportGenerator:
                     </div>
                 </div>
                 <div class="evidence-note">{rule_note}</div>
-                <div class="evidence-detail-layout">
-                    <div class="evidence-detail-panel">
-                        <h3>Top Variant Evidence</h3>
-                        {post_gwas_table_html}
-                    </div>
-                    <div class="evidence-side-stack">
+                <details class="evidence-detail-disclosure">
+                    <summary>Review detailed local evidence</summary>
+                    <div class="evidence-detail-layout">
                         <div class="evidence-detail-panel">
-                            <h3>Variant-Haplotype Bridge</h3>
-                            {variant_haplotype_bridge_html}
+                            <h3>Top Variant Evidence</h3>
+                            {post_gwas_table_html}
                         </div>
-                        <div class="evidence-detail-panel">
-                            <h3>Confidence Flags</h3>
-                            <div class="confidence-grid">
-                                {confidence_flags_html}
+                        <div class="evidence-side-stack">
+                            <div class="evidence-detail-panel">
+                                <h3>Variant-Haplotype Bridge</h3>
+                                {variant_haplotype_bridge_html}
+                            </div>
+                            <div class="evidence-detail-panel">
+                                <h3>Confidence Flags</h3>
+                                <div class="confidence-grid">
+                                    {confidence_flags_html}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </details>
             </section>
 
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->

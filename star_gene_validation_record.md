@@ -196,6 +196,39 @@ right edge is within `1 px` of the last visible sequence column. The score
 panel now leaves a fixed `15 px` gap before the sequence columns, preventing
 the score chart width from pushing the LD triangle to the right.
 
+2026-06-20 Post-GWAS evidence detail layout/bridge-score rerun:
+The same default and robust commands were rerun after adapting the newer
+auditable evidence detail panels. This was a report-layout and field-mapping
+fix only; the discovery score mode and literature validation conclusion were
+not changed.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Top-scored haplotypes:
+Default mode still ranks rare ambiguous `Hap5=C/A|G|C` first, n=7, total
+score `4.2581`. Robust mode still ranks exact Qin2014 `Hap1=A|G|C` first,
+n=371, total score `1.8132`, sample reliability `0.9488`, matching the
+functional haplotype.
+
+HTML verification:
+The new `Top Variant Evidence`, `Variant-Haplotype Bridge`, and
+`Confidence Flags` panels are now inside a collapsed
+`Review detailed local evidence` disclosure by default. Browser geometry on
+the robust report showed the default evidence panel height was reduced from
+the previous ~625 px to ~196 px, keeping the network/GWAS row near the first
+screen. When expanded, the detail panel remains above the GWAS/gene guide-line
+corridor. The bridge now reads haplotype scores from `total` when
+`overall_score`/`score` are absent; the robust report shows
+`score=Hap1 (1.813)` for the lead evidence rows instead of `score=NA`.
+
 Reliability limits:
 The biological validation remains limited to the available 3 promoter SNPs
 and 816 Watkins TGW-overlap samples; the current report still has no external
