@@ -22,6 +22,7 @@ import time
 import json
 import logging
 import traceback
+import html
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -2192,6 +2193,258 @@ def _summarize_post_gwas_evidence(
         },
         "records": sorted(records, key=lambda r: r["pvalue"])[:20],
     }
+
+
+def _html_escape(value) -> str:
+    """Escape short report labels before embedding in generated HTML."""
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def _format_report_float(value, digits: int = 3, default: str = "NA") -> str:
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not np.isfinite(val):
+        return default
+    if abs(val) >= 1000 or (0 < abs(val) < 0.001):
+        return f"{val:.2e}"
+    return f"{val:.{digits}f}".rstrip("0").rstrip(".")
+
+
+def _render_post_gwas_evidence_table(evidence: dict, chrom: str = "") -> str:
+    """Render top local variant evidence as a compact audit table."""
+    records = list((evidence or {}).get("records", []) or [])[:8]
+    if not records:
+        return '<div class="evidence-empty">No local variant evidence rows are available.</div>'
+
+    rows = []
+    for rec in records:
+        pos = rec.get("pos", "")
+        locus = f"{chrom}:{int(pos):,}" if chrom and isinstance(pos, (int, np.integer)) else str(pos)
+        pval = _format_report_float(rec.get("pvalue"), digits=2)
+        logp = _format_report_float(rec.get("minus_log10_p"), digits=2)
+        r2 = _format_report_float(rec.get("r2_to_lead", rec.get("r2")), digits=2)
+        rows.append(
+            "<tr>"
+            f"<td>{_html_escape(locus)}</td>"
+            f"<td>{_html_escape(rec.get('variant_type', 'NA'))}</td>"
+            f"<td>{_html_escape(rec.get('position_context', 'NA'))}</td>"
+            f"<td>{_html_escape(pval)}</td>"
+            f"<td>{_html_escape(logp)}</td>"
+            f"<td>{_html_escape(r2)}</td>"
+            f"<td>{_html_escape(rec.get('annotation', 'NA'))}</td>"
+            "</tr>"
+        )
+    return (
+        '<div class="evidence-table-wrap">'
+        '<table class="evidence-table">'
+        '<thead><tr>'
+        '<th>Marker</th><th>Type</th><th>Context</th><th>P</th>'
+        '<th>-log10P</th><th>LD r2</th><th>Annotation</th>'
+        '</tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody>"
+        '</table>'
+        '</div>'
+    )
+
+
+def _build_variant_haplotype_bridge(
+    records: list,
+    display_positions: list,
+    display_orig_indices: list,
+    hap_sample_df: pd.DataFrame,
+    hap_col: str,
+    top_haps: list,
+    phenotype_col: str = None,
+    effect_data: dict = None,
+    score_results: dict = None,
+) -> list:
+    """Summarize which top haplotypes carry the non-reference allele at lead markers."""
+    if hap_sample_df is None or hap_sample_df.empty or "Haplotype_Seq" not in hap_sample_df.columns:
+        return []
+    if not records or not display_positions or not display_orig_indices:
+        return []
+
+    pos_to_seq_idx = {int(pos): int(idx) for pos, idx in zip(display_positions, display_orig_indices)}
+    effect_data = effect_data or {}
+    per_hap_score = (score_results or {}).get("per_haplotype", {}) or {}
+    summaries = []
+    for rec in list(records)[:5]:
+        try:
+            pos = int(rec.get("pos"))
+        except (TypeError, ValueError):
+            continue
+        seq_idx = pos_to_seq_idx.get(pos)
+        if seq_idx is None:
+            continue
+
+        allele_by_hap = {}
+        count_by_allele = {}
+        for hap in top_haps:
+            hap_rows = hap_sample_df[hap_sample_df[hap_col] == hap]
+            if hap_rows.empty:
+                continue
+            seq = str(hap_rows["Haplotype_Seq"].iloc[0]).split("|")
+            if seq_idx >= len(seq):
+                continue
+            allele = seq[seq_idx].strip().upper() or "NA"
+            allele_by_hap[hap] = allele
+            count_by_allele[allele] = count_by_allele.get(allele, 0) + len(hap_rows)
+
+        if not count_by_allele:
+            continue
+        ref_allele = _safe_str(rec.get("ref", "")).strip().upper()
+        alt_allele = _safe_str(rec.get("alt", "")).strip().upper()
+        reference_allele = ref_allele if ref_allele in count_by_allele else max(
+            count_by_allele.items(), key=lambda item: item[1]
+        )[0]
+        if alt_allele and alt_allele in count_by_allele and alt_allele not in ("N", "NA"):
+            allele = alt_allele
+        else:
+            candidate_alleles = [a for a in count_by_allele if a != reference_allele and a not in ("N", "NA")]
+            allele = (
+                max(candidate_alleles, key=lambda a: count_by_allele[a])
+                if candidate_alleles else reference_allele
+            )
+        carrier_haps = [hap for hap, a in allele_by_hap.items() if a == allele]
+        carrier_df = hap_sample_df[hap_sample_df[hap_col].isin(carrier_haps)]
+        sample_count = int(len(carrier_df))
+        phenotype_mean = None
+        if phenotype_col and phenotype_col in carrier_df.columns:
+            vals = pd.to_numeric(carrier_df[phenotype_col], errors="coerce").dropna()
+            if len(vals) > 0:
+                phenotype_mean = float(vals.mean())
+
+        best_score_hap = None
+        best_score = None
+        for hap in carrier_haps:
+            score_entry = per_hap_score.get(hap, {}) or {}
+            score_val = score_entry.get("overall_score", score_entry.get("score"))
+            try:
+                score_val = float(score_val)
+            except (TypeError, ValueError):
+                score_val = None
+            if score_val is not None and (best_score is None or score_val > best_score):
+                best_score = score_val
+                best_score_hap = hap
+
+        strongest_effect_hap = None
+        strongest_effect = None
+        for hap in carrier_haps:
+            effect_val = (effect_data.get(hap, {}) or {}).get("effect")
+            try:
+                effect_val = float(effect_val)
+            except (TypeError, ValueError):
+                effect_val = None
+            if effect_val is not None and (
+                strongest_effect is None or abs(effect_val) > abs(strongest_effect)
+            ):
+                strongest_effect = effect_val
+                strongest_effect_hap = hap
+
+        summaries.append({
+            "pos": pos,
+            "allele": allele,
+            "reference_allele": reference_allele,
+            "haplotypes": carrier_haps,
+            "sample_count": sample_count,
+            "phenotype_mean": phenotype_mean,
+            "best_score_haplotype": best_score_hap,
+            "best_score": best_score,
+            "strongest_effect_haplotype": strongest_effect_hap,
+            "strongest_effect": strongest_effect,
+            "pvalue": rec.get("pvalue"),
+        })
+    return summaries
+
+
+def _render_variant_haplotype_bridge(bridge_rows: list, chrom: str = "") -> str:
+    if not bridge_rows:
+        return '<div class="evidence-empty">No marker-to-haplotype bridge could be built for displayed haplotypes.</div>'
+    cards = []
+    for row in bridge_rows[:4]:
+        locus = f"{chrom}:{int(row['pos']):,}" if chrom else str(row.get("pos", "NA"))
+        haps = ", ".join(row.get("haplotypes", [])[:4]) or "NA"
+        if len(row.get("haplotypes", [])) > 4:
+            haps += f" +{len(row.get('haplotypes', [])) - 4}"
+        effect_txt = "NA"
+        if row.get("strongest_effect_haplotype"):
+            effect_txt = (
+                f"{row['strongest_effect_haplotype']} "
+                f"({_format_report_float(row.get('strongest_effect'), 3)})"
+            )
+        score_txt = "NA"
+        if row.get("best_score_haplotype"):
+            score_txt = (
+                f"{row['best_score_haplotype']} "
+                f"({_format_report_float(row.get('best_score'), 3)})"
+            )
+        cards.append(
+            '<div class="bridge-card">'
+            f'<div class="bridge-marker">{_html_escape(locus)} <span>allele {_html_escape(row.get("allele", "NA"))}</span></div>'
+            f'<div class="bridge-haps">{_html_escape(haps)}</div>'
+            '<div class="bridge-meta">'
+            f'<span>n={int(row.get("sample_count", 0))}</span>'
+            f'<span>mean={_html_escape(_format_report_float(row.get("phenotype_mean"), 3))}</span>'
+            f'<span>effect={_html_escape(effect_txt)}</span>'
+            f'<span>score={_html_escape(score_txt)}</span>'
+            '</div>'
+            '</div>'
+        )
+    return "".join(cards)
+
+
+def _render_evidence_confidence_flags(
+    evidence: dict,
+    bridge_rows: list,
+    hap_sample_df: pd.DataFrame,
+    phenotype_col: str = None,
+    score_results: dict = None,
+    min_samples: int = 10,
+) -> str:
+    flags = []
+    candidate_rule = (evidence or {}).get("candidate_rule", {}) or {}
+    if candidate_rule.get("status") == "strict_local_gwas_window":
+        flags.append(("pass", "In-window signal", "At least one local marker passes the evidence threshold."))
+    elif candidate_rule.get("status") == "diagnostic_local_gwas_outside_window":
+        flags.append(("warn", "Outside-window signal", "Significant markers exist, but the best evidence is outside the target window."))
+    else:
+        flags.append(("muted", "No local signal", "No displayed marker passes the configured evidence threshold."))
+
+    n_samples = int(len(hap_sample_df)) if hap_sample_df is not None else 0
+    if n_samples < min_samples:
+        flags.append(("warn", "Low sample count", f"{n_samples} samples in the merged report table."))
+    else:
+        flags.append(("pass", "Sample count", f"{n_samples} samples in the merged report table."))
+
+    if phenotype_col and hap_sample_df is not None and phenotype_col in hap_sample_df.columns:
+        missing = int(pd.to_numeric(hap_sample_df[phenotype_col], errors="coerce").isna().sum())
+        if missing:
+            flags.append(("warn", "Phenotype missing", f"{missing} rows have no numeric phenotype value."))
+        else:
+            flags.append(("pass", "Phenotype coverage", "All displayed rows have numeric phenotype values."))
+
+    score_mode = (score_results or {}).get("score_mode")
+    if score_mode == "robust_discovery":
+        flags.append(("pass", "Robust score mode", "Tiny or ambiguous haplotypes are penalized in scoring."))
+    elif score_mode:
+        flags.append(("muted", "Score mode", str(score_mode)))
+
+    if not bridge_rows:
+        flags.append(("warn", "Bridge unavailable", "Displayed haplotypes could not be linked back to lead marker alleles."))
+    else:
+        flags.append(("pass", "Bridge built", f"{len(bridge_rows)} lead marker bridge rows are available."))
+
+    rendered = []
+    for level, title, detail in flags:
+        rendered.append(
+            f'<div class="confidence-flag {level}">'
+            f'<strong>{_html_escape(title)}</strong>'
+            f'<span>{_html_escape(detail)}</span>'
+            '</div>'
+        )
+    return "".join(rendered)
 
 
 def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
@@ -7142,6 +7395,14 @@ class ReportGenerator:
             promoter_start=promoter_start,
             promoter_end=promoter_end,
         )
+        for rec in post_gwas_evidence.get('records', []):
+            ip = int(rec.get('pos', 0))
+            rec['r2_to_lead'] = 1.0 if lead_pos is not None and ip == lead_pos else float(r2_map.get(ip, 0.0))
+        if post_gwas_evidence.get('top_marker'):
+            ip = int(post_gwas_evidence['top_marker'].get('pos', 0))
+            post_gwas_evidence['top_marker']['r2_to_lead'] = (
+                1.0 if lead_pos is not None and ip == lead_pos else float(r2_map.get(ip, 0.0))
+            )
         post_gwas_evidence_json = _script_json_dumps(post_gwas_evidence)
         candidate_rule = post_gwas_evidence.get('candidate_rule', {})
         top_marker = post_gwas_evidence.get('top_marker') or {}
@@ -7174,6 +7435,26 @@ class ReportGenerator:
         gwas_threshold_label = f"{post_gwas_evidence.get('gwas_threshold', 1e-5):.0e}".replace("e-0", "e-").replace("e+0", "e+")
         evidence_phenotype_label = actual_pheno_col
         rule_note = candidate_rule.get('note', '')
+        variant_haplotype_bridge = _build_variant_haplotype_bridge(
+            records=post_gwas_evidence.get('records', []),
+            display_positions=display_positions,
+            display_orig_indices=display_orig_indices,
+            hap_sample_df=hap_sample_df,
+            hap_col=hap_col,
+            top_haps=top_haps,
+            phenotype_col=actual_pheno_col,
+            effect_data=effect_data,
+            score_results=score_results,
+        )
+        post_gwas_table_html = _render_post_gwas_evidence_table(post_gwas_evidence, chrom=chrom)
+        variant_haplotype_bridge_html = _render_variant_haplotype_bridge(variant_haplotype_bridge, chrom=chrom)
+        confidence_flags_html = _render_evidence_confidence_flags(
+            post_gwas_evidence,
+            variant_haplotype_bridge,
+            hap_sample_df,
+            phenotype_col=actual_pheno_col,
+            score_results=score_results,
+        )
 
         # 准备网络图数据
         # 先计算lead_haplotype（在两种情况下都需要）
@@ -7423,6 +7704,38 @@ class ReportGenerator:
         .evidence-metric strong {{ display: block; font-size: 14px; color: #203040; line-height: 1.25; }}
         .evidence-metric span {{ display: block; font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.35; }}
         .evidence-note {{ font-size: 10px; color: #6b7280; margin-top: 8px; line-height: 1.35; }}
+        .evidence-detail-layout {{ display: grid; grid-template-columns: minmax(420px, 1.45fr) minmax(320px, 1fr);
+                                  gap: 10px; margin-top: 10px; align-items: start; }}
+        .evidence-detail-panel {{ border: 1px solid #e3e8ef; border-radius: 6px; background: white; overflow: hidden; }}
+        .evidence-detail-panel h3 {{ margin: 0; padding: 8px 10px; font-size: 11px; color: #2c3e50;
+                                    border-bottom: 1px solid #edf1f5; background: #f7f9fc; letter-spacing: 0; }}
+        .evidence-table-wrap {{ overflow-x: auto; }}
+        .evidence-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+        .evidence-table th {{ background: #eef3f8; color: #405066; font-size: 9px; text-align: left;
+                             padding: 6px 7px; border-bottom: 1px solid #dde5ee; white-space: nowrap; }}
+        .evidence-table td {{ font-size: 10px; color: #2d3748; padding: 6px 7px;
+                             border-bottom: 1px solid #edf1f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .evidence-table tr:last-child td {{ border-bottom: 0; }}
+        .evidence-side-stack {{ display: grid; gap: 10px; }}
+        .bridge-card {{ padding: 8px 10px; border-bottom: 1px solid #edf1f5; }}
+        .bridge-card:last-child {{ border-bottom: 0; }}
+        .bridge-marker {{ font-size: 11px; color: #1f2937; font-weight: 700; }}
+        .bridge-marker span {{ color: #64748b; font-weight: 600; margin-left: 4px; }}
+        .bridge-haps {{ font-size: 10px; color: #334155; margin-top: 4px; line-height: 1.35; }}
+        .bridge-meta {{ display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }}
+        .bridge-meta span {{ font-size: 9px; color: #526174; background: #f3f6fa; border: 1px solid #e1e8f0;
+                            border-radius: 999px; padding: 2px 6px; }}
+        .confidence-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 6px; padding: 8px; }}
+        .confidence-flag {{ border-radius: 6px; padding: 7px 8px; border: 1px solid #e1e8f0; background: #f8fafc; }}
+        .confidence-flag strong {{ display: block; font-size: 10px; color: #263445; line-height: 1.2; }}
+        .confidence-flag span {{ display: block; font-size: 9px; color: #64748b; margin-top: 3px; line-height: 1.3; }}
+        .confidence-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; }}
+        .confidence-flag.warn {{ border-color: #f1d184; background: #fff8e6; }}
+        .confidence-flag.muted {{ border-color: #d7dde5; background: #f6f8fb; }}
+        .evidence-empty {{ padding: 10px; font-size: 10px; color: #64748b; line-height: 1.35; }}
+        @media (max-width: 920px) {{
+            .evidence-detail-layout {{ grid-template-columns: 1fr; }}
+        }}
         .score-section {{ display: flex; gap: {score_gap}px; margin-top: 12px; }}
         .score-panel {{ flex: 0 0 {score_panel_w}px; min-width: {score_panel_w}px; border: 1px solid #e0e0e0;
             border-radius: 6px; background: #fafafa; padding-bottom: 6px; }}
@@ -7603,6 +7916,24 @@ class ReportGenerator:
                     </div>
                 </div>
                 <div class="evidence-note">{rule_note}</div>
+                <div class="evidence-detail-layout">
+                    <div class="evidence-detail-panel">
+                        <h3>Top Variant Evidence</h3>
+                        {post_gwas_table_html}
+                    </div>
+                    <div class="evidence-side-stack">
+                        <div class="evidence-detail-panel">
+                            <h3>Variant-Haplotype Bridge</h3>
+                            {variant_haplotype_bridge_html}
+                        </div>
+                        <div class="evidence-detail-panel">
+                            <h3>Confidence Flags</h3>
+                            <div class="confidence-grid">
+                                {confidence_flags_html}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->

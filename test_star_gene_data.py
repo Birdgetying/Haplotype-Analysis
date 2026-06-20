@@ -314,6 +314,97 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("Evidence phenotype", integrated_block)
         self.assertIn("Switching phenotype updates score/effect plots only", integrated_block)
 
+    def test_integrated_post_gwas_panel_has_auditable_evidence_layout(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("_render_post_gwas_evidence_table", source)
+        self.assertIn("_build_variant_haplotype_bridge", source)
+        self.assertIn("_render_evidence_confidence_flags", source)
+        self.assertIn("evidence-detail-layout", integrated_block)
+        self.assertIn("Top Variant Evidence", integrated_block)
+        self.assertIn("Variant-Haplotype Bridge", integrated_block)
+        self.assertIn("Confidence Flags", integrated_block)
+        self.assertIn("{post_gwas_table_html}", integrated_block)
+        self.assertIn("{variant_haplotype_bridge_html}", integrated_block)
+        self.assertIn("{confidence_flags_html}", integrated_block)
+
+    def test_evidence_table_includes_ld_and_annotation_columns(self):
+        from haplotype_phenotype_analysis import _render_post_gwas_evidence_table
+
+        html = _render_post_gwas_evidence_table({
+            "records": [{
+                "pos": 110,
+                "variant_type": "SNP",
+                "position_context": "body",
+                "pvalue": 1e-6,
+                "minus_log10_p": 6.0,
+                "r2_to_lead": 1.0,
+                "annotation": "missense",
+            }]
+        }, chrom="chr1")
+
+        self.assertIn("LD r2", html)
+        self.assertIn("Annotation", html)
+        self.assertIn("chr1:110", html)
+        self.assertIn("missense", html)
+
+    def test_variant_haplotype_bridge_groups_marker_alleles_by_haplotype(self):
+        from haplotype_phenotype_analysis import _build_variant_haplotype_bridge
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4"],
+            "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap3"],
+            "Haplotype_Seq": ["A|C", "A|C", "G|C", "G|T"],
+            "Trait": [10.0, 12.0, 20.0, 30.0],
+        })
+        bridge = _build_variant_haplotype_bridge(
+            records=[{"pos": 100, "pvalue": 1e-6}],
+            display_positions=[100, 200],
+            display_orig_indices=[0, 1],
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            top_haps=["Hap1", "Hap2", "Hap3"],
+            phenotype_col="Trait",
+            effect_data={"Hap2": {"effect": 4.0}, "Hap3": {"effect": 8.0}},
+            score_results={"per_haplotype": {"Hap2": {"overall_score": 0.7}}},
+        )
+
+        self.assertIn("pos", bridge[0])
+        self.assertEqual(bridge[0]["allele"], "G")
+        self.assertEqual(bridge[0]["haplotypes"], ["Hap2", "Hap3"])
+        self.assertEqual(bridge[0]["sample_count"], 2)
+        self.assertEqual(bridge[0]["best_score_haplotype"], "Hap2")
+
+    def test_variant_haplotype_bridge_prefers_annotated_alt_allele(self):
+        from haplotype_phenotype_analysis import _build_variant_haplotype_bridge
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4", "S5", "S6"],
+            "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap2", "Hap3", "Hap3"],
+            "Haplotype_Seq": ["A", "A", "G", "G", "G", "G"],
+            "Trait": [10, 11, 18, 19, 25, 26],
+        })
+
+        bridge = _build_variant_haplotype_bridge(
+            records=[{"pos": 100, "ref": "A", "alt": "G", "pvalue": 1e-6}],
+            display_positions=[100],
+            display_orig_indices=[0],
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            top_haps=["Hap1", "Hap2", "Hap3"],
+            phenotype_col="Trait",
+        )
+
+        self.assertEqual(bridge[0]["allele"], "G")
+        self.assertEqual(bridge[0]["reference_allele"], "A")
+        self.assertEqual(bridge[0]["haplotypes"], ["Hap2", "Hap3"])
+
     def test_score_mode_collection_prefers_score_json_over_stale_report_mode(self):
         from haplotype_phenotype_analysis import ReportGenerator
 
