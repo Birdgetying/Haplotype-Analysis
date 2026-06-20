@@ -352,6 +352,62 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("chr1:110", html)
         self.assertIn("missense", html)
 
+    def test_evidence_table_preserves_small_pvalues(self):
+        from haplotype_phenotype_analysis import _render_post_gwas_evidence_table
+
+        html = _render_post_gwas_evidence_table({
+            "records": [{
+                "pos": 110,
+                "variant_type": "SNP",
+                "position_context": "body",
+                "pvalue": 0.004,
+                "minus_log10_p": 2.39794,
+                "r2_to_lead": 0.75,
+                "annotation": "intron",
+            }]
+        }, chrom="chr1")
+
+        self.assertIn("4.00e-03", html)
+        self.assertNotIn(">0<", html)
+
+    def test_integrated_post_gwas_summary_escapes_dynamic_text(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as tmp:
+            df = pd.DataFrame({
+                "SampleID": ["S1", "S2", "S3", "S4"],
+                "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap2"],
+                "Haplotype_Seq": ["A", "A", "G", "G"],
+                "Trait<script>": [10, 11, 20, 21],
+            })
+            generator = ReportGenerator(output_dir=tmp)
+            generator.generate_integrated_html(
+                hap_sample_df=df,
+                effect_results={"grand_mean": 15.5, "haplotype_effects": []},
+                variant_positions=[100],
+                region_start=50,
+                region_end=150,
+                phenotype_col="Trait<script>",
+                gene_start=80,
+                gene_end=150,
+                promoter_start=50,
+                promoter_end=79,
+                chrom="chr<script>",
+                gene_id="GeneX",
+                variant_info={100: {"ref": "A", "alt": "G", "annotation": "<b>bad</b>"}},
+                variant_pvalues={100: 1e-6},
+                snp_effects={100: "<img src=x onerror=alert(1)>"},
+            )
+            html = (Path(tmp) / "GeneX.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("Trait<script>", html)
+        self.assertNotIn("chr<script>", html)
+        self.assertNotIn("<img src=x onerror=alert(1)>", html)
+        self.assertIn("Trait&lt;script&gt;", html)
+        self.assertIn("chr&lt;script&gt;", html)
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;", html)
+
     def test_variant_haplotype_bridge_groups_marker_alleles_by_haplotype(self):
         from haplotype_phenotype_analysis import _build_variant_haplotype_bridge
         import pandas as pd
@@ -404,6 +460,55 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(bridge[0]["allele"], "G")
         self.assertEqual(bridge[0]["reference_allele"], "A")
         self.assertEqual(bridge[0]["haplotypes"], ["Hap2", "Hap3"])
+
+    def test_variant_haplotype_bridge_handles_heterozygous_and_multi_alt_calls(self):
+        from haplotype_phenotype_analysis import _build_variant_haplotype_bridge
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4"],
+            "Hap_Name": ["Hap1", "Hap2", "Hap3", "Hap4"],
+            "Haplotype_Seq": ["A/A", "A/G", "T/A", "N"],
+            "Trait": [10, 20, 30, 40],
+        })
+
+        bridge = _build_variant_haplotype_bridge(
+            records=[{"pos": 100, "ref": "A", "alt": "G,T", "pvalue": 1e-6}],
+            display_positions=[100],
+            display_orig_indices=[0],
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            top_haps=["Hap1", "Hap2", "Hap3", "Hap4"],
+            phenotype_col="Trait",
+        )
+
+        self.assertEqual(bridge[0]["allele"], "G,T")
+        self.assertEqual(bridge[0]["haplotypes"], ["Hap2", "Hap3"])
+        self.assertEqual(bridge[0]["sample_count"], 2)
+
+    def test_variant_haplotype_bridge_labels_bound_phenotype_and_mode(self):
+        from haplotype_phenotype_analysis import _render_variant_haplotype_bridge
+
+        html = _render_variant_haplotype_bridge(
+            [{
+                "pos": 100,
+                "allele": "G",
+                "haplotypes": ["Hap2"],
+                "sample_count": 2,
+                "phenotype_mean": 20.0,
+                "best_score_haplotype": "Hap2",
+                "best_score": 0.8,
+                "strongest_effect_haplotype": "Hap2",
+                "strongest_effect": 5.0,
+            }],
+            chrom="chr1",
+            phenotype_col="TraitA",
+            score_mode="robust_discovery",
+        )
+
+        self.assertIn("Bound to TraitA", html)
+        self.assertIn("robust_discovery", html)
+        self.assertIn("does not change when the phenotype selector is switched", html)
 
     def test_score_mode_collection_prefers_score_json_over_stale_report_mode(self):
         from haplotype_phenotype_analysis import ReportGenerator

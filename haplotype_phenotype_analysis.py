@@ -2212,6 +2212,20 @@ def _format_report_float(value, digits: int = 3, default: str = "NA") -> str:
     return f"{val:.{digits}f}".rstrip("0").rstrip(".")
 
 
+def _format_report_pvalue(value, default: str = "NA") -> str:
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not np.isfinite(val):
+        return default
+    if val <= 0:
+        return "<=1e-300"
+    if val < 0.01:
+        return f"{val:.2e}"
+    return _format_report_float(val, digits=3, default=default)
+
+
 def _render_post_gwas_evidence_table(evidence: dict, chrom: str = "") -> str:
     """Render top local variant evidence as a compact audit table."""
     records = list((evidence or {}).get("records", []) or [])[:8]
@@ -2222,7 +2236,7 @@ def _render_post_gwas_evidence_table(evidence: dict, chrom: str = "") -> str:
     for rec in records:
         pos = rec.get("pos", "")
         locus = f"{chrom}:{int(pos):,}" if chrom and isinstance(pos, (int, np.integer)) else str(pos)
-        pval = _format_report_float(rec.get("pvalue"), digits=2)
+        pval = _format_report_pvalue(rec.get("pvalue"))
         logp = _format_report_float(rec.get("minus_log10_p"), digits=2)
         r2 = _format_report_float(rec.get("r2_to_lead", rec.get("r2")), digits=2)
         rows.append(
@@ -2269,6 +2283,18 @@ def _build_variant_haplotype_bridge(
     pos_to_seq_idx = {int(pos): int(idx) for pos, idx in zip(display_positions, display_orig_indices)}
     effect_data = effect_data or {}
     per_hap_score = (score_results or {}).get("per_haplotype", {}) or {}
+
+    def allele_tokens(value) -> set:
+        raw = _safe_str(value, "").strip().upper()
+        if not raw:
+            return set()
+        tokens = []
+        for part in raw.replace("|", "/").replace(",", "/").replace(";", "/").split("/"):
+            token = part.strip()
+            if token and token not in (".", "NA", "N"):
+                tokens.append(token)
+        return set(tokens)
+
     summaries = []
     for rec in list(records)[:5]:
         try:
@@ -2296,18 +2322,31 @@ def _build_variant_haplotype_bridge(
             continue
         ref_allele = _safe_str(rec.get("ref", "")).strip().upper()
         alt_allele = _safe_str(rec.get("alt", "")).strip().upper()
+        ref_tokens = allele_tokens(ref_allele)
+        alt_tokens = allele_tokens(alt_allele)
         reference_allele = ref_allele if ref_allele in count_by_allele else max(
             count_by_allele.items(), key=lambda item: item[1]
         )[0]
-        if alt_allele and alt_allele in count_by_allele and alt_allele not in ("N", "NA"):
+
+        def carries_alt_or_nonref(call: str) -> bool:
+            call_tokens = allele_tokens(call)
+            if not call_tokens:
+                return False
+            if alt_tokens:
+                return bool(call_tokens & alt_tokens)
+            if ref_tokens:
+                return bool(call_tokens - ref_tokens)
+            return call != reference_allele and call not in ("N", "NA")
+
+        carrier_haps = [hap for hap, call in allele_by_hap.items() if carries_alt_or_nonref(call)]
+        if alt_tokens:
             allele = alt_allele
+        elif carrier_haps:
+            carrier_alleles = [allele_by_hap[hap] for hap in carrier_haps]
+            allele = max(set(carrier_alleles), key=carrier_alleles.count)
         else:
-            candidate_alleles = [a for a in count_by_allele if a != reference_allele and a not in ("N", "NA")]
-            allele = (
-                max(candidate_alleles, key=lambda a: count_by_allele[a])
-                if candidate_alleles else reference_allele
-            )
-        carrier_haps = [hap for hap, a in allele_by_hap.items() if a == allele]
+            allele = reference_allele
+            carrier_haps = [hap for hap, a in allele_by_hap.items() if a == allele]
         carrier_df = hap_sample_df[hap_sample_df[hap_col].isin(carrier_haps)]
         sample_count = int(len(carrier_df))
         phenotype_mean = None
@@ -2359,9 +2398,27 @@ def _build_variant_haplotype_bridge(
     return summaries
 
 
-def _render_variant_haplotype_bridge(bridge_rows: list, chrom: str = "") -> str:
+def _render_variant_haplotype_bridge(
+    bridge_rows: list,
+    chrom: str = "",
+    phenotype_col: str = None,
+    score_mode: str = None,
+) -> str:
     if not bridge_rows:
         return '<div class="evidence-empty">No marker-to-haplotype bridge could be built for displayed haplotypes.</div>'
+    context_bits = []
+    if phenotype_col:
+        context_bits.append(f"Bound to {phenotype_col}")
+    if score_mode:
+        context_bits.append(f"score mode {score_mode}")
+    context = " | ".join(context_bits)
+    context_html = (
+        '<div class="bridge-context">'
+        f'{_html_escape(context)}; this bridge does not change when the phenotype selector is switched.'
+        '</div>'
+        if context else
+        ''
+    )
     cards = []
     for row in bridge_rows[:4]:
         locus = f"{chrom}:{int(row['pos']):,}" if chrom else str(row.get("pos", "NA"))
@@ -2392,7 +2449,7 @@ def _render_variant_haplotype_bridge(bridge_rows: list, chrom: str = "") -> str:
             '</div>'
             '</div>'
         )
-    return "".join(cards)
+    return context_html + "".join(cards)
 
 
 def _render_evidence_confidence_flags(
@@ -7376,13 +7433,9 @@ class ReportGenerator:
             list(all_score_data.values())[0] if all_score_data else {}
         )
         self._cached_haplotype_score = score_results
-        haplotype_score_json = json.dumps(
-            _json_safe(all_score_data), cls=NumpyEncoder, allow_nan=False
-        )
+        haplotype_score_json = _script_json_dumps(all_score_data)
         score_mode_data = self._collect_score_mode_data(all_score_data)
-        score_mode_json = json.dumps(
-            score_mode_data, cls=NumpyEncoder, allow_nan=False
-        )
+        score_mode_json = _script_json_dumps(score_mode_data)
         # ==================== 评分模型计算结束 ====================
 
         post_gwas_evidence = _summarize_post_gwas_evidence(
@@ -7418,23 +7471,27 @@ class ReportGenerator:
             else 'diagnostic' if evidence_status == 'diagnostic_local_gwas_outside_window'
             else 'muted'
         )
+        safe_chrom = _html_escape(chrom)
         top_marker_html = (
-            f"{chrom}:{int(top_marker.get('pos')):,} "
-            f"<span>{top_marker.get('variant_type', 'NA')} · "
-            f"P={top_marker.get('pvalue', 1.0):.2e} · "
-            f"{top_marker.get('position_context', 'NA')}</span>"
+            f"{safe_chrom}:{int(top_marker.get('pos')):,} "
+            f"<span>{_html_escape(top_marker.get('variant_type', 'NA'))} · "
+            f"P={_html_escape(_format_report_pvalue(top_marker.get('pvalue', 1.0)))} · "
+            f"{_html_escape(top_marker.get('position_context', 'NA'))}</span>"
             if top_marker else
             "No marker data <span>Local per-position tests were not available.</span>"
         )
         variant_type_summary = ', '.join(
             f"{k}={v}" for k, v in sorted(post_gwas_evidence.get('variant_type_counts', {}).items())
         ) or 'NA'
+        variant_type_summary = _html_escape(variant_type_summary)
         position_summary = ', '.join(
             f"{k}={v}" for k, v in sorted(post_gwas_evidence.get('position_counts', {}).items())
         ) or 'NA'
+        position_summary = _html_escape(position_summary)
         gwas_threshold_label = f"{post_gwas_evidence.get('gwas_threshold', 1e-5):.0e}".replace("e-0", "e-").replace("e+0", "e+")
-        evidence_phenotype_label = actual_pheno_col
-        rule_note = candidate_rule.get('note', '')
+        evidence_phenotype_label = _html_escape(actual_pheno_col)
+        rule_note = _html_escape(candidate_rule.get('note', ''))
+        score_mode_label = _html_escape(score_results.get('score_mode', getattr(self, 'score_mode', 'default')) if isinstance(score_results, dict) else getattr(self, 'score_mode', 'default'))
         variant_haplotype_bridge = _build_variant_haplotype_bridge(
             records=post_gwas_evidence.get('records', []),
             display_positions=display_positions,
@@ -7447,7 +7504,12 @@ class ReportGenerator:
             score_results=score_results,
         )
         post_gwas_table_html = _render_post_gwas_evidence_table(post_gwas_evidence, chrom=chrom)
-        variant_haplotype_bridge_html = _render_variant_haplotype_bridge(variant_haplotype_bridge, chrom=chrom)
+        variant_haplotype_bridge_html = _render_variant_haplotype_bridge(
+            variant_haplotype_bridge,
+            chrom=chrom,
+            phenotype_col=actual_pheno_col,
+            score_mode=score_results.get('score_mode', getattr(self, 'score_mode', 'default')) if isinstance(score_results, dict) else getattr(self, 'score_mode', 'default'),
+        )
         confidence_flags_html = _render_evidence_confidence_flags(
             post_gwas_evidence,
             variant_haplotype_bridge,
@@ -7591,20 +7653,20 @@ class ReportGenerator:
         network_w = 350 + n_cov_cols * 180
         
         # JSON序列化数据
-        gwas_data_json = json.dumps(gwas_data, cls=NumpyEncoder)
-        network_nodes_json = json.dumps(network_nodes, cls=NumpyEncoder)
-        network_edges_json = json.dumps(network_edges, cls=NumpyEncoder)
+        gwas_data_json = _script_json_dumps(gwas_data)
+        network_nodes_json = _script_json_dumps(network_nodes)
+        network_edges_json = _script_json_dumps(network_edges)
         has_promoter_variants_json = 'true' if has_promoter_variants else 'false'
         promoter_actual_length_json = str(promoter_actual_length)
 
         pheno_options_html = ''
         for pn in all_pheno_names:
             sel = ' selected' if pn == actual_pheno_col else ''
-            pheno_options_html += f'<option value="{pn}"{sel}>{pn}</option>\n'
-        all_pheno_names_json = json.dumps(all_pheno_names)
-        pheno_first_for_js = actual_pheno_col
+            pheno_options_html += f'<option value="{_html_escape(pn)}"{sel}>{_html_escape(pn)}</option>\n'
+        all_pheno_names_json = _script_json_dumps(all_pheno_names)
+        pheno_first_for_js = _script_json_dumps(actual_pheno_col)
         # 所有表型的箱线图/效应/全局范围数据，供JS切换用
-        all_pheno_data_for_js = json.dumps({
+        all_pheno_data_for_js = _script_json_dumps({
             'boxplot': all_boxplot_data,
             'effect': all_effect_data,
             'ranges': {p: {'box_min': float(v['box_min']), 'box_max': float(v['box_max']),
@@ -7612,8 +7674,9 @@ class ReportGenerator:
                            'eff_min': float(v['eff_min']), 'eff_max': float(v['eff_max']),
                            'eff_range': float(v['eff_range'])}
                       for p, v in all_global_ranges.items()}
-        }, cls=NumpyEncoder)
+        })
 
+        gene_id_label = _html_escape(gene_id)
         html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7718,6 +7781,8 @@ class ReportGenerator:
         .evidence-table tr:last-child td {{ border-bottom: 0; }}
         .evidence-side-stack {{ display: grid; gap: 10px; }}
         .bridge-card {{ padding: 8px 10px; border-bottom: 1px solid #edf1f5; }}
+        .bridge-context {{ padding: 7px 10px; font-size: 9px; color: #64748b; line-height: 1.35;
+                          background: #f8fafc; border-bottom: 1px solid #edf1f5; }}
         .bridge-card:last-child {{ border-bottom: 0; }}
         .bridge-marker {{ font-size: 11px; color: #1f2937; font-weight: 700; }}
         .bridge-marker span {{ color: #64748b; font-weight: 600; margin-left: 4px; }}
@@ -7801,9 +7866,9 @@ class ReportGenerator:
 <body>
 <div class="container">
     <div class="header">
-        <h1>Haplotype-Phenotype Association Analysis - {gene_id}</h1>
+        <h1>Haplotype-Phenotype Association Analysis - {gene_id_label}</h1>
         <div class="header-info">
-            <span>Region: {chrom}:{region_start:,}-{region_end:,}</span>
+            <span>Region: {safe_chrom}:{region_start:,}-{region_end:,}</span>
             <span>Length: {region_len_kb:.1f} kb</span>
             <span>Variants: {len(display_positions)}</span>
             <span>Haplotypes: {len(top_haps)}</span>
@@ -8112,6 +8177,7 @@ class ReportGenerator:
             table_x = gene_area_start + idx * seq_col_w + seq_col_w / 2
             
             var_color, var_type = get_var_color(pos)
+            var_type_attr = _html_escape(var_type)
             var_types_found.add(var_type)
             
             # 获取该位置的变异信息（用于过滤）
@@ -8125,22 +8191,22 @@ class ReportGenerator:
             is_lead_variant = (pos == lead_pos)
             
             # 向上的虚线：从变异圆圈顶部向上延伸，与GWAS图的竖线对齐
-            html += f'<line class="var-up-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y-3}" x2="{gene_x}" y2="{var_top_y - up_line_extension}" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>\n'
+            html += f'<line class="var-up-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" x1="{gene_x}" y1="{var_top_y-3}" x2="{gene_x}" y2="{var_top_y - up_line_extension}" stroke="#999" stroke-width="0.8" stroke-dasharray="4,2" opacity="0.5"/>\n'
             
             # 变异竖线：从圆圈顶部一直延伸到断线上端 (gene_y+gene_h)
             stroke_width = 2.0 if is_lead_variant else 1.2
-            html += f'<line class="var-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" x1="{gene_x}" y1="{var_top_y+3}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{var_color}" stroke-width="{stroke_width}" data-idx="{idx}"/>\n'
+            html += f'<line class="var-line" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" x1="{gene_x}" y1="{var_top_y+3}" x2="{gene_x}" y2="{gene_y+gene_h}" stroke="{var_color}" stroke-width="{stroke_width}" data-idx="{idx}"/>\n'
             
             # 变异圆圈：lead variant使用更大的圆圈和星形标记
             if is_lead_variant:
-                html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" cx="{gene_x}" cy="{var_top_y}" r="5" fill="{var_color}" stroke="#c0392b" stroke-width="2" data-idx="{idx}"/>\n'
+                html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" cx="{gene_x}" cy="{var_top_y}" r="5" fill="{var_color}" stroke="#c0392b" stroke-width="2" data-idx="{idx}"/>\n'
                 html += f'<text x="{gene_x}" y="{var_top_y+1}" font-size="6" fill="white" text-anchor="middle" dominant-baseline="middle" font-weight="bold">★</text>\n'
             else:
-                html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5" data-idx="{idx}"/>\n'
+                html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5" data-idx="{idx}"/>\n'
             
             # 斜线：由JavaScript动态计算表格列位置后绘制
             connector_width = 1.5 if is_lead_variant else 0.8
-            html += f'<line class="var-connector js-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type}" data-idx="{idx}" data-gene-x="{gene_x}" data-table-x="{table_x}" data-gene-y="{gene_y+gene_h}" stroke="{var_color}" stroke-width="{connector_width}" stroke-dasharray="4,2" style="display:none;"/>\n'
+            html += f'<line class="var-connector js-connector" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" data-idx="{idx}" data-gene-x="{gene_x}" data-table-x="{table_x}" data-gene-y="{gene_y+gene_h}" stroke="{var_color}" stroke-width="{connector_width}" stroke-dasharray="4,2" style="display:none;"/>\n'
                 
         # ==== 图例（右上角，双列布局，节省空间）====
         # 计算图例起始位置：在基因区域右侧，但留出一些边距
@@ -8578,7 +8644,7 @@ var regionEnd    = {region_end};
 var allHaplotypeScoreData = {haplotype_score_json};
 var allScoreModeData = {score_mode_json};
 var currentScoreMode = allScoreModeData.current_mode || 'default';
-var currentPhenotype = '{pheno_first_for_js}';
+var currentPhenotype = {pheno_first_for_js};
 var haplotypeScoreData = getScoreData(currentScoreMode, currentPhenotype);
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
@@ -12919,6 +12985,7 @@ draw();
             initial_pheno = next(iter(current_scores.keys()), 'phenotype') if isinstance(current_scores, dict) else 'phenotype'
         gene_label = gene_id or "Gene"
 
+        gene_id_label = _html_escape(gene_id)
         html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
