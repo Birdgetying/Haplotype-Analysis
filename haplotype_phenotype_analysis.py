@@ -2638,6 +2638,18 @@ def _safe_report_flag_class(value, default: str = "muted") -> str:
     return flag if flag in {"pass", "warn", "muted"} else default
 
 
+def _render_report_flag_chips(note, flag_class: str, chip_class: str) -> str:
+    labels = [part.strip() for part in str(note or "NA").split(",") if part.strip()]
+    if not labels:
+        labels = ["NA"]
+    safe_flag = _safe_report_flag_class(flag_class)
+    chips = "".join(
+        f'<span class="{chip_class} {safe_flag}">{_html_escape(label)}</span>'
+        for label in labels
+    )
+    return f'<span class="{chip_class}-set">{chips}</span>'
+
+
 def _build_top_haplotype_key_site_rows(
     hap_sample_df: pd.DataFrame,
     hap_col: str,
@@ -2897,7 +2909,7 @@ def _render_discovery_candidate_list(candidate_rows: list) -> str:
             f"<td>{int(row.get('sample_count', 0))}</td>"
             f"<td>{_html_escape(_format_report_float(row.get('phenotype_mean'), 3))}</td>"
             f"<td>{_html_escape(_format_report_float(row.get('effect'), 3))}</td>"
-            f"<td><span class=\"candidate-flag {flag}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
+            f"<td>{_render_report_flag_chips(row.get('flag_note', 'NA'), flag, 'candidate-flag')}</td>"
             f"<td>{seq}</td>"
             "</tr>"
         )
@@ -2932,7 +2944,7 @@ def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
             f"<td>{_html_escape(_format_report_pvalue(row.get('pvalue')))}</td>"
             f"<td>{_html_escape(row.get('variant_type', 'NA'))}</td>"
             f"<td>{_html_escape(row.get('annotation', 'NA'))}</td>"
-            f"<td><span class=\"key-site-flag {flag}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
+            f"<td>{_render_report_flag_chips(row.get('flag_note', 'NA'), flag, 'key-site-flag')}</td>"
             "</tr>"
         )
     return (
@@ -8476,15 +8488,22 @@ class ReportGenerator:
                                           border-bottom: 1px solid #edf1f5; background: #f7f9fc; letter-spacing: 0; }}
         .discovery-note {{ padding: 6px 10px; font-size: 9px; color: #64748b; background: #fbfcfe;
                           border-bottom: 1px solid #edf1f5; line-height: 1.35; }}
-        .candidate-table th:nth-child(8), .candidate-table td:nth-child(8) {{ width: 120px; }}
+        .candidate-table th:nth-child(7), .candidate-table td:nth-child(7) {{ width: 112px; min-width: 112px;
+            white-space: normal; overflow: visible; text-overflow: clip; vertical-align: top; }}
+        .candidate-table th:nth-child(8), .candidate-table td:nth-child(8) {{ width: 92px; }}
+        .candidate-flag-set, .key-site-flag-set {{ display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-start; }}
         .candidate-flag {{ display: inline-block; border-radius: 999px; padding: 2px 6px; font-size: 9px;
-                          border: 1px solid #d7dde5; background: #f6f8fb; color: #526174; }}
+                          border: 1px solid #d7dde5; background: #f6f8fb; color: #526174;
+                          max-width: 100%; white-space: normal; line-height: 1.2; }}
         .candidate-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; color: #0f6b4f; }}
         .candidate-flag.warn {{ border-color: #f1d184; background: #fff8e6; color: #805200; }}
         .top-hap-key-site {{ margin-top: 10px; }}
         .top-hap-key-site-table th:nth-child(4), .top-hap-key-site-table td:nth-child(4) {{ width: 110px; }}
+        .top-hap-key-site-table th:nth-child(10), .top-hap-key-site-table td:nth-child(10) {{ width: 126px;
+            white-space: normal; overflow: visible; text-overflow: clip; vertical-align: top; }}
         .key-site-flag {{ display: inline-block; border-radius: 999px; padding: 2px 6px; font-size: 9px;
-                         border: 1px solid #d7dde5; background: #f6f8fb; color: #526174; }}
+                         border: 1px solid #d7dde5; background: #f6f8fb; color: #526174;
+                         max-width: 100%; white-space: normal; line-height: 1.2; }}
         .key-site-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; color: #0f6b4f; }}
         .key-site-flag.warn {{ border-color: #f1d184; background: #fff8e6; color: #805200; }}
         .component-matrix th, .component-matrix td {{ text-align: right; }}

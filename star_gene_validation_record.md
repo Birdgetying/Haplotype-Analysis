@@ -379,6 +379,26 @@ DOM verification on the robust TaGW2-B1 report confirmed `Score mode: Robust`,
 phenotype `TGW_mean`, key-site rows for positions `291759689`, `291761315`,
 and `291760677`, and highlighted sequence columns for the same positions.
 
+2026-06-21 Discovery Candidate List flag layout rerun:
+The default and robust commands above were rerun after fixing truncated
+reliability flags in the `Discovery Candidate List`. Long notes such as
+`low n, low reliability` are now rendered as separate wrapped chips instead
+of one clipped badge, and the candidate/table flag columns allow normal
+wrapping. This is a report-layout fix only; the top-scored haplotype and
+literature validation conclusion did not change.
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Verification:
+`python -m unittest test_star_gene_data.py -v` passed 72 tests;
+`python -m py_compile haplotype_phenotype_analysis.py star_gene_validation.py`
+passed. Browser DOM geometry on the robust report confirmed every candidate
+flag cell had `white-space: normal`, no horizontal overflow, no chip overflow,
+and no overlap into the `Seq` column.
+
 ### VRN-Kiss2014
 
 Literature positive control:

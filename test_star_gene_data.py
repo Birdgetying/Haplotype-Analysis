@@ -682,6 +682,32 @@ class StarGeneDataTests(unittest.TestCase):
             ["SV_marker_1"],
         )
 
+    def test_discovery_candidate_flags_render_as_wrappable_chips(self):
+        from haplotype_phenotype_analysis import _render_discovery_candidate_list
+
+        html = _render_discovery_candidate_list([{
+            "rank": 1,
+            "haplotype": "Hap1",
+            "total": 1.2,
+            "sample_count": 1,
+            "phenotype_mean": 10.5,
+            "effect": 2.0,
+            "reliability_flag": "warn",
+            "flag_note": "low n, low reliability, ambiguity penalty",
+            "sequence": "A|G|T",
+        }])
+
+        self.assertIn('class="candidate-flag-set"', html)
+        self.assertIn(">low n<", html)
+        self.assertIn(">low reliability<", html)
+        self.assertIn(">ambiguity penalty<", html)
+        self.assertNotIn(">low n, low reliability, ambiguity penalty<", html)
+
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+        self.assertIn(".candidate-table th:nth-child(7), .candidate-table td:nth-child(7)", source)
+        self.assertIn(".candidate-flag-set", source)
+        self.assertIn("white-space: normal", source)
+
     def test_key_site_priority_penalizes_low_reliability_sites(self):
         from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
         import pandas as pd
