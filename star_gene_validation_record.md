@@ -330,10 +330,12 @@ and
 Robust `Candidate Key Sites` result:
 The robust report opens with `Hap1=A|G|C` as the top-scored haplotype.
 The key-site panel ranks three promoter SNPs:
-`291,759,689` (`A vs C=437; C/A=7`, n `371/445`, contrast `2.451`,
+`291,759,689` (`A vs C=437; C/A=7`, n `371/444`, site-level contrast `2.457`,
 P `6.98e-09`, stable), `291,761,315`
-(`C vs T=73; T/C=1`, shared allele warning), and `291,760,677`
-(`G vs A=7`, shared allele/low-MAF warning). These correspond to the three
+(`C vs T=73; T/C=1`, n `371/74`, site-level contrast `5.165`,
+shared-allele warning), and `291,760,677`
+(`G vs A=7`, n `371/7`, site-level contrast `-1.728`,
+low-other-n/shared-allele/low-MAF warning). These correspond to the three
 displayed TaGW2-B1 promoter SNPs and show why the top robust haplotype is
 locally distinguishable from the other haplotypes.
 
@@ -354,6 +356,28 @@ to `Hap5` while retaining the same three highlighted display positions,
 confirming that key-site rows update with score mode. Screenshot capture of
 the very large integrated page timed out in the browser runtime, but DOM and
 interaction checks succeeded.
+
+2026-06-21 Candidate Key Sites code-review fix:
+The default and robust commands above were rerun after fixing the review
+findings in the discovery key-site panel. `phenotype_contrast` is now computed
+per site as top-haplotype/top-allele carriers versus samples carrying a
+different allele at that specific site, instead of reusing one global top-hap
+versus non-top-hap contrast for every row. Candidate-key-site P values can now
+be selected per phenotype through `variant_pvalues_by_phenotype`. Low top n,
+low different-allele n, shared alleles, high missingness, low MAF, and missing
+phenotype evidence now reduce `priority_score` through a reliability factor
+instead of only changing the warning label. String marker IDs are preserved in
+`top_haplotype_key_site_positions`, and report flag CSS classes are whitelisted
+to `pass`, `warn`, or `muted`.
+
+Verification:
+`python -m unittest test_star_gene_data.py -v` passed 71 tests;
+`python -m py_compile haplotype_phenotype_analysis.py star_gene_validation.py`
+passed; `python run_rice_test.py` completed with the known
+`LOC_Os01g02660 no_phenotype_match` plus two successful rice targets. Browser
+DOM verification on the robust TaGW2-B1 report confirmed `Score mode: Robust`,
+phenotype `TGW_mean`, key-site rows for positions `291759689`, `291761315`,
+and `291760677`, and highlighted sequence columns for the same positions.
 
 ### VRN-Kiss2014
 

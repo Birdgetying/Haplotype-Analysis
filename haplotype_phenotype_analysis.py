@@ -2633,6 +2633,11 @@ def _normalize_key_site_allele(value) -> str:
     return allele
 
 
+def _safe_report_flag_class(value, default: str = "muted") -> str:
+    flag = str(value or default).strip().lower()
+    return flag if flag in {"pass", "warn", "muted"} else default
+
+
 def _build_top_haplotype_key_site_rows(
     hap_sample_df: pd.DataFrame,
     hap_col: str,
@@ -2676,20 +2681,10 @@ def _build_top_haplotype_key_site_rows(
     if not display_orig_indices:
         display_orig_indices = list(range(len(display_positions)))
     pos_idx_pairs = [
-        (int(pos), int(idx))
+        (pos, int(idx))
         for pos, idx in zip(display_positions, display_orig_indices)
         if idx is not None
     ]
-
-    top_vals = pd.to_numeric(top_rows[phenotype_col], errors="coerce").dropna() if phenotype_col in top_rows.columns else pd.Series(dtype=float)
-    other_vals = pd.to_numeric(other_rows[phenotype_col], errors="coerce").dropna() if phenotype_col in other_rows.columns else pd.Series(dtype=float)
-    top_mean = float(top_vals.mean()) if len(top_vals) > 0 else None
-    other_mean = float(other_vals.mean()) if len(other_vals) > 0 else None
-    phenotype_contrast = (
-        float(top_mean - other_mean)
-        if top_mean is not None and other_mean is not None else
-        None
-    )
 
     variant_info = variant_info or {}
     variant_pvalues = variant_pvalues or {}
@@ -2718,6 +2713,7 @@ def _build_top_haplotype_key_site_rows(
         all_counts = {}
         diff_counts = {}
         valid_other_count = 0
+        different_phenotype_values = []
         for _, sample_row in other_rows.iterrows():
             sample_seq = str(sample_row.get("Haplotype_Seq", "")).split("|")
             if seq_idx >= len(sample_seq):
@@ -2729,7 +2725,28 @@ def _build_top_haplotype_key_site_rows(
             all_counts[allele] = all_counts.get(allele, 0) + 1
             if allele != top_allele:
                 diff_counts[allele] = diff_counts.get(allele, 0) + 1
+                if phenotype_col in sample_row.index:
+                    phenotype_val = pd.to_numeric(pd.Series([sample_row[phenotype_col]]), errors="coerce").iloc[0]
+                    if pd.notna(phenotype_val):
+                        different_phenotype_values.append(float(phenotype_val))
         if not diff_counts:
+            continue
+
+        top_phenotype_values = []
+        top_count = 0
+        for _, sample_row in top_rows.iterrows():
+            sample_seq = str(sample_row.get("Haplotype_Seq", "")).split("|")
+            if seq_idx >= len(sample_seq):
+                continue
+            allele = _normalize_key_site_allele(sample_seq[seq_idx])
+            if allele != top_allele:
+                continue
+            top_count += 1
+            if phenotype_col in sample_row.index:
+                phenotype_val = pd.to_numeric(pd.Series([sample_row[phenotype_col]]), errors="coerce").iloc[0]
+                if pd.notna(phenotype_val):
+                    top_phenotype_values.append(float(phenotype_val))
+        if top_count == 0:
             continue
 
         different_count = int(sum(diff_counts.values()))
@@ -2737,6 +2754,13 @@ def _build_top_haplotype_key_site_rows(
         other_alleles = "; ".join(
             f"{allele}={count}"
             for allele, count in sorted(diff_counts.items(), key=lambda item: (-item[1], item[0]))
+        )
+        top_mean = float(np.mean(top_phenotype_values)) if top_phenotype_values else None
+        other_mean = float(np.mean(different_phenotype_values)) if different_phenotype_values else None
+        phenotype_contrast = (
+            float(top_mean - other_mean)
+            if top_mean is not None and other_mean is not None else
+            None
         )
 
         info = variant_info.get(pos, variant_info.get(str(pos), {})) or {}
@@ -2776,35 +2800,42 @@ def _build_top_haplotype_key_site_rows(
         contrast_score = min(abs(phenotype_contrast or 0.0) / 10.0, 1.0)
         reliability_notes = []
         reliability_flag = "pass"
-        top_count = int(len(top_rows))
+        reliability_factor = 1.0
         if top_count < 10:
             reliability_flag = "warn"
             reliability_notes.append("low top n")
-        if valid_other_count < 10:
+            reliability_factor *= 0.75
+        if different_count < 10:
             reliability_flag = "warn"
             reliability_notes.append("low other n")
+            reliability_factor *= 0.75
         if specificity < 0.5:
             reliability_flag = "warn"
             reliability_notes.append("shared allele")
+            reliability_factor *= max(0.5, specificity)
         if missing_rate is not None and missing_rate > 0.2:
             reliability_flag = "warn"
             reliability_notes.append("high missing")
+            reliability_factor *= max(0.35, 1.0 - min(missing_rate, 0.9))
         if maf is not None and maf < 0.05:
             reliability_flag = "warn"
             reliability_notes.append("low MAF")
+            reliability_factor *= 0.6
         if phenotype_contrast is None:
             reliability_flag = "warn"
             reliability_notes.append("no phenotype")
+            reliability_factor *= 0.5
         if not reliability_notes:
             reliability_notes.append("stable")
 
-        priority_score = (
+        raw_priority_score = (
             specificity * 3.0 +
             contrast_score * 2.0 +
             gwas_score * 1.5 +
             annotation_score +
             min(top_count / 50.0, 1.0) * 0.5
         )
+        priority_score = raw_priority_score * reliability_factor
         rows.append({
             "rank": 0,
             "position": pos,
@@ -2815,8 +2846,9 @@ def _build_top_haplotype_key_site_rows(
             "top_allele": top_allele,
             "other_alleles": other_alleles,
             "top_count": top_count,
-            "other_count": int(valid_other_count),
+            "other_count": different_count,
             "different_other_count": different_count,
+            "valid_other_count": int(valid_other_count),
             "specificity": specificity,
             "top_mean": top_mean,
             "other_mean": other_mean,
@@ -2830,6 +2862,8 @@ def _build_top_haplotype_key_site_rows(
             "reliability_flag": reliability_flag,
             "flag_note": ", ".join(reliability_notes),
             "priority_score": float(priority_score),
+            "raw_priority_score": float(raw_priority_score),
+            "reliability_factor": float(reliability_factor),
         })
 
     rows.sort(
@@ -2854,6 +2888,7 @@ def _render_discovery_candidate_list(candidate_rows: list) -> str:
         seq = _html_escape(row.get("sequence", ""))
         if len(seq) > 42:
             seq = seq[:39] + "..."
+        flag = _safe_report_flag_class(row.get("reliability_flag", "muted"))
         rows.append(
             "<tr>"
             f"<td>#{int(row.get('rank', 0))}</td>"
@@ -2862,7 +2897,7 @@ def _render_discovery_candidate_list(candidate_rows: list) -> str:
             f"<td>{int(row.get('sample_count', 0))}</td>"
             f"<td>{_html_escape(_format_report_float(row.get('phenotype_mean'), 3))}</td>"
             f"<td>{_html_escape(_format_report_float(row.get('effect'), 3))}</td>"
-            f"<td><span class=\"candidate-flag {row.get('reliability_flag', 'muted')}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
+            f"<td><span class=\"candidate-flag {flag}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
             f"<td>{seq}</td>"
             "</tr>"
         )
@@ -2885,6 +2920,7 @@ def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
         pos = row.get("position", "")
         pos_label = f"{int(pos):,}" if isinstance(pos, (int, np.integer)) else _html_escape(pos)
         allele_summary = f"{row.get('top_allele', 'NA')} vs {row.get('other_alleles', 'NA')}"
+        flag = _safe_report_flag_class(row.get("reliability_flag", "muted"))
         rows.append(
             f'<tr data-pos="{_html_escape(pos)}">'
             f"<td>#{int(row.get('rank', 0))}</td>"
@@ -2896,7 +2932,7 @@ def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
             f"<td>{_html_escape(_format_report_pvalue(row.get('pvalue')))}</td>"
             f"<td>{_html_escape(row.get('variant_type', 'NA'))}</td>"
             f"<td>{_html_escape(row.get('annotation', 'NA'))}</td>"
-            f"<td><span class=\"key-site-flag {row.get('reliability_flag', 'muted')}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
+            f"<td><span class=\"key-site-flag {flag}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
             "</tr>"
         )
     return (
@@ -2959,7 +2995,7 @@ def _render_reliability_population_panel(candidate_rows: list) -> str:
         return '<div class="evidence-empty">No reliability summary available.</div>'
     cards = []
     for row in candidate_rows[:4]:
-        flag = row.get("reliability_flag", "muted")
+        flag = _safe_report_flag_class(row.get("reliability_flag", "muted"))
         cards.append(
             f'<div class="reliability-card {flag}">'
             f'<strong>{_html_escape(row.get("haplotype", "NA"))}</strong>'
@@ -3008,10 +3044,13 @@ def _build_discovery_candidate_panel_data(
     display_orig_indices: list = None,
     variant_info: dict = None,
     variant_pvalues: dict = None,
+    variant_pvalues_by_phenotype: dict = None,
     snp_effects: dict = None,
 ) -> dict:
     """Pre-render discovery candidate panels for each score mode and phenotype."""
     effect_by_phenotype = effect_by_phenotype or {}
+    variant_pvalues = variant_pvalues or {}
+    variant_pvalues_by_phenotype = variant_pvalues_by_phenotype or {}
     current_mode = (score_mode_data or {}).get("current_mode", "default")
     modes = (score_mode_data or {}).get("modes", {}) or {}
     panel_modes = {}
@@ -3030,6 +3069,10 @@ def _build_discovery_candidate_panel_data(
                 score_results=score_results,
                 effect_data=effect_by_phenotype.get(phenotype, {}),
             )
+            phenotype_variant_pvalues = variant_pvalues_by_phenotype.get(
+                phenotype,
+                variant_pvalues_by_phenotype.get(str(phenotype), variant_pvalues),
+            )
             key_site_rows = _build_top_haplotype_key_site_rows(
                 hap_sample_df=hap_sample_df,
                 hap_col=hap_col,
@@ -3038,14 +3081,14 @@ def _build_discovery_candidate_panel_data(
                 display_positions=display_positions or [],
                 display_orig_indices=display_orig_indices or [],
                 variant_info=variant_info or {},
-                variant_pvalues=variant_pvalues or {},
+                variant_pvalues=phenotype_variant_pvalues or {},
                 snp_effects=snp_effects or {},
             )
             panel_modes[str(mode)][str(phenotype)] = {
                 "meta_html": _render_discovery_candidate_panel_meta(str(mode), str(phenotype)),
                 "candidate_list_html": _render_discovery_candidate_list(rows),
                 "top_haplotype_key_sites_html": _render_top_haplotype_key_sites(key_site_rows),
-                "top_haplotype_key_site_positions": [int(row["position"]) for row in key_site_rows],
+                "top_haplotype_key_site_positions": [str(row["position"]) for row in key_site_rows],
                 "score_component_breakdown_html": _render_score_component_breakdown(rows),
                 "reliability_population_html": _render_reliability_population_panel(rows),
             }
@@ -7468,7 +7511,8 @@ class ReportGenerator:
                                   network_data: dict = None,
                                   has_promoter_variants: bool = False,
                                   promoter_actual_length: int = 2000,
-                                  all_phenotype_results: dict = None) -> str:
+                                  all_phenotype_results: dict = None,
+                                  variant_pvalues_by_phenotype: dict = None) -> str:
         """生成综合HTML大图（整合基因结构、GWAS P值、网络图、效应图、箱线图、单倍型序列）
         
         布局设计：
@@ -7479,7 +7523,8 @@ class ReportGenerator:
         Args:
             cluster_haplotypes: 是否按序列相似度聚类排序
             variant_info: 变异信息字典 {pos: {'ref': '', 'alt': '', 'len_diff': int, 'maf': float, 'missing_rate': float, 'annotation': str}}
-            variant_pvalues: 变异P值字典 {pos: pvalue}
+            variant_pvalues: 当前表型的变异P值字典 {pos: pvalue}
+            variant_pvalues_by_phenotype: 各表型的变异P值字典 {phenotype: {pos: pvalue}}
             network_data: 网络图数据 {'nodes': [], 'edges': []}
         """
         import sys, re
@@ -8113,6 +8158,7 @@ class ReportGenerator:
             display_orig_indices=display_orig_indices,
             variant_info=variant_info,
             variant_pvalues=variant_pvalues,
+            variant_pvalues_by_phenotype=variant_pvalues_by_phenotype,
             snp_effects=snp_effects,
         )
         discovery_candidate_panel_json = _script_json_dumps(discovery_candidate_panel_data)
@@ -15461,11 +15507,23 @@ class HaplotypePhenotypeAnalyzer:
 
             # 不过滤位点 — HTML面板有交互式MAF/缺失率slider，
             # 若Python预过滤则LD倒三角/GWAS图/连线无法随slider联动更新
-            variant_pvalues = compute_variant_phenotype_pvalues(
-                assoc_module.merged_df,
-                self.positions,
-                first_pheno,
-            )
+            variant_pvalues_by_phenotype = {
+                pheno: compute_variant_phenotype_pvalues(
+                    assoc_module.merged_df,
+                    self.positions,
+                    pheno,
+                )
+                for pheno in (phenotype_cols or [])
+                if pheno in assoc_module.merged_df.columns
+            }
+            variant_pvalues = variant_pvalues_by_phenotype.get(first_pheno, {})
+            if not variant_pvalues:
+                variant_pvalues = compute_variant_phenotype_pvalues(
+                    assoc_module.merged_df,
+                    self.positions,
+                    first_pheno,
+                )
+                variant_pvalues_by_phenotype[first_pheno] = variant_pvalues
 
             score_bundle = self.reporter.compute_haplotype_scores(
                 hap_sample_df=assoc_module.merged_df,
@@ -15515,6 +15573,7 @@ class HaplotypePhenotypeAnalyzer:
                 cluster_haplotypes=cluster_haplotypes,
                 variant_info=self.extractor.variant_info if (self.extractor and hasattr(self.extractor, 'variant_info') and self.extractor.variant_info) else (self.variant_info if self.variant_info else {}),
                 variant_pvalues=variant_pvalues,
+                variant_pvalues_by_phenotype=variant_pvalues_by_phenotype,
                 has_promoter_variants=has_promoter_variants,
                 promoter_actual_length=promoter_actual_length,
                 all_phenotype_results=all_results.get('phenotype_results', {}),

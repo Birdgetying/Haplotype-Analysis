@@ -517,6 +517,221 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
         self.assertIn("Score mode: <strong>Robust</strong>", robust_panel["meta_html"])
 
+    def test_key_site_contrast_is_site_specific(self):
+        from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": [f"S{i}" for i in range(1, 9)],
+            "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap2", "Hap3", "Hap3", "Hap4", "Hap4"],
+            "Haplotype_Seq": [
+                "A|G|C", "A|G|C",
+                "T|G|C", "T|G|C",
+                "A|T|C", "A|T|C",
+                "A|G|T", "A|G|T",
+            ],
+            "Trait": [10.0, 12.0, 30.0, 32.0, 80.0, 82.0, 15.0, 17.0],
+        })
+        score_results = {
+            "per_haplotype": {
+                "Hap1": {"total": 5.0},
+                "Hap2": {"total": 2.0},
+                "Hap3": {"total": 1.0},
+                "Hap4": {"total": 0.5},
+            }
+        }
+
+        rows = _build_top_haplotype_key_site_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results=score_results,
+            display_positions=[100, 200, 300],
+            display_orig_indices=[0, 1, 2],
+            variant_info={
+                100: {"annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+                200: {"annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+                300: {"annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+            },
+            top_n=3,
+        )
+
+        by_pos = {row["position"]: row for row in rows}
+        self.assertAlmostEqual(by_pos[100]["other_mean"], 31.0)
+        self.assertAlmostEqual(by_pos[100]["phenotype_contrast"], -20.0)
+        self.assertAlmostEqual(by_pos[200]["other_mean"], 81.0)
+        self.assertAlmostEqual(by_pos[200]["phenotype_contrast"], -70.0)
+        self.assertAlmostEqual(by_pos[300]["other_mean"], 16.0)
+        self.assertAlmostEqual(by_pos[300]["phenotype_contrast"], -5.0)
+        self.assertEqual([row["position"] for row in rows], [200, 100, 300])
+
+    def test_discovery_panel_uses_phenotype_specific_variant_pvalues(self):
+        from haplotype_phenotype_analysis import _build_discovery_candidate_panel_data
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": [f"S{i}" for i in range(1, 7)],
+            "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap2", "Hap3", "Hap3"],
+            "Haplotype_Seq": ["A|G", "A|G", "T|G", "T|G", "A|T", "A|T"],
+            "TraitA": [10.0, 11.0, 30.0, 31.0, 12.0, 13.0],
+            "TraitB": [50.0, 51.0, 52.0, 53.0, 90.0, 91.0],
+        })
+        score_mode_data = {
+            "current_mode": "default",
+            "modes": {
+                "default": {
+                    "TraitA": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 5.0},
+                            "Hap2": {"total": 1.0},
+                            "Hap3": {"total": 0.5},
+                        }
+                    },
+                    "TraitB": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 5.0},
+                            "Hap2": {"total": 1.0},
+                            "Hap3": {"total": 0.5},
+                        }
+                    },
+                }
+            },
+        }
+
+        panel_data = _build_discovery_candidate_panel_data(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            score_mode_data=score_mode_data,
+            current_phenotype="TraitA",
+            display_positions=[100, 200],
+            display_orig_indices=[0, 1],
+            variant_info={
+                100: {"annotation": "promoter", "maf": 0.2, "missing_rate": 0.0},
+                200: {"annotation": "promoter", "maf": 0.2, "missing_rate": 0.0},
+            },
+            variant_pvalues={100: 0.5, 200: 0.5},
+            variant_pvalues_by_phenotype={
+                "TraitA": {100: 1e-8, 200: 0.5},
+                "TraitB": {100: 0.5, 200: 1e-8},
+            },
+        )
+
+        trait_a_html = panel_data["modes"]["default"]["TraitA"]["top_haplotype_key_sites_html"]
+        trait_b_html = panel_data["modes"]["default"]["TraitB"]["top_haplotype_key_sites_html"]
+        self.assertIn('data-pos="100"', trait_a_html)
+        self.assertIn("1.00e-08", trait_a_html)
+        self.assertIn('data-pos="200"', trait_b_html)
+        self.assertIn("1.00e-08", trait_b_html)
+
+    def test_key_site_renderer_sanitizes_flag_class_and_string_positions(self):
+        from haplotype_phenotype_analysis import (
+            _build_discovery_candidate_panel_data,
+            _render_top_haplotype_key_sites,
+        )
+        import pandas as pd
+
+        html = _render_top_haplotype_key_sites([{
+            "rank": 1,
+            "position": "SV_marker_1",
+            "top_haplotype": "Hap1",
+            "top_allele": "DEL",
+            "other_alleles": "REF=4",
+            "top_count": 2,
+            "other_count": 4,
+            "phenotype_contrast": 3.0,
+            "pvalue": 0.01,
+            "variant_type": "SV",
+            "annotation": "sv",
+            "reliability_flag": 'pass" onclick="alert(1)',
+            "flag_note": "stable",
+        }])
+
+        self.assertIn('data-pos="SV_marker_1"', html)
+        self.assertIn('class="key-site-flag muted"', html)
+        self.assertNotIn("onclick", html)
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4"],
+            "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap2"],
+            "Haplotype_Seq": ["A", "A", "T", "T"],
+            "Trait": [10.0, 11.0, 20.0, 21.0],
+        })
+        panel_data = _build_discovery_candidate_panel_data(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            score_mode_data={
+                "current_mode": "default",
+                "modes": {
+                    "default": {
+                        "Trait": {
+                            "per_haplotype": {
+                                "Hap1": {"total": 5.0},
+                                "Hap2": {"total": 1.0},
+                            }
+                        }
+                    }
+                },
+            },
+            current_phenotype="Trait",
+            display_positions=["SV_marker_1"],
+            display_orig_indices=[0],
+        )
+
+        self.assertEqual(
+            panel_data["modes"]["default"]["Trait"]["top_haplotype_key_site_positions"],
+            ["SV_marker_1"],
+        )
+
+    def test_key_site_priority_penalizes_low_reliability_sites(self):
+        from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
+        import pandas as pd
+
+        top_rows = [
+            {
+                "SampleID": f"T{i}",
+                "Hap_Name": "Hap1",
+                "Haplotype_Seq": "A|G",
+                "Trait": 10.0 + (i % 2),
+            }
+            for i in range(20)
+        ]
+        other_rows = [
+            {
+                "SampleID": f"O{i}",
+                "Hap_Name": "Hap2",
+                "Haplotype_Seq": "T|C",
+                "Trait": 30.0 + (i % 2),
+            }
+            for i in range(20)
+        ]
+        hap_sample_df = pd.DataFrame(top_rows + other_rows)
+
+        rows = _build_top_haplotype_key_site_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results={
+                "per_haplotype": {
+                    "Hap1": {"total": 5.0},
+                    "Hap2": {"total": 1.0},
+                }
+            },
+            display_positions=[100, 200],
+            display_orig_indices=[0, 1],
+            variant_info={
+                100: {"annotation": "promoter", "maf": 0.01, "missing_rate": 0.45},
+                200: {"annotation": "promoter", "maf": 0.25, "missing_rate": 0.0},
+            },
+            variant_pvalues={100: 1e-20, 200: 1e-6},
+            top_n=2,
+        )
+
+        by_pos = {row["position"]: row for row in rows}
+        self.assertEqual(by_pos[100]["reliability_flag"], "warn")
+        self.assertEqual(by_pos[200]["reliability_flag"], "pass")
+        self.assertLess(by_pos[100]["priority_score"], by_pos[200]["priority_score"])
+        self.assertEqual(rows[0]["position"], 200)
+
     def test_evidence_table_includes_ld_and_annotation_columns(self):
         from haplotype_phenotype_analysis import _render_post_gwas_evidence_table
 
