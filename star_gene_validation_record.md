@@ -272,6 +272,42 @@ from about `1014 px` to about `374 px`, the full evidence panel from about
 collapsed by default. The existing horizontal scroll comes from the fixed-width
 large integrated figure canvas, not from these new candidate panels.
 
+2026-06-21 score-mode-aware candidate panel rerun:
+The same default and robust commands were rerun after fixing a report UI
+consistency bug: the `Discovery Candidate List`, `Score Component Breakdown`,
+and `Reliability & Population` panels are now pre-rendered per
+`score_mode + phenotype` and updated by the same Original/Robust and phenotype
+switches as the score plot. This is a report-state fix only; the discovery
+ranking inputs and literature audit conclusion are unchanged.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Top-scored haplotypes:
+Default candidate panel ranks rare ambiguous `Hap5=C/A|G|C` first, n=7,
+total score `4.2581`; exact Qin2014 `Hap1=A|G|C` is second, n=371, score
+`2.5746`. Robust candidate panel ranks exact Qin2014 `Hap1=A|G|C` first,
+n=371, total score `1.8132`, sample reliability `0.9488`; rare ambiguous
+`Hap5` is third, n=7, score `0.9733`, sample reliability `0.2593`.
+
+HTML/browser verification:
+Static inspection of the robust report confirmed `allDiscoveryCandidatePanelData`
+contains both `robust_discovery` and sibling `default` panel data, and
+`switchScoreMode()` / `switchPhenotype()` call `updateDiscoveryCandidatePanels()`.
+In the in-app browser, after reload the robust report opened with
+`Score mode: Robust` and candidate/component/reliability first row `Hap1`.
+Clicking `Original` changed all three panels to `Score mode: Original` with
+first row `Hap5`; clicking `Robust` changed all three panels back to `Hap1`.
+This confirms the new discovery-safe explanatory panels no longer show stale
+rank/component/reliability data after mode switches.
+
 ### VRN-Kiss2014
 
 Literature positive control:

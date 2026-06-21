@@ -313,7 +313,7 @@ class StarGeneDataTests(unittest.TestCase):
 
         self.assertIn("Local Candidate Evidence", integrated_block)
         self.assertIn("Evidence phenotype", integrated_block)
-        self.assertIn("Switching phenotype updates score/effect plots only", integrated_block)
+        self.assertIn("Switching phenotype updates score, effect, and candidate panels", integrated_block)
 
     def test_integrated_post_gwas_panel_has_auditable_evidence_layout(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -357,12 +357,39 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("{score_component_breakdown_html}", integrated_block)
         self.assertIn("{reliability_population_html}", integrated_block)
 
+    def test_integrated_candidate_panels_are_score_mode_and_phenotype_aware(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("_build_discovery_candidate_panel_data", source)
+        self.assertIn("var allDiscoveryCandidatePanelData", integrated_block)
+        self.assertIn("function updateDiscoveryCandidatePanels", integrated_block)
+        self.assertIn("allDiscoveryCandidatePanelData.modes", integrated_block)
+        self.assertIn("discovery-candidate-panel-meta", integrated_block)
+
+        phenotype_switch = integrated_block[
+            integrated_block.index("function switchPhenotype"):
+            integrated_block.index("function getScoreData")
+        ]
+        score_mode_switch = integrated_block[
+            integrated_block.index("function switchScoreMode"):
+            integrated_block.index("function updateScoreModeControls")
+        ]
+        self.assertIn("updateDiscoveryCandidatePanels()", phenotype_switch)
+        self.assertIn("updateDiscoveryCandidatePanels()", score_mode_switch)
+        self.assertNotIn("Switch updates score plot only.", integrated_block)
+
     def test_render_discovery_candidate_panels_are_literature_free(self):
         from haplotype_phenotype_analysis import (
             _build_discovery_candidate_rows,
+            _build_discovery_candidate_panel_data,
             _render_discovery_candidate_list,
             _render_score_component_breakdown,
             _render_reliability_population_panel,
+            _select_discovery_candidate_panel,
         )
         import pandas as pd
 
@@ -411,6 +438,42 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("P1=1", html)
         self.assertNotIn("literature", html.lower())
         self.assertNotIn("published", html.lower())
+
+        panel_data = _build_discovery_candidate_panel_data(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            score_mode_data={
+                "current_mode": "robust_discovery",
+                "modes": {
+                    "default": {
+                        "Trait": {
+                            "score_mode": "default",
+                            "per_haplotype": {
+                                "Hap1": {"total": 3.0, "sample_reliability": 0.9},
+                                "Hap2": {"total": 1.0, "sample_reliability": 0.9},
+                            },
+                        },
+                    },
+                    "robust_discovery": {
+                        "Trait": {
+                            "score_mode": "robust_discovery",
+                            "per_haplotype": {
+                                "Hap1": {"total": 1.0, "sample_reliability": 0.9},
+                                "Hap2": {"total": 4.0, "sample_reliability": 0.8},
+                            },
+                        },
+                    },
+                },
+            },
+            effect_by_phenotype={"Trait": {"Hap1": {"effect": 1.0}, "Hap2": {"effect": 2.0}}},
+            current_phenotype="Trait",
+        )
+        default_panel = _select_discovery_candidate_panel(panel_data, "default", "Trait")
+        robust_panel = _select_discovery_candidate_panel(panel_data, "robust_discovery", "Trait")
+        self.assertIn("#1</td><td>Hap1", default_panel["candidate_list_html"])
+        self.assertIn("#1</td><td>Hap2", robust_panel["candidate_list_html"])
+        self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
+        self.assertIn("Score mode: <strong>Robust</strong>", robust_panel["meta_html"])
 
     def test_evidence_table_includes_ld_and_annotation_columns(self):
         from haplotype_phenotype_analysis import _render_post_gwas_evidence_table

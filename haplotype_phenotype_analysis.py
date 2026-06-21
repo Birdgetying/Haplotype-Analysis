@@ -2727,6 +2727,83 @@ def _render_reliability_population_panel(candidate_rows: list) -> str:
     )
 
 
+def _format_score_mode_label(score_mode: str) -> str:
+    labels = {
+        "default": "Original",
+        "robust_discovery": "Robust",
+    }
+    return labels.get(str(score_mode or "default"), str(score_mode or "default"))
+
+
+def _render_discovery_candidate_panel_meta(score_mode: str, phenotype_col: str) -> str:
+    return (
+        '<div class="discovery-candidate-panel-meta">'
+        f'<span>Score mode: <strong>{_html_escape(_format_score_mode_label(score_mode))}</strong></span>'
+        f'<span>Phenotype: <strong>{_html_escape(phenotype_col or "NA")}</strong></span>'
+        '<span>Discovery-only local evidence; literature labels are not used for scoring.</span>'
+        '</div>'
+    )
+
+
+def _build_discovery_candidate_panel_data(
+    hap_sample_df: pd.DataFrame,
+    hap_col: str,
+    score_mode_data: dict,
+    effect_by_phenotype: dict = None,
+    current_phenotype: str = None,
+) -> dict:
+    """Pre-render discovery candidate panels for each score mode and phenotype."""
+    effect_by_phenotype = effect_by_phenotype or {}
+    current_mode = (score_mode_data or {}).get("current_mode", "default")
+    modes = (score_mode_data or {}).get("modes", {}) or {}
+    panel_modes = {}
+
+    for mode, phenotype_scores in modes.items():
+        if not isinstance(phenotype_scores, dict):
+            continue
+        panel_modes[str(mode)] = {}
+        for phenotype, score_results in phenotype_scores.items():
+            if not isinstance(score_results, dict):
+                continue
+            rows = _build_discovery_candidate_rows(
+                hap_sample_df=hap_sample_df,
+                hap_col=hap_col,
+                phenotype_col=phenotype,
+                score_results=score_results,
+                effect_data=effect_by_phenotype.get(phenotype, {}),
+            )
+            panel_modes[str(mode)][str(phenotype)] = {
+                "meta_html": _render_discovery_candidate_panel_meta(str(mode), str(phenotype)),
+                "candidate_list_html": _render_discovery_candidate_list(rows),
+                "score_component_breakdown_html": _render_score_component_breakdown(rows),
+                "reliability_population_html": _render_reliability_population_panel(rows),
+            }
+
+    return {
+        "current_mode": current_mode,
+        "current_phenotype": current_phenotype,
+        "modes": panel_modes,
+    }
+
+
+def _select_discovery_candidate_panel(panel_data: dict, score_mode: str, phenotype_col: str) -> dict:
+    modes = (panel_data or {}).get("modes", {}) or {}
+    mode_panels = modes.get(score_mode) or modes.get((panel_data or {}).get("current_mode")) or {}
+    if not isinstance(mode_panels, dict):
+        mode_panels = {}
+    panel = mode_panels.get(phenotype_col)
+    if panel is None and mode_panels:
+        panel = next(iter(mode_panels.values()))
+    if isinstance(panel, dict):
+        return panel
+    return {
+        "meta_html": _render_discovery_candidate_panel_meta(score_mode, phenotype_col),
+        "candidate_list_html": '<div class="evidence-empty">No discovery candidates could be ranked from haplotype scores.</div>',
+        "score_component_breakdown_html": '<div class="evidence-empty">No score components available.</div>',
+        "reliability_population_html": '<div class="evidence-empty">No reliability summary available.</div>',
+    }
+
+
 def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
     """返回每位样本在 Haplotype_Seq 第 idx 个位点的碱基字符（object 数组）。"""
     out = np.empty(len(merged_df), dtype=object)
@@ -7714,7 +7791,6 @@ class ReportGenerator:
         gwas_threshold_label = f"{post_gwas_evidence.get('gwas_threshold', 1e-5):.0e}".replace("e-0", "e-").replace("e+0", "e+")
         evidence_phenotype_label = _html_escape(actual_pheno_col)
         rule_note = _html_escape(candidate_rule.get('note', ''))
-        score_mode_label = _html_escape(score_results.get('score_mode', getattr(self, 'score_mode', 'default')) if isinstance(score_results, dict) else getattr(self, 'score_mode', 'default'))
         variant_haplotype_bridge = _build_variant_haplotype_bridge(
             records=post_gwas_evidence.get('records', []),
             display_positions=display_positions,
@@ -7740,16 +7816,37 @@ class ReportGenerator:
             phenotype_col=actual_pheno_col,
             score_results=score_results,
         )
-        discovery_candidate_rows = _build_discovery_candidate_rows(
+        effect_by_phenotype = {}
+        if all_phenotype_results:
+            for pheno_name, pheno_result in all_phenotype_results.items():
+                pheno_effect = pheno_result.get('effect', {}) if isinstance(pheno_result, dict) else {}
+                hap_effects = pheno_effect.get('haplotype_effects', []) if isinstance(pheno_effect, dict) else []
+                effect_by_phenotype[pheno_name] = {
+                    eff.get('haplotype', ''): {
+                        'effect': eff.get('effect'),
+                        'p_value': eff.get('p_value'),
+                    }
+                    for eff in hap_effects if isinstance(eff, dict) and eff.get('haplotype')
+                }
+        if actual_pheno_col not in effect_by_phenotype:
+            effect_by_phenotype[actual_pheno_col] = effect_data
+        discovery_candidate_panel_data = _build_discovery_candidate_panel_data(
             hap_sample_df=hap_sample_df,
             hap_col=hap_col,
-            phenotype_col=actual_pheno_col,
-            score_results=score_results,
-            effect_data=effect_data,
+            score_mode_data=score_mode_data,
+            effect_by_phenotype=effect_by_phenotype,
+            current_phenotype=actual_pheno_col,
         )
-        discovery_candidate_list_html = _render_discovery_candidate_list(discovery_candidate_rows)
-        score_component_breakdown_html = _render_score_component_breakdown(discovery_candidate_rows)
-        reliability_population_html = _render_reliability_population_panel(discovery_candidate_rows)
+        discovery_candidate_panel_json = _script_json_dumps(discovery_candidate_panel_data)
+        initial_discovery_panel = _select_discovery_candidate_panel(
+            discovery_candidate_panel_data,
+            score_mode_data.get('current_mode', score_results.get('score_mode', getattr(self, 'score_mode', 'default')) if isinstance(score_results, dict) else getattr(self, 'score_mode', 'default')),
+            actual_pheno_col,
+        )
+        discovery_candidate_panel_meta_html = initial_discovery_panel.get('meta_html', '')
+        discovery_candidate_list_html = initial_discovery_panel.get('candidate_list_html', '')
+        score_component_breakdown_html = initial_discovery_panel.get('score_component_breakdown_html', '')
+        reliability_population_html = initial_discovery_panel.get('reliability_population_html', '')
 
         # 准备网络图数据
         # 先计算lead_haplotype（在两种情况下都需要）
@@ -8000,6 +8097,11 @@ class ReportGenerator:
         .evidence-metric strong {{ display: block; font-size: 14px; color: #203040; line-height: 1.25; }}
         .evidence-metric span {{ display: block; font-size: 10px; color: #64748b; margin-top: 3px; line-height: 1.35; }}
         .evidence-note {{ font-size: 10px; color: #6b7280; margin-top: 8px; line-height: 1.35; }}
+        .discovery-candidate-panel-meta {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+                                          font-size: 10px; color: #64748b; line-height: 1.35; }}
+        .discovery-candidate-panel-meta span {{ border: 1px solid #e1e8f0; border-radius: 999px;
+                                               background: white; padding: 3px 8px; }}
+        .discovery-candidate-panel-meta strong {{ color: #203040; }}
         .evidence-detail-disclosure {{ margin-top: 8px; }}
         .evidence-detail-disclosure summary {{ display: flex; align-items: center; justify-content: space-between;
                                               gap: 10px; cursor: pointer; user-select: none; list-style: none;
@@ -8235,7 +8337,7 @@ class ReportGenerator:
                     <div class="evidence-metric">
                         <label>Evidence phenotype</label>
                         <strong>{evidence_phenotype_label}</strong>
-                        <span>Switching phenotype updates score/effect plots only.</span>
+                        <span>Switching phenotype updates score, effect, and candidate panels.</span>
                     </div>
                     <div class="evidence-metric">
                         <label>Variant classes</label>
@@ -8249,11 +8351,20 @@ class ReportGenerator:
                     </div>
                 </div>
                 <div class="evidence-note">{rule_note}</div>
+                <div id="discovery-candidate-panel-meta">
+                    {discovery_candidate_panel_meta_html}
+                </div>
                 <div class="discovery-candidate-strip">
-                    {discovery_candidate_list_html}
+                    <div id="discovery-candidate-list-panel">
+                        {discovery_candidate_list_html}
+                    </div>
                     <div class="evidence-side-stack">
-                        {score_component_breakdown_html}
-                        {reliability_population_html}
+                        <div id="score-component-breakdown-panel">
+                            {score_component_breakdown_html}
+                        </div>
+                        <div id="reliability-population-panel">
+                            {reliability_population_html}
+                        </div>
                     </div>
                 </div>
                 <details class="evidence-detail-disclosure">
@@ -8921,6 +9032,7 @@ var regionStart  = {region_start};
 var regionEnd    = {region_end};
 var allHaplotypeScoreData = {haplotype_score_json};
 var allScoreModeData = {score_mode_json};
+var allDiscoveryCandidatePanelData = {discovery_candidate_panel_json};
 var currentScoreMode = allScoreModeData.current_mode || 'default';
 var currentPhenotype = {pheno_first_for_js};
 var haplotypeScoreData = getScoreData(currentScoreMode, currentPhenotype);
@@ -8954,6 +9066,7 @@ function switchPhenotype(pheno) {{
     if (typeof drawHaplotypeScorePlot === 'function') {{
         drawHaplotypeScorePlot(haplotypeScoreData);
     }}
+    updateDiscoveryCandidatePanels();
     // 重绘表型列（效应+箱线图）
     renderPhenotypeColumn(pheno);
 }}
@@ -8972,7 +9085,28 @@ function switchScoreMode(mode) {{
         haplotypeScoreData = selectedScoreData;
         drawHaplotypeScorePlot(haplotypeScoreData);
     }}
+    updateDiscoveryCandidatePanels();
     updateScoreModeControls();
+}}
+
+function getDiscoveryCandidatePanel(mode, pheno) {{
+    var modePanels = (allDiscoveryCandidatePanelData && allDiscoveryCandidatePanelData.modes) ? allDiscoveryCandidatePanelData.modes[mode] : null;
+    if (!modePanels) return null;
+    return modePanels[pheno] || modePanels[Object.keys(modePanels)[0]] || null;
+}}
+
+function setPanelHtml(id, html) {{
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = html || '';
+}}
+
+function updateDiscoveryCandidatePanels() {{
+    var panel = getDiscoveryCandidatePanel(currentScoreMode, currentPhenotype);
+    if (!panel) return;
+    setPanelHtml('discovery-candidate-panel-meta', panel.meta_html);
+    setPanelHtml('discovery-candidate-list-panel', panel.candidate_list_html);
+    setPanelHtml('score-component-breakdown-panel', panel.score_component_breakdown_html);
+    setPanelHtml('reliability-population-panel', panel.reliability_population_html);
 }}
 
 function updateScoreModeControls() {{
@@ -8987,7 +9121,7 @@ function updateScoreModeControls() {{
     var status = document.getElementById('score-mode-status');
     if (status) {{
         var availableModes = allScoreModeData && allScoreModeData.modes ? Object.keys(allScoreModeData.modes) : [];
-        status.textContent = availableModes.length > 1 ? 'Switch updates score plot only.' : 'Other mode unavailable.';
+        status.textContent = availableModes.length > 1 ? 'Switch updates score plot and candidate panels.' : 'Other mode unavailable.';
     }}
 }}
 
@@ -10534,6 +10668,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{post_gwas_evidence_json}', post_gwas_evidence_json)
         html = html.replace('{haplotype_score_json}', haplotype_score_json)
         html = html.replace('{score_mode_json}', score_mode_json)
+        html = html.replace('{discovery_candidate_panel_json}', discovery_candidate_panel_json)
         html = html.replace('{all_pheno_data_for_js}', all_pheno_data_for_js)
         html = html.replace('{all_pheno_names_json}', all_pheno_names_json)
         html = html.replace('{pheno_first_for_js}', pheno_first_for_js)
