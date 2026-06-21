@@ -350,12 +350,16 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("discovery-candidate-section", integrated_block)
         self.assertIn("Discovery Candidate List", source)
         self.assertIn("Score Component Breakdown", source)
+        self.assertIn("Candidate Key Sites", source)
         self.assertIn("Reliability &amp; Population", source)
         self.assertIn("component-matrix", source)
         self.assertNotIn("component-card", source)
         self.assertIn("{discovery_candidate_list_html}", integrated_block)
+        self.assertIn("{top_haplotype_key_sites_html}", integrated_block)
         self.assertIn("{score_component_breakdown_html}", integrated_block)
         self.assertIn("{reliability_population_html}", integrated_block)
+        self.assertIn("top-hap-key-site", integrated_block)
+        self.assertIn("highlightKeySiteColumns", integrated_block)
 
     def test_integrated_candidate_panels_are_score_mode_and_phenotype_aware(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -386,9 +390,11 @@ class StarGeneDataTests(unittest.TestCase):
         from haplotype_phenotype_analysis import (
             _build_discovery_candidate_rows,
             _build_discovery_candidate_panel_data,
+            _build_top_haplotype_key_site_rows,
             _render_discovery_candidate_list,
             _render_score_component_breakdown,
             _render_reliability_population_panel,
+            _render_top_haplotype_key_sites,
             _select_discovery_candidate_panel,
         )
         import pandas as pd
@@ -396,14 +402,14 @@ class StarGeneDataTests(unittest.TestCase):
         hap_sample_df = pd.DataFrame({
             "SampleID": ["S1", "S2", "S3", "S4", "S5"],
             "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap3", "Hap3"],
-            "Haplotype_Seq": ["A|G", "A|G", "C|G", "C|T", "C|T"],
+            "Haplotype_Seq": ["A|G|C", "A|G|C", "C|G|C", "C|G|T", "C|G|T"],
             "Trait": [10.0, 12.0, 30.0, 20.0, 22.0],
             "Population": ["P1", "P2", "P1", "P2", "P2"],
         })
         score_results = {
             "score_mode": "robust_discovery",
             "per_haplotype": {
-                "Hap1": {"total": 1.2, "variant_effect": 0.8, "burden": 0.2, "effect_size": 0.6, "sample_reliability": 0.9, "ambiguity_factor": 1.0},
+                "Hap1": {"total": 3.2, "variant_effect": 0.8, "burden": 0.2, "effect_size": 0.6, "sample_reliability": 0.9, "ambiguity_factor": 1.0},
                 "Hap2": {"total": 2.5, "variant_effect": 1.0, "burden": 0.7, "effect_size": 0.9, "sample_reliability": 0.4, "ambiguity_factor": 0.5},
                 "Hap3": {"total": 1.7, "variant_effect": 0.3, "burden": 0.9, "effect_size": 0.4, "sample_reliability": 0.8, "ambiguity_factor": 1.0},
             },
@@ -417,23 +423,54 @@ class StarGeneDataTests(unittest.TestCase):
             effect_data={"Hap2": {"effect": 5.0}},
         )
 
-        self.assertEqual(rows[0]["haplotype"], "Hap2")
+        self.assertEqual(rows[0]["haplotype"], "Hap1")
         self.assertEqual(rows[0]["rank"], 1)
-        self.assertEqual(rows[0]["sample_count"], 1)
-        self.assertEqual(rows[0]["population_summary"], "P1=1")
+        self.assertEqual(rows[0]["sample_count"], 2)
+        self.assertEqual(rows[0]["population_summary"], "P1=1; P2=1")
         self.assertEqual(rows[0]["reliability_flag"], "warn")
+
+        key_rows = _build_top_haplotype_key_site_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results=score_results,
+            display_positions=[100, 200, 300],
+            display_orig_indices=[0, 1, 2],
+            variant_info={
+                100: {"annotation": "promoter", "maf": 0.40, "missing_rate": 0.00},
+                200: {"annotation": "intron", "maf": 0.45, "missing_rate": 0.00},
+                300: {"annotation": "missense", "maf": 0.25, "missing_rate": 0.10},
+            },
+            variant_pvalues={100: 1e-6, 300: 2e-4},
+            top_n=5,
+        )
+        self.assertEqual([row["position"] for row in key_rows], [100, 300])
+        self.assertEqual(key_rows[0]["top_haplotype"], "Hap1")
+        self.assertEqual(key_rows[0]["top_allele"], "A")
+        self.assertEqual(key_rows[0]["other_alleles"], "C=3")
+        self.assertEqual(key_rows[0]["top_count"], 2)
+        self.assertEqual(key_rows[0]["other_count"], 3)
+        self.assertAlmostEqual(key_rows[0]["phenotype_contrast"], -13.0)
+        self.assertEqual(key_rows[0]["annotation"], "promoter")
+        self.assertEqual(key_rows[0]["variant_type"], "SNP")
+        self.assertEqual(key_rows[0]["reliability_flag"], "warn")
 
         html = (
             _render_discovery_candidate_list(rows)
+            + _render_top_haplotype_key_sites(key_rows)
             + _render_score_component_breakdown(rows)
             + _render_reliability_population_panel(rows)
         )
         self.assertIn("Discovery Candidate List", html)
+        self.assertIn("Candidate Key Sites", html)
+        self.assertIn("data-pos=\"100\"", html)
+        self.assertIn("Hap1", html)
+        self.assertIn("A vs C=3", html)
         self.assertIn("Score Component Breakdown", html)
         self.assertIn("Reliability &amp; Population", html)
         self.assertIn("component-matrix", html)
         self.assertNotIn("component-card", html)
-        self.assertIn("Hap2", html)
+        self.assertIn("Hap1", html)
         self.assertIn("sample_reliability", html)
         self.assertIn("P1=1", html)
         self.assertNotIn("literature", html.lower())
@@ -442,6 +479,9 @@ class StarGeneDataTests(unittest.TestCase):
         panel_data = _build_discovery_candidate_panel_data(
             hap_sample_df=hap_sample_df,
             hap_col="Hap_Name",
+            display_positions=[100, 200, 300],
+            display_orig_indices=[0, 1, 2],
+            variant_info={100: {"annotation": "promoter"}, 300: {"annotation": "missense"}},
             score_mode_data={
                 "current_mode": "robust_discovery",
                 "modes": {
@@ -472,6 +512,8 @@ class StarGeneDataTests(unittest.TestCase):
         robust_panel = _select_discovery_candidate_panel(panel_data, "robust_discovery", "Trait")
         self.assertIn("#1</td><td>Hap1", default_panel["candidate_list_html"])
         self.assertIn("#1</td><td>Hap2", robust_panel["candidate_list_html"])
+        self.assertIn("Candidate Key Sites", default_panel["top_haplotype_key_sites_html"])
+        self.assertIn("Candidate Key Sites", robust_panel["top_haplotype_key_sites_html"])
         self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
         self.assertIn("Score mode: <strong>Robust</strong>", robust_panel["meta_html"])
 

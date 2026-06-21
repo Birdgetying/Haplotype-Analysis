@@ -2626,6 +2626,226 @@ def _build_discovery_candidate_rows(
     return rows[:top_n]
 
 
+def _normalize_key_site_allele(value) -> str:
+    allele = _safe_str(value, "").strip().upper()
+    if allele in ("", ".", "NA", "N", "NONE", "NAN"):
+        return ""
+    return allele
+
+
+def _build_top_haplotype_key_site_rows(
+    hap_sample_df: pd.DataFrame,
+    hap_col: str,
+    phenotype_col: str,
+    score_results: dict,
+    display_positions: list,
+    display_orig_indices: list = None,
+    variant_info: dict = None,
+    variant_pvalues: dict = None,
+    snp_effects: dict = None,
+    top_n: int = 8,
+) -> list:
+    """Rank sites that distinguish the top-scored haplotype from other haplotypes."""
+    per_hap = (score_results or {}).get("per_haplotype", {}) or {}
+    if (
+        hap_sample_df is None or hap_sample_df.empty or
+        hap_col not in hap_sample_df.columns or
+        "Haplotype_Seq" not in hap_sample_df.columns or
+        not per_hap or not display_positions
+    ):
+        return []
+
+    scored_haps = []
+    for hap, score_entry in per_hap.items():
+        total = _score_value(score_entry, "total", None)
+        if total is None:
+            total = _score_value(score_entry, "overall_score", _score_value(score_entry, "score", None))
+        if total is not None:
+            scored_haps.append((str(hap), float(total)))
+    if not scored_haps:
+        return []
+    scored_haps.sort(key=lambda item: item[1], reverse=True)
+    top_hap, top_score = scored_haps[0]
+
+    top_rows = hap_sample_df[hap_sample_df[hap_col].astype(str) == top_hap]
+    other_rows = hap_sample_df[hap_sample_df[hap_col].astype(str) != top_hap]
+    if top_rows.empty or other_rows.empty:
+        return []
+
+    top_seq = str(top_rows["Haplotype_Seq"].iloc[0]).split("|")
+    if not display_orig_indices:
+        display_orig_indices = list(range(len(display_positions)))
+    pos_idx_pairs = [
+        (int(pos), int(idx))
+        for pos, idx in zip(display_positions, display_orig_indices)
+        if idx is not None
+    ]
+
+    top_vals = pd.to_numeric(top_rows[phenotype_col], errors="coerce").dropna() if phenotype_col in top_rows.columns else pd.Series(dtype=float)
+    other_vals = pd.to_numeric(other_rows[phenotype_col], errors="coerce").dropna() if phenotype_col in other_rows.columns else pd.Series(dtype=float)
+    top_mean = float(top_vals.mean()) if len(top_vals) > 0 else None
+    other_mean = float(other_vals.mean()) if len(other_vals) > 0 else None
+    phenotype_contrast = (
+        float(top_mean - other_mean)
+        if top_mean is not None and other_mean is not None else
+        None
+    )
+
+    variant_info = variant_info or {}
+    variant_pvalues = variant_pvalues or {}
+    snp_effects = snp_effects or {}
+    annotation_priority = {
+        "missense": 1.00,
+        "nonsense": 1.00,
+        "stop_gained": 1.00,
+        "splice": 0.95,
+        "promoter": 0.85,
+        "utr": 0.75,
+        "sv": 0.75,
+        "indel": 0.70,
+        "intron": 0.45,
+        "other": 0.30,
+    }
+
+    rows = []
+    for display_index, (pos, seq_idx) in enumerate(pos_idx_pairs):
+        if seq_idx >= len(top_seq):
+            continue
+        top_allele = _normalize_key_site_allele(top_seq[seq_idx])
+        if not top_allele:
+            continue
+
+        all_counts = {}
+        diff_counts = {}
+        valid_other_count = 0
+        for _, sample_row in other_rows.iterrows():
+            sample_seq = str(sample_row.get("Haplotype_Seq", "")).split("|")
+            if seq_idx >= len(sample_seq):
+                continue
+            allele = _normalize_key_site_allele(sample_seq[seq_idx])
+            if not allele:
+                continue
+            valid_other_count += 1
+            all_counts[allele] = all_counts.get(allele, 0) + 1
+            if allele != top_allele:
+                diff_counts[allele] = diff_counts.get(allele, 0) + 1
+        if not diff_counts:
+            continue
+
+        different_count = int(sum(diff_counts.values()))
+        specificity = float(different_count / max(1, valid_other_count))
+        other_alleles = "; ".join(
+            f"{allele}={count}"
+            for allele, count in sorted(diff_counts.items(), key=lambda item: (-item[1], item[0]))
+        )
+
+        info = variant_info.get(pos, variant_info.get(str(pos), {})) or {}
+        annotation = (
+            snp_effects.get(pos, snp_effects.get(str(pos))) or
+            info.get("annotation") or
+            info.get("effect") or
+            "NA"
+        )
+        annotation_l = str(annotation or "").lower()
+        annotation_score = 0.30
+        for key, score in annotation_priority.items():
+            if key in annotation_l:
+                annotation_score = score
+                break
+
+        variant_type = _infer_local_variant_type(pos, variant_info, snp_effects)
+        pvalue = variant_pvalues.get(pos, variant_pvalues.get(str(pos), None))
+        try:
+            pvalue = float(pvalue)
+            if not np.isfinite(pvalue) or pvalue <= 0:
+                pvalue = None
+        except (TypeError, ValueError):
+            pvalue = None
+        minus_log10_p = float(-np.log10(max(pvalue, 1e-300))) if pvalue is not None else None
+        gwas_score = min((minus_log10_p or 0.0) / 8.0, 1.0)
+
+        try:
+            maf = float(info.get("maf")) if info.get("maf") is not None else None
+        except (TypeError, ValueError):
+            maf = None
+        try:
+            missing_rate = float(info.get("missing_rate")) if info.get("missing_rate") is not None else None
+        except (TypeError, ValueError):
+            missing_rate = None
+
+        contrast_score = min(abs(phenotype_contrast or 0.0) / 10.0, 1.0)
+        reliability_notes = []
+        reliability_flag = "pass"
+        top_count = int(len(top_rows))
+        if top_count < 10:
+            reliability_flag = "warn"
+            reliability_notes.append("low top n")
+        if valid_other_count < 10:
+            reliability_flag = "warn"
+            reliability_notes.append("low other n")
+        if specificity < 0.5:
+            reliability_flag = "warn"
+            reliability_notes.append("shared allele")
+        if missing_rate is not None and missing_rate > 0.2:
+            reliability_flag = "warn"
+            reliability_notes.append("high missing")
+        if maf is not None and maf < 0.05:
+            reliability_flag = "warn"
+            reliability_notes.append("low MAF")
+        if phenotype_contrast is None:
+            reliability_flag = "warn"
+            reliability_notes.append("no phenotype")
+        if not reliability_notes:
+            reliability_notes.append("stable")
+
+        priority_score = (
+            specificity * 3.0 +
+            contrast_score * 2.0 +
+            gwas_score * 1.5 +
+            annotation_score +
+            min(top_count / 50.0, 1.0) * 0.5
+        )
+        rows.append({
+            "rank": 0,
+            "position": pos,
+            "display_index": int(display_index),
+            "sequence_index": int(seq_idx),
+            "top_haplotype": top_hap,
+            "top_score": top_score,
+            "top_allele": top_allele,
+            "other_alleles": other_alleles,
+            "top_count": top_count,
+            "other_count": int(valid_other_count),
+            "different_other_count": different_count,
+            "specificity": specificity,
+            "top_mean": top_mean,
+            "other_mean": other_mean,
+            "phenotype_contrast": phenotype_contrast,
+            "variant_type": variant_type,
+            "annotation": str(annotation or "NA"),
+            "pvalue": pvalue,
+            "minus_log10_p": minus_log10_p,
+            "maf": maf,
+            "missing_rate": missing_rate,
+            "reliability_flag": reliability_flag,
+            "flag_note": ", ".join(reliability_notes),
+            "priority_score": float(priority_score),
+        })
+
+    rows.sort(
+        key=lambda row: (
+            row["priority_score"],
+            row["specificity"],
+            abs(row["phenotype_contrast"] or 0.0),
+            row["minus_log10_p"] or 0.0,
+        ),
+        reverse=True,
+    )
+    for idx, row in enumerate(rows[:top_n], start=1):
+        row["rank"] = idx
+    return rows[:top_n]
+
+
 def _render_discovery_candidate_list(candidate_rows: list) -> str:
     if not candidate_rows:
         return '<div class="evidence-empty">No discovery candidates could be ranked from haplotype scores.</div>'
@@ -2652,6 +2872,39 @@ def _render_discovery_candidate_list(candidate_rows: list) -> str:
         '<div class="discovery-note">Ranked only from local haplotype scores, phenotype summaries, and sample reliability.</div>'
         '<div class="evidence-table-wrap"><table class="evidence-table candidate-table">'
         '<thead><tr><th>Rank</th><th>Hap</th><th>Score</th><th>n</th><th>Mean</th><th>Effect</th><th>Flag</th><th>Seq</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        '</section>'
+    )
+
+
+def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
+    if not key_site_rows:
+        return '<div class="evidence-empty">No top-haplotype discriminating sites could be ranked from displayed haplotypes.</div>'
+    rows = []
+    for row in key_site_rows:
+        pos = row.get("position", "")
+        pos_label = f"{int(pos):,}" if isinstance(pos, (int, np.integer)) else _html_escape(pos)
+        allele_summary = f"{row.get('top_allele', 'NA')} vs {row.get('other_alleles', 'NA')}"
+        rows.append(
+            f'<tr data-pos="{_html_escape(pos)}">'
+            f"<td>#{int(row.get('rank', 0))}</td>"
+            f"<td>{_html_escape(pos_label)}</td>"
+            f"<td>{_html_escape(row.get('top_haplotype', 'NA'))}</td>"
+            f"<td>{_html_escape(allele_summary)}</td>"
+            f"<td>{int(row.get('top_count', 0))}/{int(row.get('other_count', 0))}</td>"
+            f"<td>{_html_escape(_format_report_float(row.get('phenotype_contrast'), 3))}</td>"
+            f"<td>{_html_escape(_format_report_pvalue(row.get('pvalue')))}</td>"
+            f"<td>{_html_escape(row.get('variant_type', 'NA'))}</td>"
+            f"<td>{_html_escape(row.get('annotation', 'NA'))}</td>"
+            f"<td><span class=\"key-site-flag {row.get('reliability_flag', 'muted')}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
+            "</tr>"
+        )
+    return (
+        '<section class="discovery-candidate-section top-hap-key-site">'
+        '<h3>Candidate Key Sites</h3>'
+        '<div class="discovery-note">Sites where the current top-scored haplotype differs from other local haplotypes; ranked without external validation labels.</div>'
+        '<div class="evidence-table-wrap"><table class="evidence-table top-hap-key-site-table">'
+        '<thead><tr><th>Rank</th><th>Pos</th><th>Top Hap</th><th>Alleles</th><th>n</th><th>Contrast</th><th>P</th><th>Type</th><th>Ann</th><th>Flag</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         '</section>'
     )
@@ -2751,6 +3004,11 @@ def _build_discovery_candidate_panel_data(
     score_mode_data: dict,
     effect_by_phenotype: dict = None,
     current_phenotype: str = None,
+    display_positions: list = None,
+    display_orig_indices: list = None,
+    variant_info: dict = None,
+    variant_pvalues: dict = None,
+    snp_effects: dict = None,
 ) -> dict:
     """Pre-render discovery candidate panels for each score mode and phenotype."""
     effect_by_phenotype = effect_by_phenotype or {}
@@ -2772,9 +3030,22 @@ def _build_discovery_candidate_panel_data(
                 score_results=score_results,
                 effect_data=effect_by_phenotype.get(phenotype, {}),
             )
+            key_site_rows = _build_top_haplotype_key_site_rows(
+                hap_sample_df=hap_sample_df,
+                hap_col=hap_col,
+                phenotype_col=phenotype,
+                score_results=score_results,
+                display_positions=display_positions or [],
+                display_orig_indices=display_orig_indices or [],
+                variant_info=variant_info or {},
+                variant_pvalues=variant_pvalues or {},
+                snp_effects=snp_effects or {},
+            )
             panel_modes[str(mode)][str(phenotype)] = {
                 "meta_html": _render_discovery_candidate_panel_meta(str(mode), str(phenotype)),
                 "candidate_list_html": _render_discovery_candidate_list(rows),
+                "top_haplotype_key_sites_html": _render_top_haplotype_key_sites(key_site_rows),
+                "top_haplotype_key_site_positions": [int(row["position"]) for row in key_site_rows],
                 "score_component_breakdown_html": _render_score_component_breakdown(rows),
                 "reliability_population_html": _render_reliability_population_panel(rows),
             }
@@ -2799,6 +3070,8 @@ def _select_discovery_candidate_panel(panel_data: dict, score_mode: str, phenoty
     return {
         "meta_html": _render_discovery_candidate_panel_meta(score_mode, phenotype_col),
         "candidate_list_html": '<div class="evidence-empty">No discovery candidates could be ranked from haplotype scores.</div>',
+        "top_haplotype_key_sites_html": '<div class="evidence-empty">No top-haplotype discriminating sites could be ranked from displayed haplotypes.</div>',
+        "top_haplotype_key_site_positions": [],
         "score_component_breakdown_html": '<div class="evidence-empty">No score components available.</div>',
         "reliability_population_html": '<div class="evidence-empty">No reliability summary available.</div>',
     }
@@ -7836,6 +8109,11 @@ class ReportGenerator:
             score_mode_data=score_mode_data,
             effect_by_phenotype=effect_by_phenotype,
             current_phenotype=actual_pheno_col,
+            display_positions=display_positions,
+            display_orig_indices=display_orig_indices,
+            variant_info=variant_info,
+            variant_pvalues=variant_pvalues,
+            snp_effects=snp_effects,
         )
         discovery_candidate_panel_json = _script_json_dumps(discovery_candidate_panel_data)
         initial_discovery_panel = _select_discovery_candidate_panel(
@@ -7845,6 +8123,7 @@ class ReportGenerator:
         )
         discovery_candidate_panel_meta_html = initial_discovery_panel.get('meta_html', '')
         discovery_candidate_list_html = initial_discovery_panel.get('candidate_list_html', '')
+        top_haplotype_key_sites_html = initial_discovery_panel.get('top_haplotype_key_sites_html', '')
         score_component_breakdown_html = initial_discovery_panel.get('score_component_breakdown_html', '')
         reliability_population_html = initial_discovery_panel.get('reliability_population_html', '')
 
@@ -8156,6 +8435,12 @@ class ReportGenerator:
                           border: 1px solid #d7dde5; background: #f6f8fb; color: #526174; }}
         .candidate-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; color: #0f6b4f; }}
         .candidate-flag.warn {{ border-color: #f1d184; background: #fff8e6; color: #805200; }}
+        .top-hap-key-site {{ margin-top: 10px; }}
+        .top-hap-key-site-table th:nth-child(4), .top-hap-key-site-table td:nth-child(4) {{ width: 110px; }}
+        .key-site-flag {{ display: inline-block; border-radius: 999px; padding: 2px 6px; font-size: 9px;
+                         border: 1px solid #d7dde5; background: #f6f8fb; color: #526174; }}
+        .key-site-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; color: #0f6b4f; }}
+        .key-site-flag.warn {{ border-color: #f1d184; background: #fff8e6; color: #805200; }}
         .component-matrix th, .component-matrix td {{ text-align: right; }}
         .component-matrix th:first-child, .component-matrix td:first-child {{ text-align: left; width: 46px; }}
         .component-matrix th:nth-child(2), .component-matrix td:nth-child(2) {{ width: 50px; }}
@@ -8201,6 +8486,9 @@ class ReportGenerator:
         .data-table td {{ padding: 6px 4px; text-align: center; border-bottom: 1px solid #eee; overflow: hidden; }}
         .data-table tr:hover {{ background: #f8f9fa; }}
         .data-table tr.ref-row {{ background: #fffbeb; }}
+        .data-table th.key-site-highlight, .data-table td.key-site-highlight {{ background: #fff7d6 !important;
+            box-shadow: inset 0 0 0 1px #f0c95a; }}
+        .data-table td.key-site-highlight .base {{ color: #8a5a00 !important; }}
         .hap-cell {{ width: 90px; min-width: 90px; max-width: 90px; text-align: left !important; padding-left: 10px !important; font-weight: 600; font-size: 12px; }}
         .ref-tag {{ background: #e74c3c; color: white; font-size: 8px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }}
         .base {{ font-family: Consolas, monospace; font-weight: 700; font-size: 13px; }}
@@ -8355,8 +8643,13 @@ class ReportGenerator:
                     {discovery_candidate_panel_meta_html}
                 </div>
                 <div class="discovery-candidate-strip">
-                    <div id="discovery-candidate-list-panel">
-                        {discovery_candidate_list_html}
+                    <div class="evidence-side-stack">
+                        <div id="discovery-candidate-list-panel">
+                            {discovery_candidate_list_html}
+                        </div>
+                        <div id="top-haplotype-key-sites-panel">
+                            {top_haplotype_key_sites_html}
+                        </div>
                     </div>
                     <div class="evidence-side-stack">
                         <div id="score-component-breakdown-panel">
@@ -8788,7 +9081,8 @@ class ReportGenerator:
                     else:
                         font_size = "9px"
 
-                    html += f'<td class="seq-col-th" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
+                    cell_pos = display_positions[idx] if idx < len(display_positions) else ''
+                    html += f'<td class="seq-col-th seq-site-cell" data-pos="{cell_pos}" data-key-site="false" style="width:20px;min-width:20px;max-width:20px;padding:0;text-align:center;overflow:hidden;"><span class="base" style="color:{color};font-size:{font_size};white-space:nowrap;">{display_base}</span></td>\n'
             
             html += f'<td class="n-cell" style="min-width:60px;text-align:center;overflow:visible;">{cnt}</td>\n'
             
@@ -9105,8 +9399,20 @@ function updateDiscoveryCandidatePanels() {{
     if (!panel) return;
     setPanelHtml('discovery-candidate-panel-meta', panel.meta_html);
     setPanelHtml('discovery-candidate-list-panel', panel.candidate_list_html);
+    setPanelHtml('top-haplotype-key-sites-panel', panel.top_haplotype_key_sites_html);
     setPanelHtml('score-component-breakdown-panel', panel.score_component_breakdown_html);
     setPanelHtml('reliability-population-panel', panel.reliability_population_html);
+    highlightKeySiteColumns(panel);
+}}
+
+function highlightKeySiteColumns(panel) {{
+    var positions = (panel && panel.top_haplotype_key_site_positions) ? panel.top_haplotype_key_site_positions.map(String) : [];
+    var positionSet = new Set(positions);
+    document.querySelectorAll('.seq-col-th[data-pos], .seq-site-cell[data-pos]').forEach(function(el) {{
+        var isKey = positionSet.has(String(el.getAttribute('data-pos')));
+        el.classList.toggle('key-site-highlight', isKey);
+        el.setAttribute('data-key-site', isKey ? 'true' : 'false');
+    }});
 }}
 
 function updateScoreModeControls() {{
@@ -10594,6 +10900,7 @@ document.addEventListener('DOMContentLoaded', function() {
     drawNetworkPlot();
     drawGWASPlot(gwasData);
     drawHaplotypeScorePlot(haplotypeScoreData);
+    updateDiscoveryCandidatePanels();
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
     // 初始化LD倒三角图

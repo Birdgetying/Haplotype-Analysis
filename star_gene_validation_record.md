@@ -308,6 +308,53 @@ first row `Hap5`; clicking `Robust` changed all three panels back to `Hap1`.
 This confirms the new discovery-safe explanatory panels no longer show stale
 rank/component/reliability data after mode switches.
 
+2026-06-21 Candidate Key Sites discovery panel rerun:
+The same default and robust commands were rerun after adding
+`Candidate Key Sites`, a discovery-stage panel that asks which displayed
+variant sites distinguish the current top-scored haplotype from the other
+haplotypes. The panel uses only local haplotype sequences, phenotype means,
+sample counts, local marker P values when available, and variant annotation.
+It does not use Qin2014 or any other literature functional labels as scoring
+or ranking input.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Robust `Candidate Key Sites` result:
+The robust report opens with `Hap1=A|G|C` as the top-scored haplotype.
+The key-site panel ranks three promoter SNPs:
+`291,759,689` (`A vs C=437; C/A=7`, n `371/445`, contrast `2.451`,
+P `6.98e-09`, stable), `291,761,315`
+(`C vs T=73; T/C=1`, shared allele warning), and `291,760,677`
+(`G vs A=7`, shared allele/low-MAF warning). These correspond to the three
+displayed TaGW2-B1 promoter SNPs and show why the top robust haplotype is
+locally distinguishable from the other haplotypes.
+
+Default `Candidate Key Sites` result:
+Switching to Original changes the same panel to `Hap5=C/A|G|C`, the default
+top-scored haplotype. The panel flags `low top n` because `Hap5` has only
+7 carriers (`7/809` contrast comparison), which is consistent with the known
+default-mode over-ranking of a rare ambiguous haplotype.
+
+HTML/browser verification:
+Static inspection confirmed the robust HTML embeds
+`top_haplotype_key_sites_html`, `top_haplotype_key_site_positions`,
+`highlightKeySiteColumns()`, and the sequence-column `key-site-highlight`
+CSS. In the in-app browser, the robust page showed `Candidate Key Sites`
+with first row `Hap1`; three positions were highlighted in the haplotype
+sequence table. A coordinate click on `Original` changed the key-site panel
+to `Hap5` while retaining the same three highlighted display positions,
+confirming that key-site rows update with score mode. Screenshot capture of
+the very large integrated page timed out in the browser runtime, but DOM and
+interaction checks succeeded.
+
 ### VRN-Kiss2014
 
 Literature positive control:
