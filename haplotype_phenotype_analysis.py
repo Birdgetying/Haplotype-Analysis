@@ -2504,6 +2504,229 @@ def _render_evidence_confidence_flags(
     return "".join(rendered)
 
 
+def _score_value(score_entry: dict, key: str, default=None):
+    if not isinstance(score_entry, dict):
+        return default
+    val = score_entry.get(key, default)
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_discovery_candidate_rows(
+    hap_sample_df: pd.DataFrame,
+    hap_col: str,
+    phenotype_col: str,
+    score_results: dict,
+    effect_data: dict = None,
+    top_n: int = 6,
+) -> list:
+    """Build discovery-mode candidate rows from local scores, effects, and samples."""
+    per_hap = (score_results or {}).get("per_haplotype", {}) or {}
+    if not per_hap:
+        return []
+    effect_data = effect_data or {}
+    rows = []
+    group_cols = [
+        c for c in ("Population", "Group", "Subpopulation", "population", "group")
+        if hap_sample_df is not None and c in hap_sample_df.columns
+    ]
+    group_col = group_cols[0] if group_cols else None
+
+    for hap, score_entry in per_hap.items():
+        if not isinstance(score_entry, dict):
+            continue
+        total = _score_value(score_entry, "total", None)
+        if total is None:
+            total = _score_value(score_entry, "overall_score", _score_value(score_entry, "score", 0.0))
+        hap_rows = (
+            hap_sample_df[hap_sample_df[hap_col] == hap]
+            if hap_sample_df is not None and hap_col in hap_sample_df.columns else
+            pd.DataFrame()
+        )
+        sample_count = int(len(hap_rows))
+        phenotype_mean = None
+        phenotype_missing = None
+        if phenotype_col and phenotype_col in hap_rows.columns:
+            vals = pd.to_numeric(hap_rows[phenotype_col], errors="coerce")
+            phenotype_missing = int(vals.isna().sum())
+            vals = vals.dropna()
+            if len(vals) > 0:
+                phenotype_mean = float(vals.mean())
+        seq = ""
+        if "Haplotype_Seq" in hap_rows.columns and not hap_rows.empty:
+            seq = str(hap_rows["Haplotype_Seq"].iloc[0])
+
+        population_summary = "NA"
+        dominant_population = None
+        dominant_population_fraction = None
+        if group_col and not hap_rows.empty:
+            counts = hap_rows[group_col].fillna("NA").astype(str).value_counts()
+            if len(counts) > 0:
+                population_summary = "; ".join(f"{idx}={int(val)}" for idx, val in counts.head(3).items())
+                if len(counts) > 3:
+                    population_summary += f"; +{len(counts) - 3}"
+                dominant_population = str(counts.index[0])
+                dominant_population_fraction = float(counts.iloc[0] / max(1, sample_count))
+
+        reliability = _score_value(score_entry, "sample_reliability", None)
+        ambiguity = _score_value(score_entry, "ambiguity_factor", None)
+        reliability_flag = "pass"
+        flag_notes = []
+        if sample_count < 10:
+            reliability_flag = "warn"
+            flag_notes.append("low n")
+        if reliability is not None and reliability < 0.5:
+            reliability_flag = "warn"
+            flag_notes.append("low reliability")
+        if ambiguity is not None and ambiguity < 0.7:
+            reliability_flag = "warn"
+            flag_notes.append("ambiguity penalty")
+        if dominant_population_fraction is not None and dominant_population_fraction >= 0.8 and sample_count >= 5:
+            reliability_flag = "warn"
+            flag_notes.append("population skew")
+        if phenotype_missing:
+            reliability_flag = "warn"
+            flag_notes.append("phenotype missing")
+        if not flag_notes:
+            flag_notes.append("stable")
+
+        components = {}
+        for key, val in score_entry.items():
+            if key in ("total", "overall_score", "score", "haplotype_sample_count"):
+                continue
+            try:
+                components[key] = float(val)
+            except (TypeError, ValueError):
+                continue
+
+        rows.append({
+            "haplotype": str(hap),
+            "total": float(total or 0.0),
+            "components": components,
+            "sample_count": sample_count,
+            "phenotype_mean": phenotype_mean,
+            "phenotype_missing": phenotype_missing,
+            "sequence": seq,
+            "population_summary": population_summary,
+            "dominant_population": dominant_population,
+            "dominant_population_fraction": dominant_population_fraction,
+            "sample_reliability": reliability,
+            "ambiguity_factor": ambiguity,
+            "effect": (effect_data.get(hap, {}) or {}).get("effect"),
+            "effect_pvalue": (effect_data.get(hap, {}) or {}).get("p_value"),
+            "reliability_flag": reliability_flag,
+            "flag_note": ", ".join(flag_notes),
+        })
+
+    rows.sort(key=lambda row: row["total"], reverse=True)
+    for idx, row in enumerate(rows[:top_n], start=1):
+        row["rank"] = idx
+    return rows[:top_n]
+
+
+def _render_discovery_candidate_list(candidate_rows: list) -> str:
+    if not candidate_rows:
+        return '<div class="evidence-empty">No discovery candidates could be ranked from haplotype scores.</div>'
+    rows = []
+    for row in candidate_rows:
+        seq = _html_escape(row.get("sequence", ""))
+        if len(seq) > 42:
+            seq = seq[:39] + "..."
+        rows.append(
+            "<tr>"
+            f"<td>#{int(row.get('rank', 0))}</td>"
+            f"<td>{_html_escape(row.get('haplotype', 'NA'))}</td>"
+            f"<td>{_html_escape(_format_report_float(row.get('total'), 3))}</td>"
+            f"<td>{int(row.get('sample_count', 0))}</td>"
+            f"<td>{_html_escape(_format_report_float(row.get('phenotype_mean'), 3))}</td>"
+            f"<td>{_html_escape(_format_report_float(row.get('effect'), 3))}</td>"
+            f"<td><span class=\"candidate-flag {row.get('reliability_flag', 'muted')}\">{_html_escape(row.get('flag_note', 'NA'))}</span></td>"
+            f"<td>{seq}</td>"
+            "</tr>"
+        )
+    return (
+        '<section class="discovery-candidate-section">'
+        '<h3>Discovery Candidate List</h3>'
+        '<div class="discovery-note">Ranked only from local haplotype scores, phenotype summaries, and sample reliability.</div>'
+        '<div class="evidence-table-wrap"><table class="evidence-table candidate-table">'
+        '<thead><tr><th>Rank</th><th>Hap</th><th>Score</th><th>n</th><th>Mean</th><th>Effect</th><th>Flag</th><th>Seq</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        '</section>'
+    )
+
+
+def _render_score_component_breakdown(candidate_rows: list, max_rows: int = 3) -> str:
+    if not candidate_rows:
+        return '<div class="evidence-empty">No score components available.</div>'
+    component_order = [
+        ("variant_effect", "Variant"),
+        ("burden", "Burden"),
+        ("eb_effect", "EB"),
+        ("multi_omics", "Omics"),
+        ("fine_mapping", "Fine"),
+        ("effect_size", "Effect"),
+        ("genetic_distinct", "Distinct"),
+        ("sample_reliability", "Reliab."),
+        ("ambiguity_factor", "Ambig."),
+    ]
+    header = (
+        "<thead><tr><th>Hap</th><th>Score</th>"
+        + "".join(f"<th>{label}</th>" for _, label in component_order)
+        + "</tr></thead>"
+    )
+    body_rows = []
+    for row in candidate_rows[:max_rows]:
+        comps = row.get("components", {}) or {}
+        cells = []
+        for key, _label in component_order:
+            val = comps.get(key)
+            cells.append(f"<td>{_html_escape(_format_report_float(val, 3))}</td>")
+        body_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(row.get('haplotype', 'NA'))}</td>"
+            f"<td>{_html_escape(_format_report_float(row.get('total'), 3))}</td>"
+            f"{''.join(cells)}"
+            "</tr>"
+        )
+    return (
+        '<section class="discovery-candidate-section">'
+        '<h3>Score Component Breakdown</h3>'
+        '<div class="evidence-table-wrap">'
+        '<table class="evidence-table component-matrix">'
+        f"{header}<tbody>{''.join(body_rows)}</tbody>"
+        '</table></div>'
+        '</section>'
+    )
+
+
+def _render_reliability_population_panel(candidate_rows: list) -> str:
+    if not candidate_rows:
+        return '<div class="evidence-empty">No reliability summary available.</div>'
+    cards = []
+    for row in candidate_rows[:4]:
+        flag = row.get("reliability_flag", "muted")
+        cards.append(
+            f'<div class="reliability-card {flag}">'
+            f'<strong>{_html_escape(row.get("haplotype", "NA"))}</strong>'
+            f'<span>n={int(row.get("sample_count", 0))}; mean={_html_escape(_format_report_float(row.get("phenotype_mean"), 3))}</span>'
+            f'<span>sample_reliability={_html_escape(_format_report_float(row.get("sample_reliability"), 3))}; '
+            f'ambiguity={_html_escape(_format_report_float(row.get("ambiguity_factor"), 3))}</span>'
+            f'<span>population: {_html_escape(row.get("population_summary", "NA"))}</span>'
+            f'<em>{_html_escape(row.get("flag_note", "NA"))}</em>'
+            '</div>'
+        )
+    return (
+        '<section class="discovery-candidate-section">'
+        '<h3>Reliability &amp; Population</h3>'
+        '<div class="reliability-grid">'
+        f'{"".join(cards)}'
+        '</div>'
+        '</section>'
+    )
+
+
 def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
     """返回每位样本在 Haplotype_Seq 第 idx 个位点的碱基字符（object 数组）。"""
     out = np.empty(len(merged_df), dtype=object)
@@ -7517,6 +7740,16 @@ class ReportGenerator:
             phenotype_col=actual_pheno_col,
             score_results=score_results,
         )
+        discovery_candidate_rows = _build_discovery_candidate_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col=hap_col,
+            phenotype_col=actual_pheno_col,
+            score_results=score_results,
+            effect_data=effect_data,
+        )
+        discovery_candidate_list_html = _render_discovery_candidate_list(discovery_candidate_rows)
+        score_component_breakdown_html = _render_score_component_breakdown(discovery_candidate_rows)
+        reliability_population_html = _render_reliability_population_panel(discovery_candidate_rows)
 
         # 准备网络图数据
         # 先计算lead_haplotype（在两种情况下都需要）
@@ -7809,9 +8042,32 @@ class ReportGenerator:
         .confidence-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; }}
         .confidence-flag.warn {{ border-color: #f1d184; background: #fff8e6; }}
         .confidence-flag.muted {{ border-color: #d7dde5; background: #f6f8fb; }}
+        .discovery-candidate-strip {{ display: grid; grid-template-columns: minmax(420px, 1.15fr) minmax(360px, 0.9fr);
+                                     gap: 10px; margin-top: 10px; align-items: start; }}
+        .discovery-candidate-section {{ border: 1px solid #e3e8ef; border-radius: 6px; background: white; overflow: hidden; }}
+        .discovery-candidate-section h3 {{ margin: 0; padding: 8px 10px; font-size: 11px; color: #2c3e50;
+                                          border-bottom: 1px solid #edf1f5; background: #f7f9fc; letter-spacing: 0; }}
+        .discovery-note {{ padding: 6px 10px; font-size: 9px; color: #64748b; background: #fbfcfe;
+                          border-bottom: 1px solid #edf1f5; line-height: 1.35; }}
+        .candidate-table th:nth-child(8), .candidate-table td:nth-child(8) {{ width: 120px; }}
+        .candidate-flag {{ display: inline-block; border-radius: 999px; padding: 2px 6px; font-size: 9px;
+                          border: 1px solid #d7dde5; background: #f6f8fb; color: #526174; }}
+        .candidate-flag.pass {{ border-color: #bde7d0; background: #f1fbf5; color: #0f6b4f; }}
+        .candidate-flag.warn {{ border-color: #f1d184; background: #fff8e6; color: #805200; }}
+        .component-matrix th, .component-matrix td {{ text-align: right; }}
+        .component-matrix th:first-child, .component-matrix td:first-child {{ text-align: left; width: 46px; }}
+        .component-matrix th:nth-child(2), .component-matrix td:nth-child(2) {{ width: 50px; }}
+        .reliability-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; padding: 8px; }}
+        .reliability-card {{ border: 1px solid #d7dde5; border-radius: 6px; background: #f8fafc; padding: 8px; }}
+        .reliability-card.pass {{ border-color: #bde7d0; background: #f1fbf5; }}
+        .reliability-card.warn {{ border-color: #f1d184; background: #fff8e6; }}
+        .reliability-card strong {{ display: block; font-size: 10px; color: #263445; margin-bottom: 4px; }}
+        .reliability-card span {{ display: block; font-size: 9px; color: #526174; line-height: 1.35; }}
+        .reliability-card em {{ display: block; margin-top: 4px; font-size: 9px; color: #805200; font-style: normal; }}
         .evidence-empty {{ padding: 10px; font-size: 10px; color: #64748b; line-height: 1.35; }}
-        @media (max-width: 920px) {{
+        @media (max-width: 780px) {{
             .evidence-detail-layout {{ grid-template-columns: 1fr; }}
+            .discovery-candidate-strip {{ grid-template-columns: 1fr; }}
         }}
         .score-section {{ display: flex; gap: {score_gap}px; margin-top: 12px; }}
         .score-panel {{ flex: 0 0 {score_panel_w}px; min-width: {score_panel_w}px; border: 1px solid #e0e0e0;
@@ -7963,7 +8219,7 @@ class ReportGenerator:
         <div class="integrated-view">
             <section class="post-gwas-evidence" id="post-gwas-evidence">
                 <div class="post-gwas-evidence-head">
-                    <h2>Local Post-GWAS Evidence</h2>
+                    <h2>Local Candidate Evidence</h2>
                     <span class="evidence-badge {evidence_status_class}">{evidence_status_label}</span>
                 </div>
                 <div class="post-gwas-grid">
@@ -7989,10 +8245,17 @@ class ReportGenerator:
                     <div class="evidence-metric">
                         <label>Position context</label>
                         <strong>{position_summary}</strong>
-                        <span>Local evidence only; no external eQTL is used in scoring.</span>
+                        <span>Discovery-safe evidence; no external labels are used in scoring.</span>
                     </div>
                 </div>
                 <div class="evidence-note">{rule_note}</div>
+                <div class="discovery-candidate-strip">
+                    {discovery_candidate_list_html}
+                    <div class="evidence-side-stack">
+                        {score_component_breakdown_html}
+                        {reliability_population_html}
+                    </div>
+                </div>
                 <details class="evidence-detail-disclosure">
                     <summary>Review detailed local evidence</summary>
                     <div class="evidence-detail-layout">

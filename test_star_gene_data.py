@@ -208,7 +208,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("switchScoreMode('robust_discovery')", integrated_block)
         self.assertIn("mode-toggle-btn", integrated_block)
 
-    def test_integrated_html_has_local_post_gwas_evidence_panel(self):
+    def test_integrated_html_has_local_candidate_evidence_panel(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
         integrated_start = source.index("def generate_integrated_html")
@@ -217,7 +217,8 @@ class StarGeneDataTests(unittest.TestCase):
 
         self.assertIn("def _summarize_post_gwas_evidence", source)
         self.assertIn("post-gwas-evidence", integrated_block)
-        self.assertIn("Post-GWAS Evidence", integrated_block)
+        self.assertIn("Local Candidate Evidence", integrated_block)
+        self.assertIn("Discovery-safe evidence", integrated_block)
         self.assertIn("Candidate rule", integrated_block)
         self.assertIn("Top local marker", integrated_block)
         self.assertIn("postGwasEvidence", integrated_block)
@@ -310,7 +311,7 @@ class StarGeneDataTests(unittest.TestCase):
         integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
         integrated_block = source[integrated_start:integrated_end]
 
-        self.assertIn("Local Post-GWAS Evidence", integrated_block)
+        self.assertIn("Local Candidate Evidence", integrated_block)
         self.assertIn("Evidence phenotype", integrated_block)
         self.assertIn("Switching phenotype updates score/effect plots only", integrated_block)
 
@@ -333,6 +334,83 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("{post_gwas_table_html}", integrated_block)
         self.assertIn("{variant_haplotype_bridge_html}", integrated_block)
         self.assertIn("{confidence_flags_html}", integrated_block)
+
+    def test_integrated_report_has_discovery_candidate_panels(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("_build_discovery_candidate_rows", source)
+        self.assertIn("_render_discovery_candidate_list", source)
+        self.assertIn("_render_score_component_breakdown", source)
+        self.assertIn("_render_reliability_population_panel", source)
+        self.assertIn("Local Candidate Evidence", integrated_block)
+        self.assertIn("discovery-candidate-section", integrated_block)
+        self.assertIn("Discovery Candidate List", source)
+        self.assertIn("Score Component Breakdown", source)
+        self.assertIn("Reliability &amp; Population", source)
+        self.assertIn("component-matrix", source)
+        self.assertNotIn("component-card", source)
+        self.assertIn("{discovery_candidate_list_html}", integrated_block)
+        self.assertIn("{score_component_breakdown_html}", integrated_block)
+        self.assertIn("{reliability_population_html}", integrated_block)
+
+    def test_render_discovery_candidate_panels_are_literature_free(self):
+        from haplotype_phenotype_analysis import (
+            _build_discovery_candidate_rows,
+            _render_discovery_candidate_list,
+            _render_score_component_breakdown,
+            _render_reliability_population_panel,
+        )
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame({
+            "SampleID": ["S1", "S2", "S3", "S4", "S5"],
+            "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap3", "Hap3"],
+            "Haplotype_Seq": ["A|G", "A|G", "C|G", "C|T", "C|T"],
+            "Trait": [10.0, 12.0, 30.0, 20.0, 22.0],
+            "Population": ["P1", "P2", "P1", "P2", "P2"],
+        })
+        score_results = {
+            "score_mode": "robust_discovery",
+            "per_haplotype": {
+                "Hap1": {"total": 1.2, "variant_effect": 0.8, "burden": 0.2, "effect_size": 0.6, "sample_reliability": 0.9, "ambiguity_factor": 1.0},
+                "Hap2": {"total": 2.5, "variant_effect": 1.0, "burden": 0.7, "effect_size": 0.9, "sample_reliability": 0.4, "ambiguity_factor": 0.5},
+                "Hap3": {"total": 1.7, "variant_effect": 0.3, "burden": 0.9, "effect_size": 0.4, "sample_reliability": 0.8, "ambiguity_factor": 1.0},
+            },
+        }
+
+        rows = _build_discovery_candidate_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results=score_results,
+            effect_data={"Hap2": {"effect": 5.0}},
+        )
+
+        self.assertEqual(rows[0]["haplotype"], "Hap2")
+        self.assertEqual(rows[0]["rank"], 1)
+        self.assertEqual(rows[0]["sample_count"], 1)
+        self.assertEqual(rows[0]["population_summary"], "P1=1")
+        self.assertEqual(rows[0]["reliability_flag"], "warn")
+
+        html = (
+            _render_discovery_candidate_list(rows)
+            + _render_score_component_breakdown(rows)
+            + _render_reliability_population_panel(rows)
+        )
+        self.assertIn("Discovery Candidate List", html)
+        self.assertIn("Score Component Breakdown", html)
+        self.assertIn("Reliability &amp; Population", html)
+        self.assertIn("component-matrix", html)
+        self.assertNotIn("component-card", html)
+        self.assertIn("Hap2", html)
+        self.assertIn("sample_reliability", html)
+        self.assertIn("P1=1", html)
+        self.assertNotIn("literature", html.lower())
+        self.assertNotIn("published", html.lower())
 
     def test_evidence_table_includes_ld_and_annotation_columns(self):
         from haplotype_phenotype_analysis import _render_post_gwas_evidence_table

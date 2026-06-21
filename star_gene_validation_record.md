@@ -235,6 +235,43 @@ and 816 Watkins TGW-overlap samples; the current report still has no external
 GWAS file input. Literature variants are used only for post-ranking audit,
 not as discovery-scoring inputs.
 
+2026-06-21 discovery-safe candidate panel rerun:
+The same default and robust commands were rerun after adding the report
+features selected for discovery use: `Discovery Candidate List`,
+`Score Component Breakdown`, and `Reliability & Population`. Literature
+haplotypes and published variant labels are not used by these panels; they
+rank and explain candidates only from local haplotype scores, effect summaries,
+sample counts, sample reliability, ambiguity penalties, and population/sample
+coverage summaries.
+
+Commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Top-scored haplotypes:
+Default mode still ranks rare ambiguous `Hap5=C/A|G|C` first, n=7, total
+score `4.2581`; exact Qin2014 `Hap1=A|G|C` is second, n=371, score `2.5746`.
+Robust mode ranks exact Qin2014 `Hap1=A|G|C` first, n=371, total score
+`1.8132`, sample reliability `0.9488`, ambiguity factor `1.0000`; rare
+ambiguous `Hap5` drops to third, n=7, score `0.9733`, sample reliability
+`0.2593`, ambiguity factor `0.7333`.
+
+HTML verification:
+Both regenerated integrated reports contain `Local Candidate Evidence` plus
+the three discovery-safe panels. `Score Component Breakdown` is rendered as a
+compact `component-matrix` instead of tall per-haplotype cards. Browser
+geometry on the robust report showed the candidate strip height was reduced
+from about `1014 px` to about `374 px`, the full evidence panel from about
+`1220 px` to about `580 px`, and `Review detailed local evidence` remains
+collapsed by default. The existing horizontal scroll comes from the fixed-width
+large integrated figure canvas, not from these new candidate panels.
+
 ### VRN-Kiss2014
 
 Literature positive control:
