@@ -568,7 +568,7 @@
             "start": 291759689,
             "end": 291778752
           },
-          "required_database_source": "wheatomics_remote_tagw2_b1_promoter_snp_vcf",
+          "required_database_source": "wwwg2b_tagw2_b1_full_region_snp_vcf",
           "expected_direction": "increases_trait",
           "traits": [
             {
@@ -619,7 +619,7 @@
               "source_note": "Qin et al. 2014 reported Hap-6B-1 as the favorable TaGW2-6B promoter haplotype; diagnostic pattern A/G/C at -1709/-721/-83."
             }
           ],
-          "notes": "TaGW2-B1 remote-SNP positive-control route. The literature natural promoter haplotype is testable only if these three diagnostic promoter SNPs are present and segregating in the current VCF/Watkins overlap."
+          "notes": "TaGW2-B1 full-region SNP positive-control route from complete WWWG2B chr6B VCF. The literature natural promoter haplotype is audited post hoc from the three diagnostic promoter SNPs, but discovery scoring uses the regional SNP haplotypes."
         },
         {
           "target_id": "VRN-Kiss2014",

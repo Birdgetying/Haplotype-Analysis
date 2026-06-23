@@ -21,9 +21,12 @@ result is tested.
 
 Current proof set for the teacher's "at least three" requirement:
 
-1. `TaGW2-B1-remoteSNP__robust_discovery`: strong top-rank proof. The
-   exact Qin2014 `Hap-6B-1 = A|G|C` is covered, segregating, large
-   (`n=371`), and top-ranked.
+1. `TaGW2-B1-remoteSNP`: strong regional proof after the 2026-06-23
+   full-region rerun. The complete chr6B VCF gives a strong TaGW2-B1 TGW
+   association (`P=1.98e-06`, PVE `27.17%`), and the Qin2014 `A/G/C`
+   promoter haplotype is covered and segregating. However, full-region
+   background SNPs split that promoter class, so the exact literature
+   promoter haplotype is no longer the raw top full-region haplotype.
 2. `VRN-D1-Kiss2014__robust_discovery`: stable diagnostic-marker proof.
    The top robust single-marker haplotype is `VRN-D1=1` (`Hap2`, n=38)
    and has significant DEV49/DEV59 heading-date score regressions.
@@ -34,8 +37,8 @@ Current proof set for the teacher's "at least three" requirement:
 
 | Target | Trait | Score mode | Status | Key result | Conclusion |
 |---|---|---|---|---|---|
-| TaGW2-B1 / TaGW2-6B | TGW | default | tested | Top score was rare ambiguous `Hap5=C/A\|G\|C`, not exact Qin2014 `A\|G\|C` | Biological signal present, default ranking over-rewarded rare ambiguous haplotype |
-| TaGW2-B1 / TaGW2-6B | TGW | robust_discovery | tested | Top score became exact Qin2014 `Hap1=A\|G\|C`, n=371 | Strongest current proof that robust scoring can recover a known functional haplotype without using literature labels in scoring |
+| TaGW2-B1 / TaGW2-6B | TGW | default | tested | Full-region rerun uses 71 SNPs; top is rare full-region Hap43, not the exact Qin2014 promoter haplotype | Biological signal present, but full-region background SNPs split the literature promoter haplotype into many sub-haplotypes |
+| TaGW2-B1 / TaGW2-6B | TGW | robust_discovery | tested | Full-region rerun uses 71 SNPs; top is Hap2, while Qin2014 `A/G/C` is present across many exact full-region haplotypes | Full-region discovery view is more realistic, but exact promoter-haplotype validation should be read from literature marker audit/grouping, not raw full-region top rank |
 | TaGW2-A1 | TGW | default | tested | Gene-level signal exists, but `SNP-494 A` is absent in current complete Watkins samples | Not an exact Hap5 validation |
 | TaGW2-D1 | TGW | default | tested | Weak low-confidence signal with only 2 retained SNPs | Limited marker coverage; not strong proof |
 | VRN-Kiss2014 | heading date | default | tested | Literature all-spring `1\|1\|1` was top-scored but n=2 | Useful audit check, weak statistical proof |
@@ -57,7 +60,7 @@ the tested score mode.
 
 | Target | Literature/source | Decisive variant or functional haplotype | Current marker/data | Coverage and segregation | Top-score match | Validation verdict |
 |---|---|---|---|---|---|---|
-| TaGW2-B1 / TaGW2-6B | Qin et al. 2014, BMC Plant Biology, `https://doi.org/10.1186/1471-2229-14-107` | Favorable promoter haplotype `Hap-6B-1`, diagnostic states `-1709/-721/-83 = A/G/C`; TaGW2 encodes a RING-type E3 ubiquitin ligase and the favored haplotype increases grain width/weight. | WWWG2B chr6B SNP VCF records `chr6B:291759689 C>A`, `chr6B:291760677 G>A`, `chr6B:291761315 T>C`; 816 Watkins TGW-overlap samples. | Covered and segregating; exact `A\|G\|C` haplotype is `Hap1`, n=371. | Default: no, top was rare ambiguous `Hap5=C/A\|G\|C`; robust_discovery: yes, top is exact `Hap1=A\|G\|C`. | Strongest current proof for robust discovery scoring; also proves default mode over-rewarded a tiny ambiguous haplotype. |
+| TaGW2-B1 / TaGW2-6B | Qin et al. 2014, BMC Plant Biology, `https://doi.org/10.1186/1471-2229-14-107` | Favorable promoter haplotype `Hap-6B-1`, diagnostic states `-1709/-721/-83 = A/G/C`; TaGW2 encodes a RING-type E3 ubiquitin ligase and the favored haplotype increases grain width/weight. | Current full-region database uses complete WWWG2B chr6B VCF over `chr6B:291759689-291778752`: 756 Watkins TGW-overlap samples, 71 SNPs. The three diagnostic records are `chr6B:291759689 C>A`, `chr6B:291760677 G>A`, `chr6B:291761315 T>C`. | Covered and segregating, but `A/G/C` is split across many exact full-region haplotypes. | Full-region default/robust: no, strict audit is `present_but_not_top`. Historical 3-marker robust run: yes, exact `A\|G\|C` was top. | Strong regional GW2 proof and useful demonstration that exact literature-marker validation should be separated from full-region discovery ranking. |
 | TaGW2-A1 / TaGW2-6A | Jaiswal et al. 2015, PLoS ONE, `https://doi.org/10.1371/journal.pone.0129400` | Promoter `SNP-494` is the causal/expression-regulating marker; favorable allele `A`; four-SNP Hap5 pattern tracked as `SNP-988/SNP-739/SNP-593/SNP-494 = G/A/G/A`. | Local WatSeq chr6A SNP VCF plus remote WheatOmics micro-VCF. | Local data miss `SNP-494`; remote data cover `chr6A:237734341 G>A`, but expected `A` has 0 complete Watkins carriers, so Hap5 is not observed. | No exact validation. Some top haplotypes match the first three promoter SNPs, but not the decisive `SNP-494 A` state. | Gene-level TGW signal only; cannot be used as exact functional-haplotype proof in current samples. |
 | TaGW2-D1 | WheatOmics GW2 homolog annotation and current WatSeq A/D run. | No precise published decisive D1 functional marker was configured for this validation; current target used two regional SNPs around `TraesCS6D02G176900`. | WatSeq chr6D SNP VCF; 820 Watkins TGW-overlap samples; 2 retained SNPs. | Region covered sparsely; no literature decisive allele/haplotype available in manifest. | Not applicable. | Low-confidence regional signal only; not a star-gene proof. |
 | Rht-B1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`; mechanism is GA-insensitive reduced height through truncated/stabilized DELLA repression of growth. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Marker is present, but expected `T` has 0 phenotype-overlap carriers. | No, blocked before scoring. | Data-blocked in current Watkins panel; not a method-negative result. |
@@ -78,7 +81,43 @@ coordinate system these are `chr6B:291759689 C>A`,
 
 Data:
 `star_gene_database/wheat_nature_2024/TaGW2-B1-remoteSNP`,
-816 Watkins TGW-overlap samples, 3 promoter SNPs, 6 haplotypes.
+2026-06-23 full-region rerun:
+The complete downloaded WWWG2B chr6B VCF was used beyond the three
+literature SNPs. The current database at
+`star_gene_database/wheat_nature_2024/TaGW2-B1-remoteSNP` now contains
+756 Watkins TGW-overlap samples, 71 regional SNPs from
+`chr6B:291759689-291778752`, and 112 haplotypes. Variant annotation is
+8 promoter SNPs plus 63 intronic SNPs. The integrated HTML displays 23
+positions because the main plot only shows positions variable among the
+top displayed haplotypes; the database itself has all 71 retained SNPs.
+
+Commands:
+`python prepare_wheat2024_tagw2_b1_remote_snp.py --vcf D:\Desktop\data\GW2\chr6B.HARD.SNP.Missing-unphasing.ID.ann.finalSID.1047.allele2_retain.hard_retain.InbreedingCoeff_retain.vcf.gz --min-haplotype-count 1 --max-missing-rate 0.2`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP/TaGW2-B1-remoteSNP.html`
+and
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery/TaGW2-B1-remoteSNP.html`.
+
+Full-region result:
+The literature `A/G/C` promoter pattern is still covered and segregating, but
+adding 68 background regional SNPs splits that promoter class into many exact
+full-region haplotypes. Strict audit therefore reports the Qin2014 haplotype
+as `present_but_not_top` in both default and robust full-region runs. Default
+top is rare `Hap43` (n=2, TGW mean `52.544`), and robust top is `Hap2`.
+The full-region association remains strong (`P=1.98e-06`, PVE `27.17%`),
+but it should be interpreted as discovery-style regional signal, not as an
+exact literature-promoter-haplotype recovery.
+
+Earlier 3-marker validation dataset:
+Before the full-region rerun, the same target directory was built from only
+the three Qin2014 promoter SNPs: 816 Watkins TGW-overlap samples, 3 promoter
+SNPs, and 6 haplotypes. The historical records below refer to that 3-marker
+positive-control run.
 
 Default command:
 `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP`

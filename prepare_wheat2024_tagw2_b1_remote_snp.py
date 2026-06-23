@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a TaGW2-B1 promoter-SNP positive-control database."""
+"""Prepare a TaGW2-B1 full-region SNP positive-control database."""
 
 import argparse
 import gzip
@@ -37,6 +37,10 @@ DEFAULT_PHENOTYPE_XLSX = Path(
 )
 DEFAULT_OUTPUT_ROOT = Path("star_gene_database/wheat_nature_2024")
 DEFAULT_INTERMEDIATE_ROOT = Path("external_data/wheat_nature_2024/tagw2_b1_remote")
+DEFAULT_LOCAL_CHR6B_VCF = Path(
+    r"D:\Desktop\data\GW2\chr6B.HARD.SNP.Missing-unphasing.ID.ann.finalSID.1047."
+    r"allele2_retain.hard_retain.InbreedingCoeff_retain.vcf.gz"
+)
 
 TARGET_ID = "TaGW2-B1-remoteSNP"
 PHENOTYPE_COLUMNS = ["TGW_mean", "TGW_CFLN10", "TGW_CFLN14"]
@@ -81,13 +85,14 @@ TAGW2_B1 = {
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Build a TaGW2-B1 promoter-SNP positive-control database from a local "
+            "Build a TaGW2-B1 full-region positive-control database from a local "
             "or remote WheatOmics merged SNP VCF and Watkins TGW phenotypes."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--vcf", default=REMOTE_WHEATOMICS_SNP_VCF,
-                        help="Local or remote SNP VCF containing TaGW2-B1 promoter SNP calls")
+    default_vcf = str(DEFAULT_LOCAL_CHR6B_VCF if DEFAULT_LOCAL_CHR6B_VCF.exists() else REMOTE_WHEATOMICS_SNP_VCF)
+    parser.add_argument("--vcf", default=default_vcf,
+                        help="Local or remote SNP VCF containing the TaGW2-B1 region")
     parser.add_argument("--phenotype-xlsx", default=str(DEFAULT_PHENOTYPE_XLSX),
                         help="Watkins JIC phenotype workbook")
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT),
@@ -96,6 +101,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Directory for marker matrix, phenotype TSV, and prepare status")
     parser.add_argument("--min-haplotype-count", type=int, default=3,
                         help="Minimum sample count for retained haplotypes")
+    parser.add_argument("--max-missing-rate", type=float, default=0.2,
+                        help="Maximum per-variant missing rate before complete-sample filtering")
     parser.add_argument("--bcftools", default="bcftools",
                         help="bcftools executable; on Windows this can be used through WSL")
     return parser
@@ -214,10 +221,19 @@ def fetch_vcf_records(vcf: str, region: str, bcftools: str) -> List[str]:
     return records
 
 
+def annotation_for_position(pos: int) -> str:
+    if pos < int(TAGW2_B1["gene_start"]):
+        return "promoter"
+    if int(TAGW2_B1["gene_start"]) <= pos <= int(TAGW2_B1["gene_end"]):
+        return "intron"
+    return "other"
+
+
 def build_marker_matrix(
     vcf: str,
     phenotype_samples: Sequence[str],
     bcftools: str,
+    max_missing_rate: float,
 ) -> Tuple[pd.DataFrame, Dict[str, Dict[str, object]], List[str]]:
     region = f"{TAGW2_B1['region_chrom']}:{TAGW2_B1['promoter_snps'][0]['position']}-{TAGW2_B1['gene_end']}"
     records = fetch_vcf_records(vcf, region, bcftools)
@@ -230,54 +246,67 @@ def build_marker_matrix(
     if not sample_indices:
         raise ValueError("TaGW2-B1: no VCF samples overlap Watkins TGW phenotypes")
 
-    record_by_marker: Dict[str, List[str]] = {}
+    required_markers = {str(snp["marker_id"]) for snp in TAGW2_B1["promoter_snps"]}
+    marker_metadata: Dict[str, Dict[str, object]] = {}
+    calls_by_marker: Dict[str, Dict[str, str]] = {}
     for record in records:
         parts = record.split("\t")
         if len(parts) < 10:
             continue
         marker_id = parts[2] if parts[2] and parts[2] != "." else f"{parts[0]}_{parts[1]}"
-        record_by_marker[marker_id] = parts
-
-    marker_metadata: Dict[str, Dict[str, object]] = {}
-    calls_by_marker: Dict[str, Dict[str, str]] = {}
-    missing_markers: List[str] = []
-    for snp in TAGW2_B1["promoter_snps"]:
-        marker_id = str(snp["marker_id"])
-        parts = record_by_marker.get(marker_id)
-        if parts is None:
-            missing_markers.append(marker_id)
+        if marker_id in calls_by_marker:
+            marker_id = f"{marker_id}_{parts[3]}_{parts[4].replace(',', '_')}"
+        try:
+            pos = int(parts[1])
+        except ValueError:
             continue
         ref, alt, fmt = parts[3], parts[4], parts[8]
         calls: Dict[str, str] = {}
+        missing = 0
         for sample_idx in sample_indices:
             sample = sample_names[sample_idx - 9]
             state = genotype_to_state(parts[sample_idx], fmt, ref, alt)
             if state is not None:
                 calls[sample] = state
+            else:
+                missing += 1
+        missing_rate = missing / len(sample_indices) if sample_indices else 1.0
         if len(set(calls.values())) < 2:
-            missing_markers.append(f"{marker_id}:not_segregating")
+            continue
+        if missing_rate > max_missing_rate and marker_id not in required_markers:
             continue
         calls_by_marker[marker_id] = calls
         marker_metadata[marker_id] = {
-            "position": int(parts[1]),
+            "position": pos,
             "ref": ref,
             "alt": alt,
             "record_id": parts[2],
-            "missing_rate": 1 - (len(calls) / len(sample_indices)),
+            "missing_rate": missing_rate,
+            "annotation": annotation_for_position(pos),
         }
 
+    missing_markers: List[str] = [
+        marker for marker in sorted(required_markers)
+        if marker not in calls_by_marker
+    ]
     if missing_markers:
         raise ValueError(
             "TaGW2-B1: literature promoter SNPs are missing or not segregating: "
             + ", ".join(missing_markers)
         )
 
+    if not calls_by_marker:
+        raise ValueError(f"TaGW2-B1: no polymorphic SNPs found in {region}")
+
+    marker_order = sorted(
+        calls_by_marker,
+        key=lambda marker: (int(marker_metadata[marker]["position"]), marker),
+    )
     complete_samples = sorted(set.intersection(*(set(calls) for calls in calls_by_marker.values())))
     if len(complete_samples) < 2:
         raise ValueError("TaGW2-B1: fewer than two complete samples across literature promoter SNPs")
 
     rows = []
-    marker_order = [str(snp["marker_id"]) for snp in TAGW2_B1["promoter_snps"]]
     for sample in complete_samples:
         row = {"SampleID": sample}
         for marker in marker_order:
@@ -308,12 +337,13 @@ def update_gene_and_variant_metadata(
         "cds_start_offset_1based": TAGW2_B1["cds_start_offset_1based"],
         "atg_position": TAGW2_B1["atg_position"],
         "literature_haplotype": TAGW2_B1["literature_haplotype"],
-        "source": "wheatomics_remote_tagw2_b1_promoter_snp_vcf",
+        "source": "wwwg2b_tagw2_b1_full_region_snp_vcf",
         "source_vcf": source_vcf,
         "source_phenotype": str(phenotype_xlsx),
         "source_note": (
-            "TaGW2-B1 natural promoter haplotype SNPs from Qin et al. 2014 Fig. 2B; "
-            "expected Hap-6B-1 pattern is A/G/C at -1709/-721/-83."
+            "TaGW2-B1 full promoter-to-gene SNP region from the complete WWWG2B chr6B "
+            "1047-sample VCF; Qin et al. 2014 Hap-6B-1 diagnostic promoter SNPs "
+            "remain audited post hoc as A/G/C at -1709/-721/-83."
         ),
     })
     with gene_info_path.open("w", encoding="utf-8") as f:
@@ -328,7 +358,7 @@ def update_gene_and_variant_metadata(
         variant_df.at[idx, "ref"] = meta["ref"]
         variant_df.at[idx, "alt"] = meta["alt"]
         variant_df.at[idx, "missing_rate"] = float(meta["missing_rate"])
-        variant_df.at[idx, "annotation"] = "promoter_snp"
+        variant_df.at[idx, "annotation"] = meta.get("annotation", "other")
     variant_df.to_csv(variant_path, index=False)
 
 
@@ -340,11 +370,13 @@ def build_database(
     intermediate_root: Path,
     min_haplotype_count: int,
     bcftools: str,
+    max_missing_rate: float,
 ) -> Path:
     marker_df, marker_metadata, marker_order = build_marker_matrix(
         vcf=vcf,
         phenotype_samples=phenotype_df["SampleID"].tolist(),
         bcftools=bcftools,
+        max_missing_rate=max_missing_rate,
     )
     phenotype_subset = phenotype_df[phenotype_df["SampleID"].isin(marker_df["SampleID"])].copy()
     phenotype_subset = phenotype_subset.sort_values("SampleID")
@@ -402,6 +434,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             intermediate_root=intermediate_root,
             min_haplotype_count=args.min_haplotype_count,
             bcftools=args.bcftools,
+            max_missing_rate=args.max_missing_rate,
         )
     except ValueError as e:
         status = {

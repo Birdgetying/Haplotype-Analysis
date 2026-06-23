@@ -2533,6 +2533,7 @@ class StarGeneDataTests(unittest.TestCase):
                     "chr6B\t291759689\tchr6B_291759689\tC\tA\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
                     "chr6B\t291760677\tchr6B_291760677\tG\tA\t.\tPASS\t.\tGT\t0/0\t1/1\t0/0\t1/1",
                     "chr6B\t291761315\tchr6B_291761315\tT\tC\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
+                    "chr6B\t291762000\tchr6B_291762000\tG\tT\t.\tPASS\t.\tGT\t1/1\t0/0\t1/1\t0/0",
                     "",
                 ]),
                 encoding="utf-8",
@@ -2568,16 +2569,19 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             db_dir = output_root / "TaGW2-B1-remoteSNP"
             gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
-            self.assertEqual(gene_info["source"], "wheatomics_remote_tagw2_b1_promoter_snp_vcf")
+            self.assertEqual(gene_info["source"], "wwwg2b_tagw2_b1_full_region_snp_vcf")
             self.assertEqual(gene_info["atg_position"], 291761397)
             variant_info = pd.read_csv(db_dir / "variant_info.csv")
+            self.assertEqual(len(variant_info), 4)
+            for marker in ["chr6B_291759689", "chr6B_291760677", "chr6B_291761315"]:
+                self.assertIn(marker, variant_info["marker_id"].tolist())
+            self.assertIn("chr6B_291762000", variant_info["marker_id"].tolist())
             self.assertEqual(
-                variant_info["marker_id"].tolist(),
-                ["chr6B_291759689", "chr6B_291760677", "chr6B_291761315"],
+                variant_info.set_index("marker_id").loc["chr6B_291762000", "annotation"],
+                "intron",
             )
-            self.assertTrue((variant_info["annotation"] == "promoter_snp").all())
             hap_text = (db_dir / "haplotype_data.csv").read_text(encoding="utf-8")
-            self.assertIn("A|G|C", hap_text)
+            self.assertIn("A|G|C|T", hap_text)
 
     def test_tagw2_hap8_maps_published_promoter_offsets_to_refseq_positions(self):
         from analyze_tagw2_hap8_functional_groups import map_promoter_offset_to_position
