@@ -38,6 +38,17 @@ AUDIT_COLUMNS = [
     "directional_top_haplotype_contains_expected",
     "directional_top_haplotype_exact_expected",
     "directional_validation_status",
+    "top_core_group",
+    "top_core_group_sample_count",
+    "top_core_group_contains_expected",
+    "top_core_group_exact_expected",
+    "core_group_validation_status",
+    "directional_top_core_group",
+    "directional_top_core_group_sample_count",
+    "directional_top_core_group_contains_expected",
+    "directional_top_core_group_exact_expected",
+    "directional_core_group_validation_status",
+    "core_positions",
     "exact_matching_haplotypes",
     "validation_status",
     "covered_marker_count",
@@ -188,6 +199,72 @@ def _pick_top_haplotype(result_path: Path) -> Tuple[Optional[str], Optional[floa
                 best_hap = str(hap_name)
                 best_score = score
     return best_hap, best_score
+
+
+def _pick_top_core_group(result_path: Path) -> Dict[str, Any]:
+    score_path = result_path / "haplotype_scores.json"
+    if not score_path.exists():
+        return {}
+    try:
+        with score_path.open("r", encoding="utf-8") as f:
+            score_data = json.load(f)
+    except Exception:
+        return {}
+
+    best = {}
+    best_score = None
+    for trait_scores in score_data.values():
+        if not isinstance(trait_scores, dict):
+            continue
+        core = trait_scores.get("core_haplotype_groups") or {}
+        top = core.get("top_group") or {}
+        score = _safe_float(top.get("mean_score"))
+        if score is None:
+            continue
+        if best_score is None or score > best_score:
+            best_score = score
+            best = {
+                "top_group": top,
+                "core_positions": [int(p) for p in core.get("core_positions") or []],
+            }
+    return best
+
+
+def _pick_directional_top_core_group(
+    result_path: Path,
+    target_id: str,
+    summary_rows: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Tuple[Optional[str], Optional[int]]:
+    rows = list(summary_rows or [])
+    if not rows:
+        rows = _read_summary_rows(result_path)
+
+    best_group = None
+    best_count = None
+    try:
+        result_text = str(result_path.resolve())
+    except Exception:
+        result_text = str(result_path)
+    for row in rows:
+        if str(row.get("target_id") or "") != str(target_id):
+            continue
+        row_result_path = str(row.get("result_path") or "").strip()
+        if row_result_path:
+            try:
+                row_result_path = str(Path(row_result_path).resolve())
+            except Exception:
+                pass
+            if row_result_path != result_text:
+                continue
+        group = str(row.get("directional_top_core_group") or "").strip()
+        if not group:
+            continue
+        count_value = _safe_float(row.get("directional_top_core_group_sample_count"))
+        count = int(count_value) if count_value is not None else None
+        if best_group is None or (count or 0) > (best_count or 0):
+            best_group = group
+            best_count = count
+    return best_group, best_count
 
 
 def _pick_directional_top_haplotype(
@@ -391,6 +468,10 @@ def _haplotype_record(
     directional_top_hap: Optional[str],
     directional_top_score: Optional[float],
     directional_top_count: Optional[int],
+    top_core_group: Optional[Dict[str, Any]] = None,
+    core_positions: Optional[Sequence[int]] = None,
+    directional_top_core_group: Optional[str] = None,
+    directional_top_core_group_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     paper_id = paper.get("paper_id") or paper.get("short_name") or ""
     target_id = target.get("target_id") or target.get("gene_or_locus") or ""
@@ -472,6 +553,71 @@ def _haplotype_record(
             for marker, expected in expected_markers.items()
         )
 
+    core_positions = [int(p) for p in (core_positions or [])]
+    top_core_group = top_core_group or {}
+    top_core_group_name = str(top_core_group.get("core_sequence") or "")
+    top_core_group_sample_count = top_core_group.get("sample_count") or ""
+    core_marker_to_index = {}
+    for marker in expected_markers:
+        idx = context["marker_to_index"].get(marker)
+        if idx is None:
+            continue
+        if idx < len(context["variant_rows"]):
+            try:
+                pos = int(context["variant_rows"][idx].get("position"))
+            except (TypeError, ValueError):
+                pos = None
+            if pos in core_positions:
+                core_marker_to_index[marker] = core_positions.index(pos)
+
+    top_core_contains = False
+    top_core_exact = False
+    core_status = ""
+    directional_core_group_name = str(directional_top_core_group or "")
+    directional_core_group_count = directional_top_core_group_count or ""
+    directional_core_contains = False
+    directional_core_exact = False
+    directional_core_status = ""
+    if covered and top_core_group_name and len(core_marker_to_index) == len(expected_markers):
+        core_tokens = _split_haplotype(top_core_group_name)
+        top_core_contains = all(
+            _allele_matches(core_tokens[core_marker_to_index[marker]], expected)
+            for marker, expected in expected_markers.items()
+        )
+        top_core_exact = all(
+            _allele_exactly_matches(core_tokens[core_marker_to_index[marker]], expected)
+            for marker, expected in expected_markers.items()
+        )
+        if carrier_count > 0 and carrier_count < len(context["sample_alleles"]):
+            if top_core_exact:
+                core_status = "matched_top_core_group"
+            elif top_core_contains:
+                core_status = "contained_in_top_core_group_not_exact"
+            else:
+                core_status = "present_but_not_top_core_group"
+    elif covered and top_core_group_name:
+        core_status = "not_testable_core_markers_not_selected"
+
+    if covered and directional_core_group_name and len(core_marker_to_index) == len(expected_markers):
+        directional_core_tokens = _split_haplotype(directional_core_group_name)
+        directional_core_contains = all(
+            _allele_matches(directional_core_tokens[core_marker_to_index[marker]], expected)
+            for marker, expected in expected_markers.items()
+        )
+        directional_core_exact = all(
+            _allele_exactly_matches(directional_core_tokens[core_marker_to_index[marker]], expected)
+            for marker, expected in expected_markers.items()
+        )
+        if carrier_count > 0 and carrier_count < len(context["sample_alleles"]):
+            if directional_core_exact:
+                directional_core_status = "matched_directional_top_core_group"
+            elif directional_core_contains:
+                directional_core_status = "contained_in_directional_top_core_group_not_exact"
+            else:
+                directional_core_status = "present_but_not_directional_top_core_group"
+    elif covered and directional_core_group_name:
+        directional_core_status = "not_testable_core_markers_not_selected"
+
     if not expected_markers:
         status = "not_testable_no_expected_allele"
     elif not covered:
@@ -524,6 +670,17 @@ def _haplotype_record(
         "directional_top_haplotype_contains_expected": directional_top_contains,
         "directional_top_haplotype_exact_expected": directional_top_exact,
         "directional_validation_status": directional_status,
+        "top_core_group": top_core_group_name,
+        "top_core_group_sample_count": top_core_group_sample_count,
+        "top_core_group_contains_expected": top_core_contains,
+        "top_core_group_exact_expected": top_core_exact,
+        "core_group_validation_status": core_status,
+        "directional_top_core_group": directional_core_group_name,
+        "directional_top_core_group_sample_count": directional_core_group_count,
+        "directional_top_core_group_contains_expected": directional_core_contains,
+        "directional_top_core_group_exact_expected": directional_core_exact,
+        "directional_core_group_validation_status": directional_core_status,
+        "core_positions": ";".join(str(p) for p in core_positions),
         "exact_matching_haplotypes": _format_hap_counts(exact_hap_counts),
         "validation_status": status,
         "covered_marker_count": len(expected_markers) - len(missing),
@@ -551,9 +708,13 @@ def run_literature_audit(
 
     context = _load_marker_context(database_path)
     top_hap, top_score = _pick_top_haplotype(result_path)
+    core_context = _pick_top_core_group(result_path)
     target_id = target.get("target_id") or target.get("gene_or_locus") or ""
     directional_top_hap, directional_top_score, directional_top_count = (
         _pick_directional_top_haplotype(result_path, str(target_id), summary_rows=summary_rows)
+    )
+    directional_top_core_group, directional_top_core_group_count = (
+        _pick_directional_top_core_group(result_path, str(target_id), summary_rows=summary_rows)
     )
     records: List[Dict[str, Any]] = []
     for variant in variants:
@@ -565,6 +726,10 @@ def run_literature_audit(
         records.append(_haplotype_record(
             paper, target, haplotype, context, top_hap, top_score,
             directional_top_hap, directional_top_score, directional_top_count,
+            top_core_group=core_context.get("top_group"),
+            core_positions=core_context.get("core_positions"),
+            directional_top_core_group=directional_top_core_group,
+            directional_top_core_group_count=directional_top_core_group_count,
         ))
 
     csv_path = result_path / "literature_variant_audit.csv"

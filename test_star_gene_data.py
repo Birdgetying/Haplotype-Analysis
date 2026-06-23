@@ -130,6 +130,100 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(runner.pick_directional_top_haplotype(score_results, "increases_trait")[0], "TallHap")
         self.assertEqual(runner.pick_directional_top_haplotype(score_results, "decreases_trait")[0], "ShortHap")
 
+    def test_direction_aware_top_haplotype_filters_low_support_extremes(self):
+        from star_gene_validation import StarGeneValidator
+
+        runner = StarGeneValidator(
+            manifest={"papers": []},
+            database_root=Path("star_gene_database"),
+            results_root=Path("star_gene_results"),
+            check_only=True,
+        )
+        per_haplotype = {
+            "StableHigh": {"total": 1.8, "mean_phenotype": 50.0},
+            "TinyExtreme": {"total": 3.0, "mean_phenotype": 100.0},
+        }
+        per_sample = []
+        for i in range(8):
+            per_sample.append({
+                "sample_id": f"Stable{i}",
+                "haplotype": "StableHigh",
+                "score": 1.8,
+                "phenotype": 49.0 + i % 3,
+            })
+        for i in range(2):
+            per_sample.append({
+                "sample_id": f"Tiny{i}",
+                "haplotype": "TinyExtreme",
+                "score": 3.0,
+                "phenotype": 100.0 + i,
+            })
+        for i in range(30):
+            hap = f"Singleton{i}"
+            per_haplotype[hap] = {"total": 0.1, "mean_phenotype": 20.0 + i * 0.01}
+            per_sample.append({
+                "sample_id": f"SingletonSample{i}",
+                "haplotype": hap,
+                "score": 0.1,
+                "phenotype": 20.0 + i * 0.01,
+            })
+
+        score_results = {
+            "per_haplotype": per_haplotype,
+            "per_sample": per_sample,
+        }
+
+        self.assertEqual(
+            runner.pick_directional_top_haplotype(score_results, "increases_trait")[0],
+            "StableHigh",
+        )
+
+    def test_direction_aware_top_core_group_uses_expected_direction(self):
+        from star_gene_validation import StarGeneValidator
+
+        runner = StarGeneValidator(
+            manifest={"papers": []},
+            database_root=Path("star_gene_database"),
+            results_root=Path("star_gene_results"),
+            check_only=True,
+        )
+        score_results = {
+            "core_haplotype_groups": {
+                "groups": {
+                    "A|A": {
+                        "core_sequence": "A|A",
+                        "rank_score": 1.0,
+                        "mean_score": 1.2,
+                        "mean_phenotype": 30.0,
+                        "sample_count": 50,
+                    },
+                    "G|G": {
+                        "core_sequence": "G|G",
+                        "rank_score": 0.8,
+                        "mean_score": 0.9,
+                        "mean_phenotype": 45.0,
+                        "sample_count": 20,
+                    },
+                    "T|T": {
+                        "core_sequence": "T|T",
+                        "rank_score": 2.0,
+                        "mean_score": 2.5,
+                        "mean_phenotype": 60.0,
+                        "sample_count": 1,
+                    },
+                }
+            }
+        }
+
+        self.assertEqual(
+            runner.pick_directional_top_core_group(score_results, "increases_trait")[0],
+            "G|G",
+        )
+        self.assertEqual(
+            runner.pick_directional_top_core_group(score_results, "decreases_trait")[0],
+            "A|A",
+        )
+
     def test_score_tooltips_use_viewport_coordinates(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 

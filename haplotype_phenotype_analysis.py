@@ -18,11 +18,13 @@ import sys
 import io
 import argparse
 import gzip
+import re
 import time
 import json
 import logging
 import traceback
 import html
+from collections import Counter
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -5613,6 +5615,12 @@ class HaplotypeScorer:
         self.unique_haps = sorted(hap_sample_df[self.hap_col].unique())
         self.grand_pheno_mean = hap_sample_df[self.phenotype_col].mean()
         self.grand_pheno_std = hap_sample_df[self.phenotype_col].std()
+        self.full_variant_positions = (
+            sorted(self.variant_info.keys()) if self.variant_info else list(self.variant_positions)
+        )
+        self.pos_to_seq_idx = {
+            int(pos): i for i, pos in enumerate(self.full_variant_positions)
+        }
 
     def _classify_position(self, pos):
         """对位置进行功能分类，返回 FUNCTIONAL_WEIGHTS 中的 key
@@ -5746,6 +5754,19 @@ class HaplotypeScorer:
         self._cached_seq_tokens = seq_tokens
         return seq_tokens
 
+    def _allele_for_hap_position(self, hap, pos):
+        """Return the allele token for a genomic position in a haplotype sequence.
+
+        Haplotype_Seq stores the full variant_info order, while score/display
+        positions can be a filtered subset. Always map position -> full-sequence
+        index before reading the allele to avoid shifting full-region scores.
+        """
+        tokens = self._get_hap_seq_tokens().get(hap, [])
+        idx = self.pos_to_seq_idx.get(int(pos))
+        if idx is None or idx >= len(tokens):
+            return ''
+        return tokens[idx]
+
     def _get_hap_counts(self):
         """返回每个单倍型的样本数。"""
         if hasattr(self, '_cached_hap_counts'):
@@ -5757,6 +5778,10 @@ class HaplotypeScorer:
     def _sample_reliability(self, hap):
         """样本量可靠性，n/(n+k)，用于抑制极小单倍型的发现排名。"""
         n = self._get_hap_counts().get(hap, 0)
+        return self._sample_reliability_for_count(n)
+
+    def _sample_reliability_for_count(self, n):
+        """Sample-count reliability for a group or haplotype."""
         k = float(self.ROBUST_DISCOVERY_RELIABILITY_K)
         return float(n / (n + k)) if n > 0 else 0.0
 
@@ -5802,6 +5827,205 @@ class HaplotypeScorer:
                     value *= ambiguity.get(hap, 1.0)
                 adjusted[comp_name][hap] = value
         return adjusted, reliability, ambiguity
+
+    def _select_core_positions(self, score_components, max_positions=12):
+        """Select stable, non-redundant positions for full-region core grouping.
+
+        This is discovery-only: it uses score-derived position evidence, MAF,
+        functional annotation, and LD pruning. It does not use literature labels.
+        """
+        if not self.variant_positions:
+            return []
+
+        # Per-position signal from available local evidence. Phenotype terms are
+        # estimated from marker groups and filtered for support, so singleton
+        # outliers cannot define the core haplotype.
+        X, y, all_positions = self._reconstruct_genotype_matrix()
+        effect_by_pos = {}
+        if X is not None and y is not None and X.shape[1] == len(all_positions):
+            effects = self._compute_univariate_effects(X, y)
+            effects = self._eb_shrink_marker_effects(
+                effects,
+                np.array([self.pos_maf.get(pos, 0.5) for pos in all_positions])
+            )
+            max_effect = float(np.max(effects)) if len(effects) else 0.0
+            if max_effect > 0:
+                effect_by_pos = {
+                    int(pos): float(eff / max_effect)
+                    for pos, eff in zip(all_positions, effects)
+                }
+
+        pheno_by_pos = {}
+        for pos in self.variant_positions:
+            groups = {}
+            for _, row in self.hap_sample_df.iterrows():
+                pheno = row.get(self.phenotype_col)
+                if pd.isna(pheno):
+                    continue
+                allele = self._allele_for_hap_position(row[self.hap_col], pos)
+                if not allele or str(allele).upper() in {'N', '.', 'NA', 'NAN', '?'}:
+                    continue
+                groups.setdefault(str(allele), []).append(float(pheno))
+            if len(groups) < 2:
+                continue
+            counts = [len(vals) for vals in groups.values()]
+            min_count = min(counts)
+            if min_count < 5:
+                continue
+            try:
+                vals = list(groups.values())
+                if len(vals) == 2:
+                    pval = stats.ttest_ind(vals[0], vals[1], equal_var=False).pvalue
+                else:
+                    pval = stats.f_oneway(*vals).pvalue
+            except Exception:
+                continue
+            if pval is None or not np.isfinite(pval):
+                continue
+            means = [float(np.mean(vals)) for vals in groups.values()]
+            effect = max(means) - min(means)
+            pheno_by_pos[int(pos)] = {
+                'logp': float(-np.log10(max(pval, 1e-300))),
+                'effect': effect,
+                'min_count': min_count,
+            }
+        max_logp = max((v['logp'] for v in pheno_by_pos.values()), default=0.0)
+        max_effect = max((v['effect'] for v in pheno_by_pos.values()), default=0.0)
+
+        position_scores = []
+        for pos in self.variant_positions:
+            maf = float(self.pos_maf.get(pos, 0.5) or 0.0)
+            if maf <= 0 or min(maf, 1.0 - maf) < 0.005:
+                continue
+            func_w = float(self.pos_func_weight.get(pos, 0.1))
+            func_component = min(func_w / 2.5, 1.0)
+            effect_component = effect_by_pos.get(int(pos), 0.0)
+            pheno = pheno_by_pos.get(int(pos), {})
+            pheno_logp_component = (
+                pheno.get('logp', 0.0) / max_logp if max_logp > 0 else 0.0
+            )
+            pheno_effect_component = (
+                pheno.get('effect', 0.0) / max_effect if max_effect > 0 else 0.0
+            )
+            gwas_component = min(float(self.pos_gwas_logp.get(pos, 0.0) or 0.0) / 8.0, 1.0)
+            maf_stability = min(maf, 1.0 - maf) / 0.05 if min(maf, 1.0 - maf) < 0.05 else 1.0
+            maf_stability = max(0.15, min(float(maf_stability), 1.0))
+            missing = 0.0
+            if pos in self.variant_info:
+                try:
+                    missing = float(self.variant_info[pos].get('missing_rate', 0.0) or 0.0)
+                except (TypeError, ValueError):
+                    missing = 0.0
+            missing_factor = max(0.2, 1.0 - min(missing, 0.8))
+            score = (
+                0.30 * pheno_logp_component +
+                0.20 * pheno_effect_component +
+                0.20 * effect_component +
+                0.25 * func_component +
+                0.10 * gwas_component +
+                0.15 * maf_stability
+            ) * missing_factor
+            position_scores.append((score, int(pos)))
+
+        if not position_scores:
+            return []
+
+        selected = []
+        for score, pos in sorted(position_scores, reverse=True):
+            if score <= 0:
+                continue
+            redundant = False
+            for chosen in selected:
+                if self._get_ld_r2(pos, chosen) >= 0.85:
+                    redundant = True
+                    break
+            if redundant:
+                continue
+            selected.append(pos)
+            if len(selected) >= max_positions:
+                break
+        return sorted(selected)
+
+    def _build_core_haplotype_groups(self, score_components, hap_total):
+        """Aggregate full-region haplotypes into core-position groups.
+
+        Full-region haplotypes are useful for discovery but can be over-split by
+        neutral background SNPs. Core groups preserve discovery scoring while
+        reporting a stable functional-haplotype view.
+        """
+        core_positions = self._select_core_positions(score_components)
+        if not core_positions:
+            return {
+                'core_positions': [],
+                'groups': {},
+                'top_group': None,
+            }
+
+        hap_to_core = {}
+        for hap in self.unique_haps:
+            tokens = []
+            for pos in core_positions:
+                allele = self._allele_for_hap_position(hap, pos)
+                tokens.append(str(allele or 'N'))
+            hap_to_core[hap] = '|'.join(tokens)
+
+        groups = {}
+        for _, row in self.hap_sample_df.iterrows():
+            hap = str(row[self.hap_col])
+            core_seq = hap_to_core.get(hap)
+            if not core_seq:
+                continue
+            pheno = row.get(self.phenotype_col)
+            entry = groups.setdefault(core_seq, {
+                'core_sequence': core_seq,
+                'sample_count': 0,
+                'phenotype_values': [],
+                'haplotypes': Counter(),
+                'score_sum': 0.0,
+            })
+            entry['sample_count'] += 1
+            entry['haplotypes'][hap] += 1
+            entry['score_sum'] += float(hap_total.get(hap, 0.0) or 0.0)
+            if pd.notna(pheno):
+                entry['phenotype_values'].append(float(pheno))
+
+        out_groups = {}
+        for core_seq, entry in groups.items():
+            n = int(entry['sample_count'])
+            mean_score = entry['score_sum'] / max(n, 1)
+            phenos = entry['phenotype_values']
+            mean_pheno = float(np.mean(phenos)) if phenos else None
+            representative_hap, representative_count = entry['haplotypes'].most_common(1)[0]
+            out_groups[core_seq] = {
+                'core_sequence': core_seq,
+                'sample_count': n,
+                'mean_score': round(mean_score, 4),
+                'rank_score': round(mean_score * self._sample_reliability_for_count(n), 4),
+                'mean_phenotype': round(mean_pheno, 4) if mean_pheno is not None else None,
+                'representative_haplotype': representative_hap,
+                'representative_haplotype_count': int(representative_count),
+                'haplotype_count': len(entry['haplotypes']),
+                'haplotypes': dict(entry['haplotypes']),
+            }
+
+        top_group = None
+        if out_groups:
+            # Stable discovery ranking: prioritize support before score so a
+            # one-off background haplotype does not become the core group.
+            top_group = max(
+                out_groups.values(),
+                key=lambda g: (
+                    g.get('rank_score') or 0.0,
+                    min(g.get('sample_count') or 0, 50),
+                    g.get('mean_phenotype') if g.get('mean_phenotype') is not None else -np.inf,
+                )
+            )
+
+        return {
+            'core_positions': core_positions,
+            'groups': out_groups,
+            'top_group': top_group,
+        }
 
     def _build_ld_blocks(self):
         """构建LD block索引: 将r²≥阈值的位点归入同一block
@@ -5875,17 +6099,25 @@ class HaplotypeScorer:
 
         - N/空 → 缺失数据，返回False
         - + / - → indel，始终为变异等位基因
-        - A/T/C/G → SNP，与 variant_info 中的 ref 比对
+        - A/T/C/G 或 C/A → 与 variant_info 中的 ref 比对
         - 无ref信息 → 保守处理，非N即视为变异
         """
-        if not allele or allele == 'N':
+        allele = str(allele or '').strip().upper()
+        if not allele or allele in {'N', '.', 'NA', 'NAN', '?'}:
             return False
         if allele in ('+', '-'):
             return True
         vinfo = self.variant_info.get(pos, {}) if self.variant_info else {}
         ref = str(vinfo.get('ref', '')).upper()
+        observed_parts = [
+            part.strip().upper()
+            for part in re.split(r'[\/\\,;]', allele)
+            if part.strip()
+        ]
+        if not observed_parts:
+            return False
         if ref:
-            return allele.upper() != ref
+            return any(part != ref for part in observed_parts)
         return True  # 无参考信息时，非N即视为变异（保守）
 
     # ========== GeneBayes 增强: EB收缩 + LD软加权 ==========
@@ -5914,8 +6146,7 @@ class HaplotypeScorer:
         phenotypes = []
         for _, row in self.hap_sample_df.iterrows():
             hap = row[self.hap_col]
-            seq = seq_map.get(hap, '')
-            if not seq:
+            if hap not in seq_map:
                 continue
             pheno = row.get(self.phenotype_col)
             if pd.isna(pheno):
@@ -5923,7 +6154,8 @@ class HaplotypeScorer:
 
             gt = np.zeros(p, dtype=np.float64)
             for i, pos in enumerate(all_positions):
-                if i < len(seq) and self._is_alt_allele(pos, seq[i]):
+                allele = self._allele_for_hap_position(hap, pos)
+                if self._is_alt_allele(pos, allele):
                     gt[i] = 1.0
 
             samples.append(str(row.get('SampleID', '')))
@@ -6123,12 +6355,12 @@ class HaplotypeScorer:
         seq_map = self._get_hap_seq_map()
         lead_key = lambda p: per_pos_contrib.get(p, 0)
         scores = {}
-        for hap, seq in seq_map.items():
+        for hap in self.unique_haps:
             total = 0.0
-            for i, pos in enumerate(self.variant_positions):
-                if i >= len(seq) or pos not in self.pos_annotation:
+            for pos in self.variant_positions:
+                if pos not in self.pos_annotation:
                     continue
-                allele = seq[i]
+                allele = self._allele_for_hap_position(hap, pos)
                 if not self._is_alt_allele(pos, allele):
                     continue
                 if allele_filter and not allele_filter(pos):
@@ -6502,8 +6734,8 @@ class HaplotypeScorer:
 
         distances = {}
         for hap_i in self.unique_haps:
-            seq_i = seq_map.get(hap_i, '')
-            if not seq_i:
+            tokens_i = self._get_hap_seq_tokens().get(hap_i, [])
+            if not tokens_i:
                 distances[hap_i] = 0.0
                 continue
 
@@ -6512,25 +6744,19 @@ class HaplotypeScorer:
             for hap_j in self.unique_haps:
                 if hap_i == hap_j:
                     continue
-                seq_j = seq_map.get(hap_j, '')
+                tokens_j = self._get_hap_seq_tokens().get(hap_j, [])
                 n_j = hap_counts.get(hap_j, 0)
                 if n_j == 0:
                     continue
 
                 weighted_ham = 0.0
-                common_len = min(len(seq_i), len(seq_j))
-                for k in range(common_len):
-                    if seq_i[k] != seq_j[k]:
-                        if k < len(self.variant_positions):
-                            pos = self.variant_positions[k]
-                            w = pos_weights.get(pos, 1.0 / max(len(self.variant_positions), 1))
-                        else:
-                            w = 0.0
+                for pos in self.variant_positions:
+                    idx = self.pos_to_seq_idx.get(int(pos))
+                    if idx is None or idx >= len(tokens_i) or idx >= len(tokens_j):
+                        continue
+                    if tokens_i[idx] != tokens_j[idx]:
+                        w = pos_weights.get(pos, 1.0 / max(len(self.variant_positions), 1))
                         weighted_ham += w
-
-                len_diff = abs(len(seq_i) - len(seq_j))
-                if len_diff > 0 and len(self.variant_positions) > 0:
-                    weighted_ham += len_diff / len(self.variant_positions)
 
                 weighted_sum += weighted_ham * n_j
                 total_other += n_j
@@ -6576,12 +6802,10 @@ class HaplotypeScorer:
         all_pos_set = set(all_positions)
         scores = {}
         for hap in self.unique_haps:
-            seq = seq_map.get(hap, '')
             total = 0.0
-            for i, pos in enumerate(all_positions):
-                if i >= len(seq):
-                    break
-                if not self._is_alt_allele(pos, seq[i]):
+            for pos in all_positions:
+                allele = self._allele_for_hap_position(hap, pos)
+                if not self._is_alt_allele(pos, allele):
                     continue
                 total += pos_contrib.get(pos, 0.0)
             scores[hap] = total
@@ -6677,14 +6901,12 @@ class HaplotypeScorer:
 
         # Step 3: 按单倍型实际携带的ALT等位基因汇总
         scores = {}
-        for hap, seq in seq_map.items():
+        for hap in self.unique_haps:
             total = 0.0
-            for i, pos in enumerate(self.variant_positions):
+            for pos in self.variant_positions:
                 if pos not in selected:
                     continue
-                if i >= len(seq):
-                    continue
-                allele = seq[i]
+                allele = self._allele_for_hap_position(hap, pos)
                 if not self._is_alt_allele(pos, allele):
                     continue
                 total += selected[pos]
@@ -6787,6 +7009,10 @@ class HaplotypeScorer:
                     total += w * score_components[comp_name].get(hap, 0.0)
             hap_total[hap] = total
 
+        core_haplotype_groups = {}
+        if self.score_mode == 'robust_discovery':
+            core_haplotype_groups = self._build_core_haplotype_groups(score_components, hap_total)
+
         # PVE 置信度校准
         if self.pve is not None:
             if self.pve >= 0.20:
@@ -6866,6 +7092,7 @@ class HaplotypeScorer:
             'slope': round(slope, 6),
             'intercept': round(intercept, 6),
             'component_weights': self.component_weights,
+            'core_haplotype_groups': core_haplotype_groups,
             'confidence_level': confidence_level,
             'low_confidence': low_confidence,
             'pve': self.pve,

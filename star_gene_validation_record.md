@@ -563,3 +563,71 @@ validation. It shows that a score designed to find "large effect" haplotypes
 must not be interpreted as "beneficial/top" without trait direction. For
 unknown discovery, report high-value and low-value candidate ranks separately
 when the trait direction is not known in advance.
+
+### 2026-06-23 Robust full-region rerun and cross-target algorithm check
+
+Purpose:
+The full TaGW2-B1 regional SNP panel split the literature promoter haplotype
+into many background haplotypes. The algorithm was therefore updated with two
+generic safeguards, not target-specific rules: full-sequence position indexing
+for regional haplotypes, robust core-position grouping, and direction-aware
+stable top selection with low-support extreme filtering. Literature variants
+remain post hoc validation labels only and are not used in discovery scoring.
+
+Run command:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-Zanke2014 --score-mode robust_discovery`
+
+Output directories:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery`,
+`star_gene_results/wheat_nature_2024/VRN-D1-Kiss2014__robust_discovery`,
+and
+`star_gene_results/wheat_nature_2024/Rht-Zanke2014__robust_discovery`.
+
+TaGW2-B1 full-region result:
+The database has 756 phenotype-overlap samples, 71 regional SNPs, and 112
+full-region haplotypes. Score regression remains significant for TGW_mean
+(`R^2=0.0124`, `P=0.0022046`), and the output HTML was regenerated at
+`TaGW2-B1-remoteSNP.html`. However, the Qin2014 `Hap-6B-1` promoter pattern
+`A|G|C` is no longer the raw top or directional top after adding the full
+regional background SNPs. The literature haplotype audit remains
+`present_but_not_top`; the robust core group is not testable for the full
+three-marker pattern because not all literature markers were selected as core
+positions. This target is therefore a gene-level/phenotype-signal check under
+the full-region database, not a strong functional-haplotype proof.
+
+VRN-D1-Kiss2014 result:
+Target gene/marker is `VRN-D1` diagnostic spring marker from Kiss et al. 2014.
+Data source is the extracted Springer embedded workbook converted into
+`star_gene_database/wheat_nature_2024/VRN-D1-Kiss2014`. Robust mode analyzed
+676 samples, 1 diagnostic marker, and 2 haplotypes. Top-scored and
+directional top haplotype are both `Hap2` with 38 samples and the expected
+spring marker allele `1`. DEV49_mean score regression is `R^2=0.0382`,
+`P=2.980468e-07`; DEV59_mean is `R^2=0.0230`, `P=7.488576e-05`.
+Literature audit status is `matched_top_haplotype` and
+`matched_directional_top_haplotype`. This is a usable independent positive
+control, with low confidence caused by modest PVE rather than marker mismatch.
+
+Rht-Zanke2014 result:
+Target markers are `Rht-B1` and `Rht-D1` diagnostic states from Zanke et al.
+2014 Table S2. Data source is
+`star_gene_database/wheat_nature_2024/Rht-Zanke2014` with 368 complete
+varieties, 2 markers, and 4 haplotypes. For `PlantHeight_BLUE`, raw top is
+the tall wild-type-like core `B1A|RHT-D1A` (`Hap2`, n=126, mean 96.384 cm),
+but expected direction is `decreases_trait`, so the stable directional top is
+`Hap1=B1a|D1b` with n=214 and mean 82.540 cm. Score regression is
+`R^2=0.0842`, `P=1.440617e-08`. Literature audit for
+`Rht-D1b_diagnostic_marker` is `matched_directional_top_haplotype`. For
+`PlantHeight_GAT_2012`, the stable low-phenotype directional top is
+`Hap3=B1b|Rht-D1a`, n=25, mean 72.454 cm, with score regression
+`R^2=0.1301`, `P=2.067409e-12`. This remains a usable positive control only
+when interpreted with trait direction.
+
+Current interpretation:
+The generic changes did not make the method work only for GW2: VRN-D1 and
+Rht-Zanke2014 still validate after the same robust rerun. The full-region
+TaGW2-B1 result also clarifies a limitation: when many background SNPs are
+included, exact literature haplotype matching can fail even when the target
+gene still has a significant score-phenotype signal. Therefore future unknown
+gene discovery reports should show raw top, direction-aware top, and robust
+core groups separately, and should not equate a full-region exact haplotype
+rank with recovery of a published promoter haplotype.

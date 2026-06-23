@@ -48,7 +48,11 @@ SUMMARY_COLUMNS = [
     'top_scored_haplotype_score', 'top_haplotype_sample_count',
     'directional_top_haplotype', 'directional_top_haplotype_score',
     'directional_top_haplotype_mean', 'directional_top_haplotype_sample_count',
-    'expected_direction', 'direction_consistency', 'data_status',
+    'top_core_group', 'top_core_group_score', 'top_core_group_mean',
+    'top_core_group_sample_count', 'directional_top_core_group',
+    'directional_top_core_group_score', 'directional_top_core_group_mean',
+    'directional_top_core_group_sample_count', 'expected_direction',
+    'direction_consistency', 'data_status',
     'database_path', 'result_path', 'integrated_html', 'haplotype_score_html',
     'analysis_report_html', 'haplotype_score_json_path', 'score_mode', 'notes',
 ]
@@ -713,6 +717,12 @@ class StarGeneValidator:
         directional_top_hap, directional_top_score, directional_top_mean, directional_top_count = (
             self.pick_directional_top_haplotype(score_results, expected_direction)
         )
+        top_core_group, top_core_score, top_core_mean, top_core_count = (
+            self.pick_top_core_group(score_results)
+        )
+        directional_core_group, directional_core_score, directional_core_mean, directional_core_count = (
+            self.pick_directional_top_core_group(score_results, expected_direction)
+        )
         direction_consistency = self.direction_consistency(expected_direction, score_results, top_hap)
 
         integrated_html = result_path / f'{target_id}.html'
@@ -742,6 +752,14 @@ class StarGeneValidator:
             'directional_top_haplotype_score': directional_top_score,
             'directional_top_haplotype_mean': directional_top_mean,
             'directional_top_haplotype_sample_count': directional_top_count,
+            'top_core_group': top_core_group,
+            'top_core_group_score': top_core_score,
+            'top_core_group_mean': top_core_mean,
+            'top_core_group_sample_count': top_core_count,
+            'directional_top_core_group': directional_core_group,
+            'directional_top_core_group_score': directional_core_score,
+            'directional_top_core_group_mean': directional_core_mean,
+            'directional_top_core_group_sample_count': directional_core_count,
             'expected_direction': expected_direction,
             'direction_consistency': direction_consistency,
             'integrated_html': str(integrated_html) if integrated_html.exists() else None,
@@ -761,6 +779,18 @@ class StarGeneValidator:
                 best_hap = hap
                 best_score = score
         return best_hap, best_score
+
+    @staticmethod
+    def _stable_support_candidates(candidates: Sequence[Tuple[Any, ...]], count_index: int) -> List[Tuple[Any, ...]]:
+        """Filter low-support outliers when stable alternatives exist."""
+        candidates = list(candidates)
+        counts = [int(item[count_index] or 0) for item in candidates if int(item[count_index] or 0) > 0]
+        if not counts:
+            return candidates
+        max_count = max(counts)
+        min_count = min(max_count, max(3, min(10, int(max_count * 0.10))))
+        stable_candidates = [item for item in candidates if int(item[count_index] or 0) >= min_count]
+        return stable_candidates or candidates
 
     def pick_directional_top_haplotype(self, score_results: Dict[str, Any],
                                        expected_direction: str) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[int]]:
@@ -802,17 +832,67 @@ class StarGeneValidator:
         if not candidates:
             hap, score = self.pick_top_haplotype(per_haplotype)
             return hap, score, None, None
-        counts = [item[3] for item in candidates if item[3] > 0]
-        if counts:
-            sorted_counts = sorted(counts)
-            median_count = sorted_counts[len(sorted_counts) // 2]
-            min_count = min(10, max(2, median_count))
-            stable_candidates = [item for item in candidates if item[3] >= min_count]
-            if stable_candidates:
-                candidates = stable_candidates
+        candidates = self._stable_support_candidates(candidates, count_index=3)
         if expected_direction == 'decreases_trait':
             return min(candidates, key=lambda item: (item[2], -item[1]))
         return max(candidates, key=lambda item: (item[2], item[1]))
+
+    def pick_top_core_group(self, score_results: Dict[str, Any]) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[int]]:
+        """Pick the raw top robust core group by reliability-adjusted score."""
+        core = score_results.get('core_haplotype_groups') or {}
+        top = core.get('top_group') or {}
+        group = str(top.get('core_sequence') or '').strip()
+        if group:
+            return (
+                group,
+                _safe_float(top.get('rank_score') or top.get('mean_score')),
+                _safe_float(top.get('mean_phenotype')),
+                int(_safe_float(top.get('sample_count')) or 0),
+            )
+        groups = core.get('groups') or {}
+        if not isinstance(groups, dict) or not groups:
+            return None, None, None, None
+        candidates = []
+        for group_name, values in groups.items():
+            values = values or {}
+            score = _safe_float(values.get('rank_score') or values.get('mean_score'))
+            if score is None:
+                continue
+            candidates.append((
+                str(values.get('core_sequence') or group_name),
+                score,
+                _safe_float(values.get('mean_phenotype')),
+                int(_safe_float(values.get('sample_count')) or 0),
+            ))
+        if not candidates:
+            return None, None, None, None
+        return max(candidates, key=lambda item: (item[1], item[3]))
+
+    def pick_directional_top_core_group(self, score_results: Dict[str, Any],
+                                        expected_direction: str) -> Tuple[Optional[str], Optional[float], Optional[float], Optional[int]]:
+        """Pick a phenotype-direction-aware robust core group without literature labels."""
+        expected_direction = normalize_direction(expected_direction)
+        if expected_direction == 'unknown':
+            return self.pick_top_core_group(score_results)
+        core = score_results.get('core_haplotype_groups') or {}
+        groups = core.get('groups') or {}
+        if not isinstance(groups, dict) or not groups:
+            return None, None, None, None
+        candidates: List[Tuple[str, float, float, int]] = []
+        for group_name, values in groups.items():
+            values = values or {}
+            mean = _safe_float(values.get('mean_phenotype'))
+            if mean is None:
+                continue
+            score = _safe_float(values.get('rank_score') or values.get('mean_score')) or 0.0
+            count = int(_safe_float(values.get('sample_count')) or 0)
+            candidates.append((str(values.get('core_sequence') or group_name), score, mean, count))
+        if not candidates:
+            return self.pick_top_core_group(score_results)
+        candidates = self._stable_support_candidates(candidates, count_index=3)
+        if expected_direction == 'decreases_trait':
+            return min(candidates, key=lambda item: (item[2], -item[1], -item[3]))
+        return max(candidates, key=lambda item: (item[2], item[1], item[3]))
 
     def direction_consistency(self, expected_direction: str, score_results: Dict[str, Any],
                               top_hap: Optional[str]) -> str:
