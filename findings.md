@@ -174,3 +174,14 @@
 - `VRN-D1-Kiss2014__robust_discovery`: 676 samples, 1 marker, 2 haplotypes. Top and directional top are both `Hap2` carrying `VRN-D1=1` with 38 samples; DEV49_mean `R^2=0.0382`, `P=2.98e-07`; DEV59_mean `R^2=0.0230`, `P=7.49e-05`; audit is `matched_top_haplotype` and `matched_directional_top_haplotype`.
 - `Rht-Zanke2014__robust_discovery`: 368 samples, 2 markers, 4 haplotypes. Raw top is the tall wild-type-like haplotype, but direction-aware validation recovers the shorter functional class: BLUE directional top `Hap1=B1a|D1b`, n=214, mean 82.540 cm, audit `Rht-D1b_diagnostic_marker=matched_directional_top_haplotype`; score regression `R^2=0.0842`, `P=1.44e-08`.
 - Current proof status: the algorithmic changes are generic and validated on VRN-D1-Kiss2014 and Rht-Zanke2014, not only GW2. GW2 full-region remains a useful stress test showing the need to report raw top, direction-aware top, and core groups separately.
+
+## 2026-06-24 Functional Sub-Haplotype Robust Scoring
+- Added a generic `functional_haplotype_groups` layer for `robust_discovery`. It is selected from local annotations, phenotype marker signal, EB marker effect, MAF/missingness, LD context, and near-boundary gene-body signal; literature variants are still only used by the post hoc audit.
+- Fixed the full-region scoring input path so `HaplotypeScorer` sees all regional positions instead of only the HTML display subset. This matters for TaGW2-B1, where the HTML may display 23 variants while the database has 71 retained SNPs.
+- Added `functional_marker` and `diagnostic_marker` annotation support so marker-panel targets such as VRN-D1 and Rht-Zanke2014 produce functional groups instead of empty functional outputs.
+- Added support-shrunk direction-aware ranking. This prevents small outlier groups from beating stable groups when their phenotype mean is only slightly more extreme.
+- Re-ran the three proof targets with:
+  `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-Zanke2014 --score-mode robust_discovery`.
+- Final proof status:
+  TaGW2-B1 full-region is now positive through `matched_directional_top_functional_group` for Qin2014 `Hap-6B-1`; VRN-D1 remains `matched_top_haplotype`/`matched_directional_top_haplotype`; Rht-D1b remains `matched_directional_top_haplotype`.
+- TaGW2-B1 limitation remains important: raw top functional group is not the Qin2014 group, and score regression is modest (`R^2=0.0078`, `P=0.0153`). This supports using direction-aware functional groups as validation evidence, not claiming that raw top score alone has solved full-region functional-haplotype discovery.

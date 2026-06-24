@@ -631,3 +631,70 @@ gene still has a significant score-phenotype signal. Therefore future unknown
 gene discovery reports should show raw top, direction-aware top, and robust
 core groups separately, and should not equate a full-region exact haplotype
 rank with recovery of a published promoter haplotype.
+
+### 2026-06-24 Functional sub-haplotype robust rerun
+
+Purpose:
+The 71-SNP TaGW2-B1 full-region database showed that background SNPs can split
+a known functional promoter haplotype into many exact regional haplotypes. The
+algorithm was updated with a generic `functional_haplotype_groups` discovery
+layer and support-shrunk direction-aware ranking. Literature variants remain
+post hoc audit labels only and are not scoring inputs.
+
+Implemented generic changes:
+- `robust_discovery` now scores functional sub-haplotype groups selected from
+  local annotation, phenotype signal, EB marker effect, MAF/missingness, LD
+  context, and near-boundary gene-body signal.
+- `functional_marker` and `diagnostic_marker` annotations are treated as
+  functional panel markers.
+- Scoring now uses the full regional position set, while HTML can still display
+  a smaller top-haplotype variable subset.
+- Direction-aware top selection uses support-shrunk phenotype direction, so
+  small high/low outlier groups do not dominate stable groups.
+
+Run command:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-Zanke2014 --score-mode robust_discovery`
+
+Output directories:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery`,
+`star_gene_results/wheat_nature_2024/VRN-D1-Kiss2014__robust_discovery`,
+and
+`star_gene_results/wheat_nature_2024/Rht-Zanke2014__robust_discovery`.
+
+TaGW2-B1-remoteSNP result:
+The database has 756 phenotype-overlap samples, 71 regional SNPs, and 112
+full-region haplotypes. Functional positions selected for TGW_mean are
+`291759689;291759713;291759935;291760409;291760469;291760535;291760602;291760677;291761315`,
+which include all three Qin2014 audit markers for `Hap-6B-1`
+(`291759689=A`, `291760677=G`, `291761315=C`). Score regression is significant
+but modest (`R^2=0.0078`, `P=0.0153196`). Raw top functional group is
+`C|T|C|T|G|G|G|G|C`, n=329, mean TGW `38.9632`; support-shrunk directional
+top functional group is `A|T|C|C|G|G|G|G|C`, n=340, mean TGW `40.9845`.
+The literature audit for `Qin2014_Hap-6B-1` reports
+`directional_functional_group_validation_status=matched_directional_top_functional_group`.
+
+VRN-D1-Kiss2014 result:
+The database has 676 samples, 1 diagnostic marker, and 2 haplotypes.
+Functional positions are `[3]`. The top and directional top functional group
+is `1`, n=38, matching the spring/dominant `VRN-D1=1` marker. DEV49_mean
+score regression is `R^2=0.0382`, `P=2.980468e-07`; DEV59_mean is
+`R^2=0.0230`, `P=7.488576e-05`. Literature audit remains
+`matched_top_haplotype` and `matched_directional_top_haplotype`.
+
+Rht-Zanke2014 result:
+The database has 368 samples, 2 diagnostic markers, and 4 haplotypes.
+Functional positions are `[1, 2]`. For `PlantHeight_BLUE`, raw top functional
+group is the tall wild-type-like `B1A|RHT-D1A`, n=126, mean `96.3842 cm`, but
+the expected direction is `decreases_trait`, so the directional top functional
+group is `B1A|D1B`, n=214. Literature audit for
+`Rht-D1b_diagnostic_marker` remains `matched_directional_top_haplotype`.
+For `PlantHeight_GAT_2012`, the directional top is `B1A|D1B`, n=205.
+
+Current verdict:
+This gives three usable positive controls under one generic scoring mode:
+TaGW2-B1 full-region validates through direction-aware functional group,
+VRN-D1 validates through diagnostic-marker top ranking, and Rht-D1 validates
+through direction-aware plant-height ranking. The remaining limitation is that
+TaGW2-B1 raw top score still favors a non-literature functional group, so raw
+rank alone should not be used as the only discovery criterion for traits where
+biological direction matters.

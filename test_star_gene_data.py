@@ -224,6 +224,221 @@ class StarGeneDataTests(unittest.TestCase):
             "A|A",
         )
 
+    def test_direction_aware_top_functional_group_uses_expected_direction(self):
+        from star_gene_validation import StarGeneValidator
+
+        runner = StarGeneValidator(
+            manifest={"papers": []},
+            database_root=Path("star_gene_database"),
+            results_root=Path("star_gene_results"),
+            check_only=True,
+        )
+        score_results = {
+            "functional_haplotype_groups": {
+                "groups": {
+                    "A|G": {
+                        "functional_sequence": "A|G",
+                        "rank_score": 1.0,
+                        "mean_score": 1.2,
+                        "mean_phenotype": 50.0,
+                        "sample_count": 45,
+                    },
+                    "C|G": {
+                        "functional_sequence": "C|G",
+                        "rank_score": 1.4,
+                        "mean_score": 1.6,
+                        "mean_phenotype": 35.0,
+                        "sample_count": 30,
+                    },
+                }
+            }
+        }
+
+        self.assertEqual(
+            runner.pick_directional_top_functional_group(score_results, "increases_trait")[0],
+            "A|G",
+        )
+        self.assertEqual(
+            runner.pick_directional_top_functional_group(score_results, "decreases_trait")[0],
+            "C|G",
+        )
+
+    def test_direction_aware_top_functional_group_shrinks_small_group_outliers(self):
+        from star_gene_validation import StarGeneValidator
+
+        runner = StarGeneValidator(
+            manifest={"papers": []},
+            database_root=Path("star_gene_database"),
+            results_root=Path("star_gene_results"),
+            check_only=True,
+        )
+        score_results = {
+            "functional_haplotype_groups": {
+                "groups": {
+                    "StableHigh": {
+                        "functional_sequence": "StableHigh",
+                        "rank_score": 0.82,
+                        "mean_score": 0.87,
+                        "mean_phenotype": 41.0,
+                        "sample_count": 340,
+                    },
+                    "SmallSpike": {
+                        "functional_sequence": "SmallSpike",
+                        "rank_score": 0.22,
+                        "mean_score": 0.45,
+                        "mean_phenotype": 41.4,
+                        "sample_count": 19,
+                    },
+                    "Baseline": {
+                        "functional_sequence": "Baseline",
+                        "rank_score": 0.98,
+                        "mean_score": 1.05,
+                        "mean_phenotype": 39.0,
+                        "sample_count": 329,
+                    },
+                }
+            }
+        }
+
+        self.assertEqual(
+            runner.pick_directional_top_functional_group(score_results, "increases_trait")[0],
+            "StableHigh",
+        )
+
+    def test_robust_discovery_builds_functional_groups_from_split_background_haplotypes(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(25):
+            rows.append({
+                "SampleID": f"F1_{i}",
+                "Hap_Name": "FuncHighBg1",
+                "Haplotype_Seq": "A|G|T|A",
+                "Trait": 50.0 + (i % 3),
+            })
+        for i in range(20):
+            rows.append({
+                "SampleID": f"F2_{i}",
+                "Hap_Name": "FuncHighBg2",
+                "Haplotype_Seq": "A|G|C|G",
+                "Trait": 49.0 + (i % 3),
+            })
+        for i in range(30):
+            rows.append({
+                "SampleID": f"L1_{i}",
+                "Hap_Name": "FuncLowBg1",
+                "Haplotype_Seq": "C|G|T|A",
+                "Trait": 35.0 + (i % 2),
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        variant_info = {
+            100: {"ref": "C", "alt": "A", "annotation": "promoter", "maf": 0.45, "missing_rate": 0.0},
+            200: {"ref": "G", "alt": "A", "annotation": "promoter", "maf": 0.02, "missing_rate": 0.0},
+            300: {"ref": "T", "alt": "C", "annotation": "intron", "maf": 0.45, "missing_rate": 0.0},
+            400: {"ref": "A", "alt": "G", "annotation": "intron", "maf": 0.45, "missing_rate": 0.0},
+        }
+
+        scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 300, 400],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        )
+        result = scorer.score_all()
+        functional = result.get("functional_haplotype_groups") or {}
+
+        self.assertIn(100, functional.get("functional_positions", []))
+        self.assertNotIn(300, functional.get("functional_positions", []))
+        self.assertIn("A|G", functional.get("groups", {}))
+        self.assertEqual(functional["groups"]["A|G"]["sample_count"], 45)
+        self.assertEqual(functional["top_group"]["functional_sequence"], "A|G")
+
+    def test_robust_discovery_treats_marker_panel_annotations_as_functional(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "Hap1", "Haplotype_Seq": "0", "Trait": 20.0},
+            {"SampleID": "S2", "Hap_Name": "Hap1", "Haplotype_Seq": "0", "Trait": 21.0},
+            {"SampleID": "S3", "Hap_Name": "Hap2", "Haplotype_Seq": "1", "Trait": 35.0},
+            {"SampleID": "S4", "Hap_Name": "Hap2", "Haplotype_Seq": "1", "Trait": 36.0},
+        ])
+        variant_info = {
+            10: {
+                "ref": "0",
+                "alt": "1",
+                "annotation": "diagnostic_marker",
+                "maf": 0.5,
+                "missing_rate": 0.0,
+            },
+        }
+
+        scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[10],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        )
+
+        self.assertEqual(scorer.pos_annotation[10], "diagnostic_marker")
+        self.assertGreater(scorer.pos_func_weight[10], scorer.FUNCTIONAL_WEIGHTS["other"])
+
+    def test_robust_discovery_adds_boundary_gene_body_signal_to_functional_groups(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(20):
+            rows.append({
+                "SampleID": f"H1_{i}",
+                "Hap_Name": "HighBg1",
+                "Haplotype_Seq": "A|G|C|T",
+                "Trait": 50.0 + (i % 3),
+            })
+        for i in range(20):
+            rows.append({
+                "SampleID": f"H2_{i}",
+                "Hap_Name": "HighBg2",
+                "Haplotype_Seq": "A|G|C|A",
+                "Trait": 51.0 + (i % 3),
+            })
+        for i in range(30):
+            rows.append({
+                "SampleID": f"L1_{i}",
+                "Hap_Name": "LowBg1",
+                "Haplotype_Seq": "C|G|T|T",
+                "Trait": 35.0 + (i % 2),
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        variant_info = {
+            100: {"ref": "C", "alt": "A", "annotation": "promoter", "maf": 0.45, "missing_rate": 0.0},
+            200: {"ref": "G", "alt": "A", "annotation": "promoter", "maf": 0.05, "missing_rate": 0.0},
+            260: {"ref": "T", "alt": "C", "annotation": "intron", "maf": 0.45, "missing_rate": 0.0},
+            1000: {"ref": "T", "alt": "A", "annotation": "intron", "maf": 0.30, "missing_rate": 0.0},
+        }
+
+        scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 260, 1000],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+            gene_start=250,
+            gene_end=5000,
+            strand="+",
+        )
+        result = scorer.score_all()
+        functional = result.get("functional_haplotype_groups") or {}
+
+        self.assertIn(100, functional.get("functional_positions", []))
+        self.assertIn(260, functional.get("functional_positions", []))
+        self.assertNotIn(1000, functional.get("functional_positions", []))
+        self.assertIn("A|G|C", functional.get("groups", {}))
+        self.assertEqual(functional["groups"]["A|G|C"]["sample_count"], 40)
+
     def test_score_tooltips_use_viewport_coordinates(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
@@ -610,6 +825,43 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("Candidate Key Sites", robust_panel["top_haplotype_key_sites_html"])
         self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
         self.assertIn("Score mode: <strong>Robust</strong>", robust_panel["meta_html"])
+
+    def test_compute_haplotype_scores_uses_full_positions_not_display_subset(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "Hap1", "Haplotype_Seq": "A|G|C|T", "Trait": 50.0},
+            {"SampleID": "S2", "Hap_Name": "Hap1", "Haplotype_Seq": "A|G|C|T", "Trait": 51.0},
+            {"SampleID": "S3", "Hap_Name": "Hap2", "Haplotype_Seq": "A|G|C|A", "Trait": 52.0},
+            {"SampleID": "S4", "Hap_Name": "Hap2", "Haplotype_Seq": "A|G|C|A", "Trait": 53.0},
+            {"SampleID": "S5", "Hap_Name": "Hap3", "Haplotype_Seq": "C|G|T|T", "Trait": 35.0},
+            {"SampleID": "S6", "Hap_Name": "Hap3", "Haplotype_Seq": "C|G|T|T", "Trait": 36.0},
+        ])
+        variant_info = {
+            100: {"ref": "C", "alt": "A", "annotation": "promoter", "maf": 0.45, "missing_rate": 0.0},
+            200: {"ref": "G", "alt": "A", "annotation": "promoter", "maf": 0.05, "missing_rate": 0.0},
+            260: {"ref": "T", "alt": "C", "annotation": "intron", "maf": 0.45, "missing_rate": 0.0},
+            1000: {"ref": "T", "alt": "A", "annotation": "intron", "maf": 0.30, "missing_rate": 0.0},
+        }
+        reporter = ReportGenerator(output_dir=tempfile.mkdtemp())
+
+        result = reporter.compute_haplotype_scores(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 260, 1000],
+            region_start=100,
+            region_end=1000,
+            phenotype_col="Trait",
+            gene_start=250,
+            gene_end=5000,
+            variant_info=variant_info,
+            score_mode="robust_discovery",
+        )
+
+        score_data = result["all_score_data"]["Trait"]
+        functional = score_data.get("functional_haplotype_groups") or {}
+        self.assertIn(260, functional.get("functional_positions", []))
+        self.assertIn("A|G|C", functional.get("groups", {}))
 
     def test_key_site_contrast_is_site_specific(self):
         from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
@@ -1947,6 +2199,101 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertEqual(row["top_scored_haplotype"], "Hap2")
             self.assertFalse(row["top_haplotype_contains_expected"])
             self.assertEqual(row["validation_status"], "present_but_not_top")
+
+    def test_literature_audit_reports_functional_group_haplotype_status(self):
+        from star_gene_literature_audit import run_literature_audit
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db"
+            result_dir = tmp_path / "result"
+            db_dir.mkdir()
+            result_dir.mkdir()
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,len_diff,is_sv,maf,missing_rate,annotation,marker_id\n"
+                "100,C,A,0,False,0.5,0.0,promoter,m1\n"
+                "200,G,A,0,False,0.02,0.0,promoter,m2\n"
+                "300,T,C,0,False,0.5,0.0,intron,bg1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "A|G|T,2,Hap1,A|G|T\n"
+                "A|G|C,2,Hap2,A|G|C\n"
+                "C|G|T,2,Hap3,C|G|T\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,A|G|T,Hap1\n"
+                "S2,A|G|T,Hap1\n"
+                "S3,A|G|C,Hap2\n"
+                "S4,A|G|C,Hap2\n"
+                "S5,C|G|T,Hap3\n"
+                "S6,C|G|T,Hap3\n",
+                encoding="utf-8",
+            )
+            (result_dir / "haplotype_scores.json").write_text(
+                json.dumps({
+                    "Trait": {
+                        "per_haplotype": {
+                            "Hap1": {"total": 2.0},
+                            "Hap2": {"total": 1.8},
+                            "Hap3": {"total": 5.0},
+                        },
+                        "functional_haplotype_groups": {
+                            "functional_positions": [100, 200],
+                            "groups": {
+                                "A|G": {
+                                    "functional_sequence": "A|G",
+                                    "sample_count": 4,
+                                    "rank_score": 1.7,
+                                    "mean_score": 1.9,
+                                    "mean_phenotype": 50.0,
+                                },
+                                "C|G": {
+                                    "functional_sequence": "C|G",
+                                    "sample_count": 2,
+                                    "rank_score": 1.2,
+                                    "mean_score": 5.0,
+                                    "mean_phenotype": 35.0,
+                                },
+                            },
+                            "top_group": {
+                                "functional_sequence": "A|G",
+                                "sample_count": 4,
+                                "rank_score": 1.7,
+                                "mean_score": 1.9,
+                                "mean_phenotype": 50.0,
+                            },
+                        },
+                    }
+                }),
+                encoding="utf-8",
+            )
+
+            records = run_literature_audit(
+                paper={"paper_id": "paper1"},
+                target={
+                    "target_id": "Gene1",
+                    "literature_haplotypes": [
+                        {
+                            "haplotype_name": "PublishedFunctional",
+                            "expected_markers": {"m1": "A", "m2": "G"},
+                            "source_note": "unit test functional group",
+                        }
+                    ],
+                },
+                database_path=db_dir,
+                result_path=result_dir,
+            )
+
+            row = records[0]
+            self.assertEqual(row["top_scored_haplotype"], "Hap3")
+            self.assertEqual(row["validation_status"], "present_but_not_top")
+            self.assertEqual(row["top_functional_group"], "A|G")
+            self.assertTrue(row["top_functional_group_exact_expected"])
+            self.assertEqual(row["functional_group_validation_status"], "matched_top_functional_group")
 
     def test_literature_audit_requires_exact_top_haplotype_for_group_match(self):
         from star_gene_literature_audit import run_literature_audit

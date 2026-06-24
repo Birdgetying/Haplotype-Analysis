@@ -179,3 +179,11 @@
   and `star_gene_results/wheat_nature_2024/Rht-Zanke2014__robust_discovery/Rht-Zanke2014.html`.
 - Result summary: VRN-D1-Kiss2014 remains a positive diagnostic-marker proof (`Hap2`, n=38, DEV49 `P=2.98e-07`, DEV59 `P=7.49e-05`); Rht-Zanke2014 remains a positive direction-aware proof (`Rht-D1b` matched by the BLUE directional top `Hap1`, n=214, score regression `P=1.44e-08`). Full-region TaGW2-B1 remains significant but is not a strong exact literature-haplotype proof because 71 regional SNPs split the Qin2014 promoter haplotype into background haplotypes.
 - Updated `star_gene_validation_record.md`, `findings.md`, and `progress.md` with the full-region GW2 limitation and the cross-target VRN/Rht validation evidence.
+- Implemented the follow-up functional sub-haplotype robust scoring pass after the full-region GW2 stress test. The key code changes are in `haplotype_phenotype_analysis.py`, `star_gene_validation.py`, and `star_gene_literature_audit.py`; tests were added in `test_star_gene_data.py`.
+- Re-ran the three requested robust targets after the functional-group update:
+  `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-Zanke2014 --score-mode robust_discovery`.
+- Final validation evidence now reaches the teacher's "at least 3" requirement:
+  `TaGW2-B1-remoteSNP` full-region Qin2014 `Hap-6B-1` matches `directional_top_functional_group`;
+  `VRN-D1-Kiss2014` `VRN-D1=1` matches top and directional top haplotype;
+  `Rht-Zanke2014` `Rht-D1b` matches direction-aware top haplotype.
+- Recorded the updated evidence and limitations in `star_gene_validation_record.md` and `findings.md`. Remaining caveat: TaGW2-B1 raw top functional group is not the literature group, so future reports should present raw top, direction-aware top, and functional/core groups separately instead of using raw top rank alone.
