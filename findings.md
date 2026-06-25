@@ -185,3 +185,10 @@
 - Final proof status:
   TaGW2-B1 full-region is now positive through `matched_directional_top_functional_group` for Qin2014 `Hap-6B-1`; VRN-D1 remains `matched_top_haplotype`/`matched_directional_top_haplotype`; Rht-D1b remains `matched_directional_top_haplotype`.
 - TaGW2-B1 limitation remains important: raw top functional group is not the Qin2014 group, and score regression is modest (`R^2=0.0078`, `P=0.0153`). This supports using direction-aware functional groups as validation evidence, not claiming that raw top score alone has solved full-region functional-haplotype discovery.
+
+## 2026-06-25 Rht-Zanke2014 Direction Fix
+- Rechecked the teacher concern that Rht-Zanke2014 Hap1/Hap3/Hap4 clustered away from Hap2 in the score plot. The haplotype partition itself matches the Zanke2014 marker panel: `Hap1=B1a|D1b` n=214, `Hap2=B1a|Rht-D1a` n=126, `Hap3=B1b|Rht-D1a` n=26, and `Hap4=B1a|D1b/Rht-D1a` n=2.
+- The issue was score interpretation, not marker parsing. The retained raw robust `total` ranked the tall wild-type `Hap2` highest because effect magnitude was not direction-aware for a `decreases_trait` target.
+- Added an active `directional_total` score axis when `expected_direction` is known. It preserves raw `total` for diagnosis but uses support-shrunk phenotype direction in the main HTML/summary/audit rank.
+- Re-ran `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-Zanke2014 --score-mode robust_discovery`. For `PlantHeight_BLUE`, top is now `Hap1=B1a|D1b`, `directional_total=0.9642`, n=214, `R^2=0.451`, `P=1.36e-49`; for `PlantHeight_GAT_2012`, top remains `Hap1`, `directional_total=0.9624`, `R^2=0.532`, `P=1.71e-60`.
+- `literature_variant_audit.csv` now reports `Rht-D1b_diagnostic_marker` as both `matched_top_haplotype` and `matched_directional_top_haplotype`. `Rht-B1b` remains present but not top because that class is `Hap3=B1b|Rht-D1a`, n=26.

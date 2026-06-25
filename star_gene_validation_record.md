@@ -30,10 +30,11 @@ Current proof set for the teacher's "at least three" requirement:
 2. `VRN-D1-Kiss2014__robust_discovery`: stable diagnostic-marker proof.
    The top robust single-marker haplotype is `VRN-D1=1` (`Hap2`, n=38)
    and has significant DEV49/DEV59 heading-date score regressions.
-3. `Rht-Zanke2014__robust_discovery`: direction-aware proof. The raw
-   top score still picks the high-plant-height wild-type haplotype, but the
-   stable low-phenotype directional top is `Hap1=B1a|D1b` (`n=214`), and
-   the literature audit marks `Rht-D1b` as `matched_directional_top_haplotype`.
+3. `Rht-Zanke2014__robust_discovery`: proof after direction-aware scoring.
+   The retained raw `total` still explains the old high-plant-height Hap2
+   artifact, but the active `directional_total` score ranks `Hap1=B1a|D1b`
+   first (`n=214`), and the literature audit marks `Rht-D1b` as both
+   `matched_top_haplotype` and `matched_directional_top_haplotype`.
 
 | Target | Trait | Score mode | Status | Key result | Conclusion |
 |---|---|---|---|---|---|
@@ -46,7 +47,7 @@ Current proof set for the teacher's "at least three" requirement:
 | VRN-D1-Kiss2014 | heading date | robust_discovery | tested | Single-marker `VRN-D1=1` top haplotype `Hap2`, n=38; DEV49 P `2.98e-07`, DEV59 P `7.49e-05` | Counts as stable marker-level proof |
 | Rht-D1b | plant height | default | tested | Top-scored haplotype contained functional T allele but only 5 carriers | Weak positive control |
 | Rht-D1b | plant height | robust_discovery | tested | Top score remained functional T haplotype `Hap2`, n=3 | Weak positive control; carrier count too small |
-| Rht-Zanke2014 | plant height | robust_discovery + directional top | tested | Raw top is high-plant-height `Hap2=B1a\|Rht-D1a`; stable low-phenotype directional top is `Hap1=B1a\|D1b`, n=214 | Direction-aware proof and evidence that raw total score must report trait direction for decreases_trait targets |
+| Rht-Zanke2014 | plant height | robust_discovery + direction-aware score axis | tested | Active top-scored haplotype is `Hap1=B1a\|D1b`, n=214, matching the `Rht-D1b` diagnostic marker; retained raw total explains the old Hap2 artifact | Positive proof after direction-aware scoring; haplotype partition matches literature marker counts |
 | Rht-B1b | plant height | any | blocked | Functional T allele has 0 phenotype-overlap carriers | Cannot validate scoring in current samples |
 | TaPIF4 | TGW / plant height | any | blocked | Public repository lacks final per-sample promoter haplotype table and matching phenotype table | Not usable until final data are obtained |
 
@@ -65,7 +66,7 @@ the tested score mode.
 | TaGW2-D1 | WheatOmics GW2 homolog annotation and current WatSeq A/D run. | No precise published decisive D1 functional marker was configured for this validation; current target used two regional SNPs around `TraesCS6D02G176900`. | WatSeq chr6D SNP VCF; 820 Watkins TGW-overlap samples; 2 retained SNPs. | Region covered sparsely; no literature decisive allele/haplotype available in manifest. | Not applicable. | Low-confidence regional signal only; not a star-gene proof. |
 | Rht-B1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`; mechanism is GA-insensitive reduced height through truncated/stabilized DELLA repression of growth. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Marker is present, but expected `T` has 0 phenotype-overlap carriers. | No, blocked before scoring. | Data-blocked in current Watkins panel; not a method-negative result. |
 | Rht-D1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4D:18781242 G>T`, `c.181G>T`, `p.Glu61*`; same GA-insensitive DELLA mechanism as Rht-B1b. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Covered and segregating, but only 5 functional-allele carriers overall; robust top haplotype carrier count is 3. | Yes. Default and robust top haplotype contains the functional `T` allele and has lower plant height. | Weak positive control: exact variant recovered, but sample size and R2 are too small for strong proof. |
-| Rht-Zanke2014 | Zanke et al. 2014 PLOS ONE Table S2, `https://doi.org/10.1371/journal.pone.0113287`; candidate-gene genotypes use Ellis et al. Rht markers. | Diagnostic `Rht-B1b` and `Rht-D1b` marker states with multi-environment plant-height phenotypes. | Downloaded Table S2 workbook; 368 complete varieties; combined `Rht-B1/Rht-D1` marker panel. | Covered and segregating; `Rht-D1b` occurs in 216 samples and exact `Hap1=B1a\|D1b` has n=214. | Raw total-score top is high-plant-height wild type, but stable direction-aware top is exact `Rht-D1b` haplotype and audit status is `matched_directional_top_haplotype`. | Counts as proof only under the direction-aware validation view; also documents an algorithmic requirement for decreases_trait targets. |
+| Rht-Zanke2014 | Zanke et al. 2014 PLOS ONE Table S2, `https://doi.org/10.1371/journal.pone.0113287`; candidate-gene genotypes use Ellis et al. Rht markers. | Diagnostic `Rht-B1b` and `Rht-D1b` marker states with multi-environment plant-height phenotypes. | Downloaded Table S2 workbook; 368 complete varieties; combined `Rht-B1/Rht-D1` marker panel. | Covered and segregating; `Rht-D1b` occurs in 216 samples and exact `Hap1=B1a\|D1b` has n=214. | Active score axis `directional_total` ranks exact `Rht-D1b` haplotype first; audit status is `matched_top_haplotype` and `matched_directional_top_haplotype`. | Positive proof after fixing direction handling; raw total is retained only as a diagnostic trace. |
 | VRN-Kiss2014 | Kiss et al. 2014 supplementary marker table; VRN1 biology supported by VRN literature on promoter/intron-1 structural variants. | Diagnostic spring/dominant marker states `VRN-A1=1`, `VRN-B1=1`, `VRN-D1=1`; exact causal events are often promoter or first-intron structural variants, so this is marker-level validation. | Extracted Kiss2014 workbook; 676 samples with VRN marker states and DEV49/DEV59 heading dates. | Covered and segregating; all-three `1\|1\|1` exists but n=2; `VRN-D1=1` single-state haplotype `0\|0\|1` has n=31. | Default: all-three `1\|1\|1` matched top; robust_discovery: top became stable `0\|0\|1`, so all-three is present but not top. | Useful marker-level check; not a strong causal-SV proof. Shows rare-candidate and stable-common ranks should be reported separately. |
 | TaPIF4 / TaSG-D1-TaPIF4 | Cao et al. 2024, Nature Communications, `https://doi.org/10.1038/s41467-024-46419-0`; code at `https://github.com/QinZhen1995/CAU-TaSG`. | Primary functional variant in that paper is `TaSG-D1 E286K`, which enhances TaPIF4 phosphorylation/stability under heat stress. TaPIF4 promoter haplotypes include `Del` with 275-bp and 12-bp deletions, and `InDel` with 405-bp deletion plus 1909-bp insertion; these reduce heat-induced TaPIF4 expression. | Current public GitHub exposes scripts and `samlist`; local project does not have final `PIF_hap.txt`, `coverage.martix`, or matching sample-level TGW/height/heat phenotype table. | Not covered in the current database. | No, not run. | Blocked. This target cannot prove scoring until final per-sample promoter haplotypes or raw BAM-derived coverage matrix plus phenotypes are obtained. |
 
@@ -541,28 +542,36 @@ Output:
 `star_gene_results/wheat_nature_2024/Rht-Zanke2014__robust_discovery/Rht-Zanke2014.html`
 
 Result:
-For `PlantHeight_BLUE`, raw top score is `Hap2=B1a|Rht-D1a`, n=126,
-mean `96.384 cm`; the stable low-phenotype directional top is
-`Hap1=B1a|D1b`, n=214, mean `82.540 cm`. Score regression is strong
-(`R^2=0.5267`, `P=2.04e-61`), but raw score direction is opposite to the
-expected `decreases_trait` direction.
+The original robust `total` score ranked the high-plant-height wild-type
+haplotype `Hap2=B1a|Rht-D1a` highest. This was the source of the Rht-Zanke2014
+concern: the HTML score plot was showing an effect-magnitude axis, not the
+expected biological direction for a `decreases_trait` target.
 
-For `PlantHeight_GAT_2012`, raw top score is again `Hap2`, while the stable
-low-phenotype directional top is `Hap3=B1b|Rht-D1a`, n=25, mean `72.454 cm`;
-score regression `R^2=0.6131`, `P=3.40e-75`.
+The scorer now preserves raw `total` but uses `directional_total` as the main
+score axis when `expected_direction` is known. For `PlantHeight_BLUE`,
+`Hap1=B1a|D1b` is the top-scored haplotype (`directional_total=0.9642`, n=214,
+mean `82.540 cm`), followed by `Hap3=B1b|Rht-D1a`
+(`directional_total=0.5613`, n=26) and `Hap4=B1a|D1b/Rht-D1a`
+(`directional_total=0.4813`, n=2). `Hap2=B1a|Rht-D1a` is low after direction
+correction (`directional_total=0.3500`, n=126, mean `96.384 cm`). Score
+regression is `R^2=0.451`, `P=1.36e-49`, slope `-21.054`.
+
+For `PlantHeight_GAT_2012`, `Hap1=B1a|D1b` remains top
+(`directional_total=0.9624`, n=214), while `Hap3` is lower-ranked despite a
+more extreme environment-specific mean because support shrinkage penalizes the
+smaller group. Score regression is `R^2=0.532`, `P=1.71e-60`, slope `-33.534`.
 
 Literature audit:
-`Rht-D1b_diagnostic_marker` has raw `validation_status=present_but_not_top`,
-but direction-aware audit reports `directional_top_haplotype=Hap1`,
-`directional_top_haplotype_sample_count=214`,
-`directional_validation_status=matched_directional_top_haplotype`.
+`Rht-D1b_diagnostic_marker` is now `matched_top_haplotype` and
+`matched_directional_top_haplotype`: top haplotype `Hap1=B1a|D1b`, n=214, all
+214 top-haplotype samples carry the expected `D1b` state. `Rht-B1b` remains
+present but not top because the B1b class is `Hap3=B1b|Rht-D1a`, n=26.
 
 Interpretation:
-This is the third usable positive control only after adding direction-aware
-validation. It shows that a score designed to find "large effect" haplotypes
-must not be interpreted as "beneficial/top" without trait direction. For
-unknown discovery, report high-value and low-value candidate ranks separately
-when the trait direction is not known in advance.
+Rht-Zanke2014 now supports the scoring method after fixing the direction
+handling. The haplotype partition itself matched the literature counts; the
+problem was interpreting raw magnitude score as a biological top for a
+height-decreasing allele.
 
 ### 2026-06-23 Robust full-region rerun and cross-target algorithm check
 

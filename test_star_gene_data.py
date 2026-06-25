@@ -1407,6 +1407,55 @@ class StarGeneDataTests(unittest.TestCase):
             robust["per_haplotype"]["Hap5"]["total"],
         )
 
+    def test_expected_decrease_direction_reorders_raw_high_phenotype_score(self):
+        import pandas as pd
+        from haplotype_phenotype_analysis import HaplotypeScorer
+
+        rows = []
+        rows.extend(
+            {
+                "SampleID": f"D1b_{i}",
+                "Hap_Name": "HapD1b",
+                "Haplotype_Seq": "B1a|D1b",
+                "PlantHeight": 82.0 + (0.1 if i % 2 else -0.1),
+            }
+            for i in range(80)
+        )
+        rows.extend(
+            {
+                "SampleID": f"WT_{i}",
+                "Hap_Name": "HapWT",
+                "Haplotype_Seq": "B1a|Rht-D1a",
+                "PlantHeight": 98.0 + (0.1 if i % 2 else -0.1),
+            }
+            for i in range(50)
+        )
+        hap_sample_df = pd.DataFrame(rows)
+        effect_results = {
+            "haplotype_effects": [
+                {"haplotype": "HapD1b", "cohens_d": 0.0, "n_samples": 80},
+                {"haplotype": "HapWT", "cohens_d": 2.0, "n_samples": 50},
+            ]
+        }
+
+        scored = HaplotypeScorer(
+            hap_sample_df,
+            variant_positions=[],
+            effect_results=effect_results,
+            phenotype_col="PlantHeight",
+            expected_direction="decreases_trait",
+        ).score_all()
+
+        self.assertEqual(scored["score_axis"], "directional_total")
+        self.assertGreater(
+            scored["per_haplotype"]["HapWT"]["total"],
+            scored["per_haplotype"]["HapD1b"]["total"],
+        )
+        self.assertGreater(
+            scored["per_haplotype"]["HapD1b"]["directional_total"],
+            scored["per_haplotype"]["HapWT"]["directional_total"],
+        )
+
     def test_pca_plot_handles_two_variant_haplotypes(self):
         import pandas as pd
         from haplotype_phenotype_analysis import ReportGenerator

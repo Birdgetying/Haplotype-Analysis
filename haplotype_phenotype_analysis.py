@@ -2516,6 +2516,17 @@ def _score_value(score_entry: dict, key: str, default=None):
         return default
 
 
+def _preferred_haplotype_score(score_entry: dict, score_results: dict = None, default=0.0):
+    score_axis = (score_results or {}).get("score_axis") or "total"
+    score = _score_value(score_entry, score_axis, None)
+    if score is not None:
+        return score
+    score = _score_value(score_entry, "total", None)
+    if score is not None:
+        return score
+    return _score_value(score_entry, "overall_score", _score_value(score_entry, "score", default))
+
+
 def _build_discovery_candidate_rows(
     hap_sample_df: pd.DataFrame,
     hap_col: str,
@@ -2539,9 +2550,8 @@ def _build_discovery_candidate_rows(
     for hap, score_entry in per_hap.items():
         if not isinstance(score_entry, dict):
             continue
-        total = _score_value(score_entry, "total", None)
-        if total is None:
-            total = _score_value(score_entry, "overall_score", _score_value(score_entry, "score", 0.0))
+        total = _preferred_haplotype_score(score_entry, score_results, 0.0)
+        raw_total = _score_value(score_entry, "total", total)
         hap_rows = (
             hap_sample_df[hap_sample_df[hap_col] == hap]
             if hap_sample_df is not None and hap_col in hap_sample_df.columns else
@@ -2606,6 +2616,7 @@ def _build_discovery_candidate_rows(
         rows.append({
             "haplotype": str(hap),
             "total": float(total or 0.0),
+            "raw_total": float(raw_total or 0.0),
             "components": components,
             "sample_count": sample_count,
             "phenotype_mean": phenotype_mean,
@@ -2676,9 +2687,7 @@ def _build_top_haplotype_key_site_rows(
 
     scored_haps = []
     for hap, score_entry in per_hap.items():
-        total = _score_value(score_entry, "total", None)
-        if total is None:
-            total = _score_value(score_entry, "overall_score", _score_value(score_entry, "score", None))
+        total = _preferred_haplotype_score(score_entry, score_results, None)
         if total is not None:
             scored_haps.append((str(hap), float(total)))
     if not scored_haps:
@@ -5563,7 +5572,8 @@ class HaplotypeScorer:
                  component_weights=None, maf_threshold=0.05,
                  ld_r2_matrix=None,
                  effect_results=None, promoter_start=None, promoter_end=None,
-                 strand='+', pve=None, score_mode='default'):
+                 strand='+', pve=None, score_mode='default',
+                 expected_direction='unknown'):
         if score_mode not in self.ROBUST_DISCOVERY_MODES:
             raise ValueError(
                 f"Unsupported score_mode={score_mode!r}; "
@@ -5593,6 +5603,7 @@ class HaplotypeScorer:
         self.ld_r2_matrix = ld_r2_matrix  # n×n LD r² matrix, 与 variant_positions 顺序一致
         self.effect_results = effect_results or {}
         self.pve = pve  # Phenotypic Variance Explained (0-1), 用于置信度校准
+        self.expected_direction = self._normalize_expected_direction(expected_direction)
 
         # Pre-compute lookup maps
         self.pos_annotation = self._build_annotation_map()
@@ -5639,6 +5650,23 @@ class HaplotypeScorer:
         self.pos_to_seq_idx = {
             int(pos): i for i, pos in enumerate(self.full_variant_positions)
         }
+
+    @staticmethod
+    def _normalize_expected_direction(direction):
+        value = str(direction or 'unknown').strip().lower()
+        mapping = {
+            'increase': 'increases_trait',
+            'increases': 'increases_trait',
+            'increases_trait': 'increases_trait',
+            'higher': 'increases_trait',
+            'positive': 'increases_trait',
+            'decrease': 'decreases_trait',
+            'decreases': 'decreases_trait',
+            'decreases_trait': 'decreases_trait',
+            'lower': 'decreases_trait',
+            'negative': 'decreases_trait',
+        }
+        return mapping.get(value, 'unknown')
 
     def _classify_position(self, pos):
         """对位置进行功能分类，返回 FUNCTIONAL_WEIGHTS 中的 key
@@ -7077,6 +7105,63 @@ class HaplotypeScorer:
 
         return distances
 
+    def _phenotype_direction_score(self, hap_total):
+        """Score the desired phenotype direction without using literature labels."""
+        if self.expected_direction == 'unknown':
+            return {hap: hap_total.get(hap, 0.0) for hap in self.unique_haps}
+
+        stats_by_hap = {}
+        for hap in self.unique_haps:
+            rows = self.hap_sample_df[self.hap_sample_df[self.hap_col] == hap]
+            vals = pd.to_numeric(rows[self.phenotype_col], errors='coerce').dropna()
+            if len(vals) == 0:
+                continue
+            stats_by_hap[hap] = {
+                'mean': float(vals.mean()),
+                'n': int(len(vals)),
+            }
+        if not stats_by_hap:
+            return {hap: 0.0 for hap in self.unique_haps}
+
+        total_n = sum(v['n'] for v in stats_by_hap.values())
+        if total_n > 0:
+            baseline = sum(v['mean'] * v['n'] for v in stats_by_hap.values()) / total_n
+        else:
+            baseline = self.grand_pheno_mean
+
+        directional_raw = {}
+        for hap in self.unique_haps:
+            stats = stats_by_hap.get(hap)
+            if not stats:
+                directional_raw[hap] = 0.0
+                continue
+            reliability = stats['n'] / (stats['n'] + self.ROBUST_DISCOVERY_RELIABILITY_K)
+            adjusted_mean = baseline + (stats['mean'] - baseline) * reliability
+            if self.expected_direction == 'decreases_trait':
+                directional_raw[hap] = baseline - adjusted_mean
+            else:
+                directional_raw[hap] = adjusted_mean - baseline
+
+        min_raw = min(directional_raw.values()) if directional_raw else 0.0
+        shifted = {
+            hap: max(0.0, directional_raw.get(hap, 0.0) - min_raw)
+            for hap in self.unique_haps
+        }
+        max_shifted = max(shifted.values()) if shifted else 0.0
+        if max_shifted <= 0:
+            return {hap: 0.0 for hap in self.unique_haps}
+        return {hap: shifted.get(hap, 0.0) / max_shifted for hap in self.unique_haps}
+
+    def _direction_adjust_hap_totals(self, hap_total):
+        if self.expected_direction == 'unknown':
+            return dict(hap_total), {hap: 0.0 for hap in self.unique_haps}
+        direction_score = self._phenotype_direction_score(hap_total)
+        total_norm = self._winsorize_normalize(hap_total)
+        directional_total = {}
+        for hap in self.unique_haps:
+            directional_total[hap] = 0.35 * total_norm.get(hap, 0.0) + 0.65 * direction_score.get(hap, 0.0)
+        return directional_total, direction_score
+
     def compute_eb_effect_score(self):
         """EB效应得分: EB收缩 + LD软加权，识别携带稀有高效应变异的单倍型
 
@@ -7320,12 +7405,15 @@ class HaplotypeScorer:
                     w = self.component_weights[comp_name]
                     total += w * score_components[comp_name].get(hap, 0.0)
             hap_total[hap] = total
+        directional_total, direction_score = self._direction_adjust_hap_totals(hap_total)
+        score_axis = 'directional_total' if self.expected_direction != 'unknown' else 'total'
+        axis_totals = directional_total if score_axis == 'directional_total' else hap_total
 
         core_haplotype_groups = {}
         functional_haplotype_groups = {}
         if self.score_mode == 'robust_discovery':
-            core_haplotype_groups = self._build_core_haplotype_groups(score_components, hap_total)
-            functional_haplotype_groups = self._build_functional_haplotype_groups(hap_total)
+            core_haplotype_groups = self._build_core_haplotype_groups(score_components, axis_totals)
+            functional_haplotype_groups = self._build_functional_haplotype_groups(axis_totals)
 
         # PVE 置信度校准
         if self.pve is not None:
@@ -7354,6 +7442,9 @@ class HaplotypeScorer:
                 entry['sample_reliability'] = round(robust_reliability.get(hap, 1.0), 4)
                 entry['ambiguity_factor'] = round(robust_ambiguity.get(hap, 1.0), 4)
             entry['total'] = round(hap_total.get(hap, 0), 4)
+            if self.expected_direction != 'unknown':
+                entry['direction_score'] = round(direction_score.get(hap, 0), 4)
+                entry['directional_total'] = round(directional_total.get(hap, 0), 4)
             per_haplotype[hap] = entry
 
         # 构建 per_sample 输出 + 线性回归
@@ -7362,7 +7453,7 @@ class HaplotypeScorer:
         phenos_for_reg = []
         for _, row in self.hap_sample_df.iterrows():
             hap = row[self.hap_col]
-            score = hap_total.get(hap, 0.0)
+            score = axis_totals.get(hap, 0.0)
             pheno = row[self.phenotype_col]
             sample_id = row.get('SampleID', '')
             if pd.notna(pheno):
@@ -7399,6 +7490,8 @@ class HaplotypeScorer:
 
         return {
             'score_mode': self.score_mode,
+            'expected_direction': self.expected_direction,
+            'score_axis': score_axis,
             'per_sample': per_sample,
             'per_haplotype': per_haplotype,
             'r_squared': r_squared,
@@ -7775,6 +7868,7 @@ class ReportGenerator:
                     strand=strand,
                     pve=pheno_pve,
                     score_mode=score_mode,
+                    expected_direction=getattr(self, 'expected_direction', 'unknown'),
                 )
                 all_score_data[score_pheno] = scorer.score_all()
             except Exception:
@@ -11417,7 +11511,7 @@ function drawHaplotypeScorePlot(scoreData) {
             tooltip.style('display', 'block')
                 .html('<b>' + d.sample_id + '</b><br>'
                     + 'Haplotype: ' + d.haplotype + '<br>'
-                    + 'Score: ' + d.score.toFixed(3) + compInfo + '<br>'
+                    + 'Score (' + (scoreData.score_axis || 'total') + '): ' + d.score.toFixed(3) + compInfo + '<br>'
                     + 'Phenotype: ' + d.phenotype.toFixed(3));
         })
         .on('mousemove', function(event) {
@@ -11499,7 +11593,9 @@ function updateScoreStats(scoreData) {
             parts.push(compNames[key] + ': w=' + weights[key].toFixed(1));
         }
     }
-    var statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode) + ' | Components: ' + parts.join(' | ');
+    var statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode)
+        + ' | Axis=' + (scoreData.score_axis || 'total')
+        + ' | Components: ' + parts.join(' | ');
 
     // PVE 置信度标注
     var level = scoreData.confidence_level;
@@ -11529,7 +11625,7 @@ function updateScoreTitle(scoreData) {
         badge = ' <span style=\'font-size:10px;color:#27ae60;\'>[High Confidence]</span>';
     }
     var modeLabel = scoreData.score_mode || currentScoreMode || 'default';
-    titleEl.innerHTML = 'Haplotype Score vs Phenotype <span style=\'font-size:10px;color:#666;\'>[' + modeLabel + ']</span>' + badge;
+    titleEl.innerHTML = 'Haplotype Score vs Phenotype <span style=\'font-size:10px;color:#666;\'>[' + modeLabel + ', axis=' + (scoreData.score_axis || 'total') + ']</span>' + badge;
 }
 
 function exportSVG() {{
@@ -14484,7 +14580,10 @@ if (!scoreData) {{
 }}
 var headerInfo = document.getElementById('header-info');
 if (headerInfo) {{
-    headerInfo.textContent = 'Mode = ' + (scoreData.score_mode || currentScoreMode) + ' | R² = ' + formatMetric(scoreData.r_squared, 4) + ' | p = ' + formatMetric(scoreData.regression_pvalue, 4);
+    headerInfo.textContent = 'Mode = ' + (scoreData.score_mode || currentScoreMode)
+        + ' | Axis = ' + (scoreData.score_axis || 'total')
+        + ' | R² = ' + formatMetric(scoreData.r_squared, 4)
+        + ' | p = ' + formatMetric(scoreData.regression_pvalue, 4);
 }}
 var samples = (scoreData.per_sample || []).filter(function(d) {{
     return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
@@ -14561,7 +14660,7 @@ if (samples.length < 2) {{
         .attr('stroke', 'white').attr('stroke-width', 0.5).attr('opacity', 0.85)
         .on('mouseover', function(event, d) {{
             tip.style('display','block')
-                .html('<b>' + d.sample_id + '</b><br>Haplotype: ' + d.haplotype + '<br>Score: ' + d.score.toFixed(3) + '<br>Phenotype: ' + d.phenotype.toFixed(3));
+                .html('<b>' + d.sample_id + '</b><br>Haplotype: ' + d.haplotype + '<br>Score (' + (scoreData.score_axis || 'total') + '): ' + d.score.toFixed(3) + '<br>Phenotype: ' + d.phenotype.toFixed(3));
         }})
         .on('mousemove', function(event) {{
             positionFixedTooltip(tip, event);
@@ -14599,7 +14698,9 @@ if (samples.length < 2) {{
     for (var k in compNames) {{ if (weights[k] !== undefined) parts.push(compNames[k] + ': w=' + weights[k].toFixed(1)); }}
     var statsText = 'Components: ' + parts.join(' | ');
     if (scoreData.pve != null) statsText += ' | PVE=' + (scoreData.pve * 100).toFixed(1) + '%';
-    statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode) + ' | ' + statsText;
+    statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode)
+        + ' | Axis=' + (scoreData.score_axis || 'total')
+        + ' | ' + statsText;
     if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
     document.getElementById('stats').textContent = statsText;
     updateModeButtons();
@@ -14861,7 +14962,8 @@ class HaplotypePhenotypeAnalyzer:
     """单倍型-表型关联分析主流程"""
     
     def __init__(self, vcf_file: str, phenotype_file: str, output_dir: str = None,
-                 gtf_file: str = None, score_mode: str = 'default'):
+                 gtf_file: str = None, score_mode: str = 'default',
+                 expected_direction: str = 'unknown'):
         """
         Args:
             vcf_file: VCF文件路径
@@ -14869,12 +14971,14 @@ class HaplotypePhenotypeAnalyzer:
             output_dir: 输出目录
             gtf_file: GTF注释文件路径（用于解析外显子/CDS坐标）
             score_mode: 单倍型评分模式，默认保持历史公式
+            expected_direction: 目标性状方向，用于方向校正展示
         """
         self.vcf_file = vcf_file
         self.phenotype_file = phenotype_file
         self.output_dir = output_dir or DataConfig.OUTPUT_DIR
         self.gtf_file = gtf_file or DataConfig.GTF_PATH
         self.score_mode = score_mode
+        self.expected_direction = expected_direction
         
         # 加载表型数据
         self.phenotype_df = self._load_phenotype()
@@ -14890,6 +14994,7 @@ class HaplotypePhenotypeAnalyzer:
                 print(f"[WARNING] 初始化 HaplotypeExtractor 失败: {e}，将依赖数据库数据")
         self.reporter = ReportGenerator(self.output_dir)
         self.reporter.score_mode = self.score_mode
+        self.reporter.expected_direction = self.expected_direction
         
         # 分析结果缓存
         self.hap_df = None
@@ -15485,7 +15590,8 @@ class HaplotypePhenotypeAnalyzer:
                      gene_id: str = None, phenotype_cols: list = None,
                      min_samples: int = 2, gwas_file: str = None,
                      cluster_haplotypes: bool = False,
-                     database_dir: str = None) -> dict:
+                     database_dir: str = None,
+                     expected_direction: str = None) -> dict:
         """
         分析指定基因区间的单倍型 - 表型关联
             
@@ -15499,6 +15605,7 @@ class HaplotypePhenotypeAnalyzer:
             gwas_file: GWAS结果文件路径（可选，用于对比分析）
             cluster_haplotypes: 是否按序列相似度聚类排序（默认False）
             database_dir: 数据库目录路径（可选，如果提供则优先从数据库加载预计算数据）
+            expected_direction: 覆盖初始化时设置的目标性状方向
                 
         Returns:
             dict: 分析结果汇总
@@ -15509,6 +15616,9 @@ class HaplotypePhenotypeAnalyzer:
         self.end = end
         self.gene_id = gene_id  # 保存基因ID供后续使用
         self.database_dir = database_dir  # 保存数据库目录供后续使用
+        if expected_direction is not None:
+            self.expected_direction = expected_direction
+            self.reporter.expected_direction = expected_direction
         
         # 尝试从数据库加载预计算数据
         preloaded_data = {}

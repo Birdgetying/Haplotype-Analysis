@@ -613,6 +613,7 @@ class StarGeneValidator:
                 output_dir=str(result_path),
                 gtf_file=str(gtf_path) if gtf_path and gtf_path.exists() else None,
                 score_mode=self.score_mode,
+                expected_direction=target.get('expected_direction', 'unknown'),
             )
             phenotype_cols = []
             for _, selected_col in selected_traits:
@@ -626,6 +627,7 @@ class StarGeneValidator:
                 phenotype_cols=phenotype_cols,
                 cluster_haplotypes=False,
                 database_dir=str(database_root_for_paper),
+                expected_direction=target.get('expected_direction', 'unknown'),
             )
         except Exception as e:
             for trait, _ in selected_traits:
@@ -714,7 +716,10 @@ class StarGeneValidator:
 
         per_sample = score_results.get('per_sample') or []
         per_haplotype = score_results.get('per_haplotype') or {}
-        top_hap, top_score = self.pick_top_haplotype(per_haplotype)
+        top_hap, top_score = self.pick_top_haplotype(
+            per_haplotype,
+            score_axis=score_results.get('score_axis') or 'total',
+        )
         top_count = None
         if top_hap is not None:
             top_count = sum(1 for sample in per_sample if str(sample.get('haplotype')) == str(top_hap))
@@ -788,11 +793,15 @@ class StarGeneValidator:
             'haplotype_score_json_path': result.get('haplotype_score_json_path'),
         }
 
-    def pick_top_haplotype(self, per_haplotype: Dict[str, Dict[str, Any]]) -> Tuple[Optional[str], Optional[float]]:
+    def pick_top_haplotype(self, per_haplotype: Dict[str, Dict[str, Any]],
+                           score_axis: str = 'total') -> Tuple[Optional[str], Optional[float]]:
         best_hap = None
         best_score = None
         for hap, values in per_haplotype.items():
-            score = _safe_float((values or {}).get('total'))
+            values = values or {}
+            score = _safe_float(values.get(score_axis))
+            if score is None and score_axis != 'total':
+                score = _safe_float(values.get('total'))
             if score is None:
                 continue
             if best_score is None or score > best_score:
@@ -848,8 +857,12 @@ class StarGeneValidator:
             entry['sum'] += pheno
 
         candidates: List[Tuple[str, float, float, int]] = []
+        score_axis = str(score_results.get('score_axis') or 'total')
         for hap, values in per_haplotype.items():
-            score = _safe_float((values or {}).get('total'))
+            values = values or {}
+            score = _safe_float(values.get(score_axis))
+            if score is None and score_axis != 'total':
+                score = _safe_float(values.get('total'))
             if score is None:
                 continue
             entry = stats_by_hap.get(str(hap), {})

@@ -199,11 +199,15 @@ def _pick_top_haplotype(result_path: Path) -> Tuple[Optional[str], Optional[floa
     for trait_scores in score_data.values():
         if not isinstance(trait_scores, dict):
             continue
+        score_axis = str(trait_scores.get("score_axis") or "total")
         per_haplotype = trait_scores.get("per_haplotype") or {}
         if not isinstance(per_haplotype, dict):
             continue
         for hap_name, values in per_haplotype.items():
-            score = _safe_float((values or {}).get("total"))
+            values = values or {}
+            score = _safe_float(values.get(score_axis))
+            if score is None and score_axis != "total":
+                score = _safe_float(values.get("total"))
             if score is None:
                 continue
             if best_score is None or score > best_score:

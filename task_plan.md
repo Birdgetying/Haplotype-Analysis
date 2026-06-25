@@ -191,7 +191,7 @@ Implemented the additional proof route needed for the teacher's "at least 3" req
 
 - Proof #1 remains `TaGW2-B1-remoteSNP__robust_discovery`: exact Qin2014 `Hap-6B-1=A|G|C` is robust top-ranked and audit-matched.
 - Proof #2 is `VRN-D1-Kiss2014__robust_discovery`: single-marker `VRN-D1=1` is robust top-ranked with significant DEV49/DEV59 heading-date score regressions.
-- Proof #3 is `Rht-Zanke2014__robust_discovery` under direction-aware validation: Zanke et al. 2014 PLOS ONE Table S2 provides Rht-B1/Rht-D1 marker genotypes and plant heights for 368 varieties. The raw top robust score is a high-plant-height wild-type haplotype, but the stable low-phenotype directional top is `Hap1=B1a|D1b` (n=214), and literature audit now marks `Rht-D1b` as `matched_directional_top_haplotype`.
+- Proof #3 is `Rht-Zanke2014__robust_discovery` after direction-aware scoring: Zanke et al. 2014 PLOS ONE Table S2 provides Rht-B1/Rht-D1 marker genotypes and plant heights for 368 varieties. The active `directional_total` score now ranks `Hap1=B1a|D1b` first (n=214), and literature audit marks `Rht-D1b` as both `matched_top_haplotype` and `matched_directional_top_haplotype`. The retained raw `total` explains the old high-plant-height Hap2 artifact.
 
 Code changes in this phase:
 
