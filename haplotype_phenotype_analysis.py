@@ -5548,13 +5548,11 @@ class HaplotypeScorer:
     }
 
     ROBUST_DISCOVERY_COMPONENT_WEIGHTS = {
-        'variant_effect': 0.8,
+        'variant_effect': 1.0,
         'burden': 0.35,
-        'eb_effect': 0.55,
-        'multi_omics': 0.5,
-        'fine_mapping': 0.6,
-        'effect_size': 1.0,
-        'genetic_distinct': 0.2,
+        'multi_omics': 0.45,
+        'fine_mapping': 0.75,
+        'genetic_distinct': 0.35,
     }
     ROBUST_DISCOVERY_RELIABILITY_K = 20.0
     ROBUST_DISCOVERY_MODES = {'default', 'robust_discovery'}
@@ -5778,6 +5776,8 @@ class HaplotypeScorer:
     def _build_gwas_map(self):
         gwas_map = {}
         for d in self.gwas_data:
+            if not self._is_external_evidence_record(d):
+                continue
             pos = d.get('pos')
             pval = d.get('pvalue', 1.0)
             if pos is not None and pval is not None and pval > 0:
@@ -5789,6 +5789,110 @@ class HaplotypeScorer:
             if pos not in gwas_map:
                 gwas_map[pos] = 0.0
         return gwas_map
+
+    @staticmethod
+    def _is_external_evidence_record(record):
+        """Return True only for explicitly external GWAS/eQTL/PostGWAS evidence."""
+        if not isinstance(record, dict):
+            return False
+        flag = record.get('external')
+        if isinstance(flag, str):
+            flag = flag.strip().lower() in {'1', 'true', 'yes', 'y', 'external'}
+        if flag is True:
+            return True
+        source_type = str(
+            record.get('source_type') or record.get('evidence_type') or ''
+        ).strip().lower()
+        return source_type in {
+            'external', 'external_gwas', 'published_gwas',
+            'postgwas', 'eqtl', 'external_eqtl'
+        }
+
+    def _external_evidence_component(self, pos):
+        """PostGWAS-like external site evidence normalized to [0, 1].
+
+        This uses only explicitly external evidence fields. Locally computed
+        phenotype p-values are deliberately ignored unless the caller marks the
+        record as external before constructing this scorer.
+        """
+        values = []
+        try:
+            logp = float(self.pos_gwas_logp.get(pos, 0.0) or 0.0)
+        except (TypeError, ValueError):
+            logp = 0.0
+        if logp > 0:
+            values.append(min(logp / 8.0, 1.0))
+
+        info = self.variant_info.get(pos, {}) if self.variant_info else {}
+        for key in ('postgwas_score', 'external_score', 'site_score', 'eqtl_score'):
+            try:
+                value = float(info.get(key, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 0:
+                values.append(min(max(value, 0.0), 1.0))
+
+        for key in ('external_logp', 'gwas_logp', 'eqtl_logp', 'minus_log10_p'):
+            try:
+                value = float(info.get(key, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 0:
+                values.append(min(value / 8.0, 1.0))
+
+        for key in ('external_pvalue', 'gwas_pvalue', 'eqtl_pvalue'):
+            try:
+                pval = float(info.get(key, 1.0) or 1.0)
+            except (TypeError, ValueError):
+                pval = 1.0
+            if 0 < pval < 1:
+                values.append(min(float(-np.log10(max(pval, 1e-300))) / 8.0, 1.0))
+
+        return max(values) if values else 0.0
+
+    def _site_weight_record(self, pos):
+        """Build a phenotype-free site score used for robust discovery grouping."""
+        maf = float(self.pos_maf.get(pos, 0.5) or 0.0)
+        maf_minor = min(maf, 1.0 - maf)
+        if maf <= 0 or maf_minor < 0.005:
+            return None
+
+        func_w = float(self.pos_func_weight.get(pos, 0.1))
+        func_component = min(func_w / 2.5, 1.0)
+        external_component = self._external_evidence_component(pos)
+        boundary_component = 0.0
+        annotation = self.pos_annotation.get(pos, 'other')
+        if (
+            annotation in {'intron', 'synonymous', 'UTR', 'other'}
+            and self._is_boundary_gene_body_position(pos)
+        ):
+            boundary_component = 0.65
+        maf_stability = maf_minor / 0.05 if maf_minor < 0.05 else 1.0
+        maf_stability = max(0.15, min(float(maf_stability), 1.0))
+
+        missing = 0.0
+        if pos in self.variant_info:
+            try:
+                missing = float(self.variant_info[pos].get('missing_rate', 0.0) or 0.0)
+            except (TypeError, ValueError):
+                missing = 0.0
+        missing_factor = max(0.2, 1.0 - min(missing, 0.8))
+        score = (
+            0.45 * func_component +
+            0.25 * external_component +
+            0.15 * boundary_component +
+            0.15 * maf_stability
+        ) * missing_factor
+        return {
+            'position': int(pos),
+            'score': float(score),
+            'function_weight': func_w,
+            'external_evidence': float(external_component),
+            'boundary_score': float(boundary_component),
+            'maf': maf,
+            'annotation': annotation,
+            'missing_rate': missing,
+        }
 
     def _get_hap_seq_map(self):
         """构建 {hap_name: haplotype_sequence_string} 映射（带缓存）"""
@@ -5904,95 +6008,11 @@ class HaplotypeScorer:
         if not self.variant_positions:
             return []
 
-        # Per-position signal from available local evidence. Phenotype terms are
-        # estimated from marker groups and filtered for support, so singleton
-        # outliers cannot define the core haplotype.
-        X, y, all_positions = self._reconstruct_genotype_matrix()
-        effect_by_pos = {}
-        if X is not None and y is not None and X.shape[1] == len(all_positions):
-            effects = self._compute_univariate_effects(X, y)
-            effects = self._eb_shrink_marker_effects(
-                effects,
-                np.array([self.pos_maf.get(pos, 0.5) for pos in all_positions])
-            )
-            max_effect = float(np.max(effects)) if len(effects) else 0.0
-            if max_effect > 0:
-                effect_by_pos = {
-                    int(pos): float(eff / max_effect)
-                    for pos, eff in zip(all_positions, effects)
-                }
-
-        pheno_by_pos = {}
-        for pos in self.variant_positions:
-            groups = {}
-            for _, row in self.hap_sample_df.iterrows():
-                pheno = row.get(self.phenotype_col)
-                if pd.isna(pheno):
-                    continue
-                allele = self._allele_for_hap_position(row[self.hap_col], pos)
-                if not allele or str(allele).upper() in {'N', '.', 'NA', 'NAN', '?'}:
-                    continue
-                groups.setdefault(str(allele), []).append(float(pheno))
-            if len(groups) < 2:
-                continue
-            counts = [len(vals) for vals in groups.values()]
-            min_count = min(counts)
-            if min_count < 5:
-                continue
-            try:
-                vals = list(groups.values())
-                if len(vals) == 2:
-                    pval = stats.ttest_ind(vals[0], vals[1], equal_var=False).pvalue
-                else:
-                    pval = stats.f_oneway(*vals).pvalue
-            except Exception:
-                continue
-            if pval is None or not np.isfinite(pval):
-                continue
-            means = [float(np.mean(vals)) for vals in groups.values()]
-            effect = max(means) - min(means)
-            pheno_by_pos[int(pos)] = {
-                'logp': float(-np.log10(max(pval, 1e-300))),
-                'effect': effect,
-                'min_count': min_count,
-            }
-        max_logp = max((v['logp'] for v in pheno_by_pos.values()), default=0.0)
-        max_effect = max((v['effect'] for v in pheno_by_pos.values()), default=0.0)
-
         position_scores = []
         for pos in self.variant_positions:
-            maf = float(self.pos_maf.get(pos, 0.5) or 0.0)
-            if maf <= 0 or min(maf, 1.0 - maf) < 0.005:
-                continue
-            func_w = float(self.pos_func_weight.get(pos, 0.1))
-            func_component = min(func_w / 2.5, 1.0)
-            effect_component = effect_by_pos.get(int(pos), 0.0)
-            pheno = pheno_by_pos.get(int(pos), {})
-            pheno_logp_component = (
-                pheno.get('logp', 0.0) / max_logp if max_logp > 0 else 0.0
-            )
-            pheno_effect_component = (
-                pheno.get('effect', 0.0) / max_effect if max_effect > 0 else 0.0
-            )
-            gwas_component = min(float(self.pos_gwas_logp.get(pos, 0.0) or 0.0) / 8.0, 1.0)
-            maf_stability = min(maf, 1.0 - maf) / 0.05 if min(maf, 1.0 - maf) < 0.05 else 1.0
-            maf_stability = max(0.15, min(float(maf_stability), 1.0))
-            missing = 0.0
-            if pos in self.variant_info:
-                try:
-                    missing = float(self.variant_info[pos].get('missing_rate', 0.0) or 0.0)
-                except (TypeError, ValueError):
-                    missing = 0.0
-            missing_factor = max(0.2, 1.0 - min(missing, 0.8))
-            score = (
-                0.30 * pheno_logp_component +
-                0.20 * pheno_effect_component +
-                0.20 * effect_component +
-                0.25 * func_component +
-                0.10 * gwas_component +
-                0.15 * maf_stability
-            ) * missing_factor
-            position_scores.append((score, int(pos)))
+            item = self._site_weight_record(int(pos))
+            if item is not None:
+                position_scores.append((item['score'], int(pos)))
 
         if not position_scores:
             return []
@@ -6084,7 +6104,8 @@ class HaplotypeScorer:
                 key=lambda g: (
                     g.get('rank_score') or 0.0,
                     min(g.get('sample_count') or 0, 50),
-                    g.get('mean_phenotype') if g.get('mean_phenotype') is not None else -np.inf,
+                    g.get('representative_haplotype_count') or 0,
+                    str(g.get('core_sequence') or ''),
                 )
             )
 
@@ -6096,99 +6117,11 @@ class HaplotypeScorer:
 
     def _score_positions_for_grouping(self):
         """Score positions for discovery grouping without literature labels."""
-        X, y, all_positions = self._reconstruct_genotype_matrix()
-        effect_by_pos = {}
-        if X is not None and y is not None and X.shape[1] == len(all_positions):
-            effects = self._compute_univariate_effects(X, y)
-            effects = self._eb_shrink_marker_effects(
-                effects,
-                np.array([self.pos_maf.get(pos, 0.5) for pos in all_positions])
-            )
-            max_effect = float(np.max(effects)) if len(effects) else 0.0
-            if max_effect > 0:
-                effect_by_pos = {
-                    int(pos): float(eff / max_effect)
-                    for pos, eff in zip(all_positions, effects)
-                }
-
-        pheno_by_pos = {}
-        for pos in self.variant_positions:
-            groups = {}
-            for _, row in self.hap_sample_df.iterrows():
-                pheno = row.get(self.phenotype_col)
-                if pd.isna(pheno):
-                    continue
-                allele = self._allele_for_hap_position(row[self.hap_col], pos)
-                if not allele or str(allele).upper() in {'N', '.', 'NA', 'NAN', '?'}:
-                    continue
-                groups.setdefault(str(allele), []).append(float(pheno))
-            if len(groups) < 2:
-                continue
-            counts = [len(vals) for vals in groups.values()]
-            min_count = min(counts)
-            if min_count < 2:
-                continue
-            try:
-                vals = list(groups.values())
-                if len(vals) == 2:
-                    pval = stats.ttest_ind(vals[0], vals[1], equal_var=False).pvalue
-                else:
-                    pval = stats.f_oneway(*vals).pvalue
-            except Exception:
-                continue
-            if pval is None or not np.isfinite(pval):
-                continue
-            means = [float(np.mean(vals)) for vals in groups.values()]
-            pheno_by_pos[int(pos)] = {
-                'logp': float(-np.log10(max(pval, 1e-300))),
-                'effect': max(means) - min(means),
-                'min_count': min_count,
-            }
-
-        max_logp = max((v['logp'] for v in pheno_by_pos.values()), default=0.0)
-        max_effect = max((v['effect'] for v in pheno_by_pos.values()), default=0.0)
         position_scores = []
         for pos in self.variant_positions:
-            maf = float(self.pos_maf.get(pos, 0.5) or 0.0)
-            if maf <= 0:
-                continue
-            func_w = float(self.pos_func_weight.get(pos, 0.1))
-            func_component = min(func_w / 2.5, 1.0)
-            pheno = pheno_by_pos.get(int(pos), {})
-            pheno_logp_component = (
-                pheno.get('logp', 0.0) / max_logp if max_logp > 0 else 0.0
-            )
-            pheno_effect_component = (
-                pheno.get('effect', 0.0) / max_effect if max_effect > 0 else 0.0
-            )
-            effect_component = effect_by_pos.get(int(pos), 0.0)
-            maf_minor = min(maf, 1.0 - maf)
-            maf_stability = maf_minor / 0.05 if maf_minor < 0.05 else 1.0
-            maf_stability = max(0.15, min(float(maf_stability), 1.0))
-            missing = 0.0
-            if pos in self.variant_info:
-                try:
-                    missing = float(self.variant_info[pos].get('missing_rate', 0.0) or 0.0)
-                except (TypeError, ValueError):
-                    missing = 0.0
-            missing_factor = max(0.2, 1.0 - min(missing, 0.8))
-            score = (
-                0.35 * func_component +
-                0.25 * pheno_logp_component +
-                0.15 * pheno_effect_component +
-                0.15 * effect_component +
-                0.10 * maf_stability
-            ) * missing_factor
-            position_scores.append({
-                'position': int(pos),
-                'score': float(score),
-                'function_weight': func_w,
-                'maf': maf,
-                'annotation': self.pos_annotation.get(pos, 'other'),
-                'phenotype_logp': pheno.get('logp', 0.0),
-                'phenotype_effect': pheno.get('effect', 0.0),
-                'min_count': pheno.get('min_count', 0),
-            })
+            item = self._site_weight_record(int(pos))
+            if item is not None:
+                position_scores.append(item)
         return position_scores
 
     def _is_boundary_gene_body_position(self, pos, window=500):
@@ -6203,8 +6136,9 @@ class HaplotypeScorer:
     def _select_functional_positions(self, max_positions=12):
         """Select function-weighted positions for sub-haplotype discovery.
 
-        This intentionally uses only local annotation, local phenotype signal,
-        MAF/missingness, and LD pruning. Literature variants are not inputs.
+        This intentionally uses only local annotation, external site evidence,
+        MAF/missingness, and LD pruning. Literature variants and validation
+        phenotypes are not inputs.
         """
         scored = self._score_positions_for_grouping()
         if not scored:
@@ -6251,27 +6185,13 @@ class HaplotypeScorer:
             add_ranked(scored, max_positions)
 
         if len(selected) < max_positions:
-            high_signal_boundary = []
-            positive_signal = [
+            boundary_candidates = [
                 item for item in scored
-                if item.get('phenotype_logp', 0.0) > 0 or item.get('phenotype_effect', 0.0) > 0
+                if item['annotation'] in {'intron', 'synonymous', 'UTR', 'other'}
+                and self._is_boundary_gene_body_position(item['position'])
+                and item.get('boundary_score', 0.0) > 0
             ]
-            if positive_signal:
-                logp_values = [item.get('phenotype_logp', 0.0) for item in positive_signal]
-                effect_values = [item.get('phenotype_effect', 0.0) for item in positive_signal]
-                logp_cutoff = float(np.quantile(logp_values, 0.60)) if logp_values else 0.0
-                effect_cutoff = float(np.quantile(effect_values, 0.60)) if effect_values else 0.0
-                high_signal_boundary = [
-                    item for item in positive_signal
-                    if item['annotation'] in {'intron', 'synonymous', 'UTR'}
-                    and self._is_boundary_gene_body_position(item['position'])
-                    and item.get('min_count', 0) >= 2
-                    and (
-                        item.get('phenotype_logp', 0.0) >= logp_cutoff
-                        or item.get('phenotype_effect', 0.0) >= effect_cutoff
-                    )
-                ]
-            add_ranked(high_signal_boundary, max_positions, prune_ld=False)
+            add_ranked(boundary_candidates, max_positions, prune_ld=False)
 
         if len(selected) < max_positions and selected:
             anchor_positions = selected[:]
@@ -6353,7 +6273,8 @@ class HaplotypeScorer:
                 key=lambda g: (
                     g.get('rank_score') or 0.0,
                     min(g.get('sample_count') or 0, 50),
-                    g.get('mean_phenotype') if g.get('mean_phenotype') is not None else -np.inf,
+                    g.get('representative_haplotype_count') or 0,
+                    str(g.get(f'{sequence_key}_sequence') or ''),
                 )
             )
         return {
@@ -7376,15 +7297,20 @@ class HaplotypeScorer:
                  slope, intercept, component_weights, confidence_level, low_confidence,
                  circularity_warning
         """
+        zero_component = {hap: 0.0 for hap in self.unique_haps}
         raw_components = {
             'variant_effect': self.compute_variant_effect_score(),
             'burden': self.compute_burden_score(),
-            'eb_effect': self.compute_eb_effect_score(),
             'multi_omics': self.compute_multi_omics_score(),
             'fine_mapping': self.compute_fine_mapping_score(),
-            'effect_size': self.compute_effect_size_score(),
             'genetic_distinct': self.compute_genetic_distinctiveness_score(),
         }
+        if self.score_mode == 'robust_discovery':
+            raw_components['eb_effect'] = dict(zero_component)
+            raw_components['effect_size'] = dict(zero_component)
+        else:
+            raw_components['eb_effect'] = self.compute_eb_effect_score()
+            raw_components['effect_size'] = self.compute_effect_size_score()
 
         # Winsorize + MinMax 归一化各组件
         norm_components = {k: self._winsorize_normalize(v) for k, v in raw_components.items()}
@@ -7406,8 +7332,8 @@ class HaplotypeScorer:
                     total += w * score_components[comp_name].get(hap, 0.0)
             hap_total[hap] = total
         directional_total, direction_score = self._direction_adjust_hap_totals(hap_total)
-        score_axis = 'directional_total' if self.expected_direction != 'unknown' else 'total'
-        axis_totals = directional_total if score_axis == 'directional_total' else hap_total
+        score_axis = 'total'
+        axis_totals = hap_total
 
         core_haplotype_groups = {}
         functional_haplotype_groups = {}

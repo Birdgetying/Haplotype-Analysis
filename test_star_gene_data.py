@@ -386,6 +386,106 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(scorer.pos_annotation[10], "diagnostic_marker")
         self.assertGreater(scorer.pos_func_weight[10], scorer.FUNCTIONAL_WEIGHTS["other"])
 
+    def test_robust_discovery_score_is_unchanged_when_phenotype_is_inverted(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(12):
+            rows.append({
+                "SampleID": f"F_{i}",
+                "Hap_Name": "FunctionalPromoter",
+                "Haplotype_Seq": "A|G|T",
+                "Trait": 10.0 + i,
+            })
+        for i in range(12):
+            rows.append({
+                "SampleID": f"N_{i}",
+                "Hap_Name": "BackgroundNoise",
+                "Haplotype_Seq": "C|A|C",
+                "Trait": 100.0 + i,
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        inverted_df = hap_sample_df.copy()
+        inverted_df["Trait"] = -inverted_df["Trait"]
+        variant_info = {
+            100: {"ref": "C", "alt": "A", "annotation": "promoter_core", "maf": 0.5, "missing_rate": 0.0},
+            200: {"ref": "G", "alt": "A", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+            300: {"ref": "T", "alt": "C", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+        }
+
+        def score(df):
+            return HaplotypeScorer(
+                hap_sample_df=df,
+                variant_positions=[100, 200, 300],
+                variant_info=variant_info,
+                phenotype_col="Trait",
+                score_mode="robust_discovery",
+                expected_direction="increases_trait",
+            ).score_all()
+
+        original = score(hap_sample_df)
+        inverted = score(inverted_df)
+
+        self.assertEqual(original["score_axis"], "total")
+        self.assertEqual(inverted["score_axis"], "total")
+        self.assertEqual(
+            original["functional_haplotype_groups"]["functional_positions"],
+            inverted["functional_haplotype_groups"]["functional_positions"],
+        )
+        for hap in ("FunctionalPromoter", "BackgroundNoise"):
+            self.assertAlmostEqual(
+                original["per_haplotype"][hap]["total"],
+                inverted["per_haplotype"][hap]["total"],
+                places=9,
+            )
+
+    def test_robust_discovery_uses_only_explicit_external_site_evidence(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "HapRef", "Haplotype_Seq": "G|C", "Trait": 1.0},
+            {"SampleID": "S2", "Hap_Name": "HapRef", "Haplotype_Seq": "G|C", "Trait": 2.0},
+            {"SampleID": "S3", "Hap_Name": "HapAlt", "Haplotype_Seq": "A|T", "Trait": 99.0},
+            {"SampleID": "S4", "Hap_Name": "HapAlt", "Haplotype_Seq": "A|T", "Trait": 100.0},
+        ])
+        variant_info = {
+            100: {"ref": "G", "alt": "A", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+            200: {"ref": "C", "alt": "T", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+        }
+
+        local_pvalue_scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            gwas_data=[{"pos": 200, "pvalue": 1e-12}],
+            score_mode="robust_discovery",
+        )
+        external_pvalue_scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            gwas_data=[{"pos": 200, "pvalue": 1e-12, "external": True}],
+            score_mode="robust_discovery",
+        )
+
+        local_scores = {
+            item["position"]: item["score"]
+            for item in local_pvalue_scorer._score_positions_for_grouping()
+        }
+        external_scores = {
+            item["position"]: item["score"]
+            for item in external_pvalue_scorer._score_positions_for_grouping()
+        }
+
+        self.assertEqual(local_pvalue_scorer.pos_gwas_logp[200], 0.0)
+        self.assertGreater(external_pvalue_scorer.pos_gwas_logp[200], 0.0)
+        self.assertAlmostEqual(local_scores[100], local_scores[200], places=9)
+        self.assertGreater(external_scores[200], external_scores[100])
+
     def test_robust_discovery_adds_boundary_gene_body_signal_to_functional_groups(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
         import pandas as pd
@@ -1446,7 +1546,7 @@ class StarGeneDataTests(unittest.TestCase):
             expected_direction="decreases_trait",
         ).score_all()
 
-        self.assertEqual(scored["score_axis"], "directional_total")
+        self.assertEqual(scored["score_axis"], "total")
         self.assertGreater(
             scored["per_haplotype"]["HapWT"]["total"],
             scored["per_haplotype"]["HapD1b"]["total"],

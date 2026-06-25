@@ -707,3 +707,76 @@ through direction-aware plant-height ranking. The remaining limitation is that
 TaGW2-B1 raw top score still favors a non-literature functional group, so raw
 rank alone should not be used as the only discovery criterion for traits where
 biological direction matters.
+
+### 2026-06-25 Phenotype-free robust discovery rerun
+
+Purpose:
+The previous 2026-06-24 `robust_discovery` implementation used validation
+phenotype signal, EB marker effects, effect-size score, and direction-adjusted
+totals inside discovery ranking. That is not valid for prediction/discovery.
+The algorithm was changed to a local PostGWAS-like site weighting model:
+annotation severity, promoter/gene-boundary context, MAF/missingness, LD, and
+explicitly external GWAS/eQTL/PostGWAS-like evidence can affect discovery
+scores. The current validation phenotype and literature variants remain post
+hoc validation only. The code does not call the PostGWAS website at runtime.
+
+Implemented generic changes:
+- `robust_discovery` component weights now exclude phenotype-derived
+  `eb_effect` and `effect_size`.
+- Locally generated per-position phenotype p-values are ignored by scoring
+  unless a record is explicitly marked as external evidence.
+- Functional/core position selection no longer uses `phenotype_logp` or
+  `phenotype_effect`.
+- Active `score_axis` is always `total`; `directional_total` remains in JSON
+  only as a validation/audit helper.
+
+Run command:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-Zanke2014 --score-mode robust_discovery`
+
+Output directories:
+`star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery`,
+`star_gene_results/wheat_nature_2024/VRN-D1-Kiss2014__robust_discovery`,
+and
+`star_gene_results/wheat_nature_2024/Rht-Zanke2014__robust_discovery`.
+
+TaGW2-B1-remoteSNP result:
+The database has 756 phenotype-overlap samples, 71 regional SNPs, and 112
+full-region haplotypes. The phenotype-free functional positions are
+`291759689;291760409;291760469;291760535;291760677;291761315`, which still
+include all three Qin2014 diagnostic positions. Raw top full haplotypes are
+rare high-weight promoter-background combinations, led by `Hap18` with total
+`1.0882`. Raw top functional group is `C|T|G|G|G|C`, n=333, representative
+`Hap2`. The Qin2014 `Hap-6B-1` combined promoter haplotype remains
+`present_but_not_top` in raw phenotype-free ranking, although two of the three
+single diagnostic SNPs are `matched_top_haplotype`. Score regression is low
+(`R^2=0.0009`, `P=0.4020`), as expected after removing phenotype leakage.
+Current verdict: useful site-level recovery, but not a full positive proof
+without external GWAS/eQTL/PostGWAS weights or an allele-direction model.
+
+VRN-D1-Kiss2014 result:
+The database has 676 samples, 1 diagnostic marker, and 2 haplotypes. Functional
+positions are `[3]`. Raw phenotype-free top is `Hap2` / functional sequence
+`1`, n=38, matching the published spring/dominant `VRN-D1=1` marker for both
+DEV49_mean and DEV59_mean. Score regression remains DEV49_mean `R^2=0.0382`,
+`P=2.980468e-07`; DEV59_mean `R^2=0.0230`, `P=7.488576e-05`. Current verdict:
+positive proof under phenotype-free discovery.
+
+Rht-Zanke2014 result:
+The database has 368 samples, 2 diagnostic markers, and 4 haplotypes.
+Functional positions are `[1, 2]`. Raw phenotype-free full-haplotype top is
+`Hap3`, not the stable literature plant-height group. However the functional
+group top by support-shrunk rank is `B1A|D1B`, n=214 for PlantHeight_BLUE and
+n=205 for PlantHeight_GAT_2012, matching the Rht-D1b diagnostic marker group.
+The audit still reports `Rht-B1b_diagnostic_marker=matched_top_haplotype` and
+`Rht-D1b_diagnostic_marker=present_but_not_top` at single-marker raw top level.
+Current verdict: partial positive proof at functional-group level; raw
+full-haplotype top alone is not sufficient.
+
+Current interpretation:
+This rerun fixes the scientific leakage problem. It gives one strong
+phenotype-free proof (VRN-D1), one partial functional-group proof (Rht-Zanke),
+and one site-level but not haplotype-level recovery (TaGW2-B1). To reach the
+teacher's "at least 3 positive controls" standard without phenotype leakage,
+the next data improvement should add external GWAS/eQTL/PostGWAS-like weights
+or richer functional annotations, not reintroduce validation phenotype into
+the discovery score.
