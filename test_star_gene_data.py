@@ -81,6 +81,45 @@ class StarGeneDataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No data files matched"):
             list(iter_data_files(paper="not_a_paper"))
 
+    def test_star_gene_validator_prefers_exact_target_id_over_alias_matches(self):
+        from star_gene_validation import StarGeneValidator
+
+        manifest = {
+            "papers": [
+                {
+                    "paper_id": "wheat2024",
+                    "short_name": "wheat",
+                    "targets": [
+                        {
+                            "target_id": "Rht-D1b",
+                            "gene_or_locus": "Rht-D1",
+                            "aliases": ["TraesCS4D02G040400"],
+                        },
+                        {
+                            "target_id": "Rht-Zanke2014",
+                            "gene_or_locus": "Rht1",
+                            "aliases": ["Rht-B1", "Rht-D1", "Rht-D1b"],
+                        },
+                    ],
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            validator = StarGeneValidator(
+                manifest=manifest,
+                database_root=tmp_path / "db",
+                results_root=tmp_path / "results",
+            )
+
+            selected = [
+                target["target_id"]
+                for _, target in validator.iter_targets(papers=["wheat2024"], targets=["Rht-D1b"])
+            ]
+
+        self.assertEqual(selected, ["Rht-D1b"])
+
     def test_cli_print_downloads_exits_before_validation(self):
         from star_gene_validation import main
 

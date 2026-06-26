@@ -192,3 +192,11 @@
 - Added an active `directional_total` score axis when `expected_direction` is known. It preserves raw `total` for diagnosis but uses support-shrunk phenotype direction in the main HTML/summary/audit rank.
 - Re-ran `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-Zanke2014 --score-mode robust_discovery`. For `PlantHeight_BLUE`, top is now `Hap1=B1a|D1b`, `directional_total=0.9642`, n=214, `R^2=0.451`, `P=1.36e-49`; for `PlantHeight_GAT_2012`, top remains `Hap1`, `directional_total=0.9624`, `R^2=0.532`, `P=1.71e-60`.
 - `literature_variant_audit.csv` now reports `Rht-D1b_diagnostic_marker` as both `matched_top_haplotype` and `matched_directional_top_haplotype`. `Rht-B1b` remains present but not top because that class is `Hap3=B1b|Rht-D1a`, n=26.
+
+## 2026-06-26 Rht single-variant clarification
+- Rebuilt and reran the strict single-variant `Rht-D1b` positive control with `python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b` and `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --score-mode robust_discovery`.
+- The exact decisive SNP remains `chr4D:18781242 G>T`, annotated `c.181G>T`, `p.Glu61*`. The rebuilt database has 802 phenotype-overlap samples and one stop-gained marker.
+- New `Rht-D1b__robust_discovery` output: `Hap1=G` n=797, mean `99.615 cm`; `Hap2=T` n=3, mean `84.583 cm`, score `1.0938`; `Hap3=G/T` n=2, mean `90.500 cm`. Score regression is `R^2=0.0056`, `P=0.0334`, confidence low.
+- `literature_variant_audit.csv` reports `Rht-D1b_stop_gained=matched_top_haplotype`, allele counts `G:797;G/T:2;T:3`, carrier count `5`, and `top_haplotype_exact_expected=True`.
+- Support-shrunk direction-aware ranking selects the large wild-type `Hap1`, so `Rht-D1b` remains a weak exact single-SNP positive control rather than a strong proof. `Rht-Zanke2014` should be described as marker-panel reference only because it combines `Rht-B1` and `Rht-D1`.
+- Fixed target selection so an exact `--target Rht-D1b` request does not also select `Rht-Zanke2014` merely because that target lists `Rht-D1b` as an alias. Exact `target_id` matches now take precedence over alias matches.

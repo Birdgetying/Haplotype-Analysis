@@ -202,3 +202,30 @@ Code changes in this phase:
 - Added tests for Rht Zanke2014 preparation, direction-aware top selection, and direction-aware literature audit.
 
 TaPIF4 was checked but not used as a proof. `Supplementary_Data_5` has TaPIF4 haplotypes for 331 accessions but no matching phenotype table; the official Source Data ZIP is reachable but downloads were incomplete/corrupt during this session.
+
+### Phase 17: Rht strict single-variant clarification
+
+Status: complete
+
+After the teacher objected that `Rht-Zanke2014` combines multiple Rht genes, the strict Rht proof route was narrowed back to one gene and one functional base variant.
+
+Commands:
+
+```bash
+python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --score-mode robust_discovery
+```
+
+Result:
+
+`Rht-D1b` uses the exact literature stop-gained SNP `chr4D:18781242 G>T` (`c.181G>T`, `p.Glu61*`) from the WheatOmics merged SNP VCF and Watkins CFLN06 plant-height phenotype overlap. The 2026-06-26 rerun rebuilt one marker and 802 samples, then regenerated `star_gene_results/wheat_nature_2024/Rht-D1b__robust_discovery/Rht-D1b.html`.
+
+The strict top raw robust haplotype is `Hap2=T` with n=3, mean `84.583 cm`, score `1.0938`, and audit status `Rht-D1b_stop_gained=matched_top_haplotype`. Total functional-allele carriers are 5 (`G:797;G/T:2;T:3`). Because support-shrunk directional top selects the large wild-type `Hap1=G`, this remains weak exact-SNP validation rather than strong proof.
+
+Decision:
+
+`Rht-Zanke2014` remains useful as a marker-panel/directionality reference, but it should not be used as strict Rht proof because it combines `Rht-B1` and `Rht-D1` marker states.
+
+Implementation note:
+
+The first 2026-06-26 `--target Rht-D1b` run also selected `Rht-Zanke2014` because alias matching treated the marker-panel target's `Rht-D1b` alias as equal to the exact target. `StarGeneValidator.iter_targets()` now gives exact `target_id` filters precedence over alias matches, with a regression test in `test_star_gene_data.py`.

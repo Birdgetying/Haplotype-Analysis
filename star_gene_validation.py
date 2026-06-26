@@ -294,6 +294,14 @@ class StarGeneValidator:
                      targets: Optional[Sequence[str]] = None) -> Iterable[Tuple[Dict[str, Any], Dict[str, Any]]]:
         paper_filter = {p.lower() for p in papers or []}
         target_filter = {t.lower() for t in targets or []}
+        exact_target_ids = {
+            str(target.get('target_id', '')).lower()
+            for paper in self.manifest.get('papers', [])
+            for target in (paper.get('targets', []) or [])
+            if str(target.get('target_id', '')).lower()
+        }
+        exact_requested = target_filter & exact_target_ids
+        fallback_filter = target_filter - exact_requested
         for paper in self.manifest.get('papers', []):
             paper_ids = {
                 str(paper.get('paper_id', '')).lower(),
@@ -303,13 +311,21 @@ class StarGeneValidator:
             if paper_filter and paper_filter.isdisjoint(paper_ids):
                 continue
             for target in paper.get('targets', []) or []:
+                target_id = str(target.get('target_id', '')).lower()
+                if exact_requested and target_id in exact_requested:
+                    yield paper, target
+                    continue
+
                 aliases = target.get('aliases') or []
                 target_ids = {
-                    str(target.get('target_id', '')).lower(),
+                    target_id,
                     str(target.get('gene_or_locus', '')).lower(),
                     *{str(a).lower() for a in aliases},
                 }
-                if target_filter and target_filter.isdisjoint(target_ids):
+                if fallback_filter and not fallback_filter.isdisjoint(target_ids):
+                    yield paper, target
+                    continue
+                if target_filter:
                     continue
                 yield paper, target
 
