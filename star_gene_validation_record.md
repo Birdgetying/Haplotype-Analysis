@@ -30,11 +30,13 @@ Current proof set for the teacher's "at least three" requirement:
 2. `VRN-D1-Kiss2014__robust_discovery`: stable diagnostic-marker proof.
    The top robust single-marker haplotype is `VRN-D1=1` (`Hap2`, n=38)
    and has significant DEV49/DEV59 heading-date score regressions.
-3. `Rht-Zanke2014__robust_discovery`: proof after direction-aware scoring.
+3. `Rht-Zanke2014__robust_discovery`: marker-panel proof after direction-aware scoring.
    The retained raw `total` still explains the old high-plant-height Hap2
    artifact, but the active `directional_total` score ranks `Hap1=B1a|D1b`
    first (`n=214`), and the literature audit marks `Rht-D1b` as both
    `matched_top_haplotype` and `matched_directional_top_haplotype`.
+   This is no longer treated as a strict single-gene/base-variant Rht proof
+   because it combines `Rht-B1` and `Rht-D1` marker states.
 
 | Target | Trait | Score mode | Status | Key result | Conclusion |
 |---|---|---|---|---|---|
@@ -46,8 +48,8 @@ Current proof set for the teacher's "at least three" requirement:
 | VRN-Kiss2014 | heading date | robust_discovery | tested | Top score became `Hap2=0\|0\|1`, n=31; all-spring `1\|1\|1` was no longer top | Robust mode favors stable VRN-D1 signal over rare all-spring haplotype |
 | VRN-D1-Kiss2014 | heading date | robust_discovery | tested | Single-marker `VRN-D1=1` top haplotype `Hap2`, n=38; DEV49 P `2.98e-07`, DEV59 P `7.49e-05` | Counts as stable marker-level proof |
 | Rht-D1b | plant height | default | tested | Top-scored haplotype contained functional T allele but only 5 carriers | Weak positive control |
-| Rht-D1b | plant height | robust_discovery | tested | Top score remained functional T haplotype `Hap2`, n=3 | Weak positive control; carrier count too small |
-| Rht-Zanke2014 | plant height | robust_discovery + direction-aware score axis | tested | Active top-scored haplotype is `Hap1=B1a\|D1b`, n=214, matching the `Rht-D1b` diagnostic marker; retained raw total explains the old Hap2 artifact | Positive proof after direction-aware scoring; haplotype partition matches literature marker counts |
+| Rht-D1b | plant height | robust_discovery | tested | 2026-06-26 strict rerun: exact stop-gained `chr4D:18781242 G>T`; top score is functional T haplotype `Hap2`, n=3, mean `84.583 cm`, score `1.0938`; audit `matched_top_haplotype` | Weak exact single-variant positive control; carrier count too small and support-shrunk directional top is wild-type `Hap1` |
+| Rht-Zanke2014 | plant height | robust_discovery + direction-aware score axis | tested | Active top-scored haplotype is `Hap1=B1a\|D1b`, n=214, matching the `Rht-D1b` diagnostic marker; retained raw total explains the old Hap2 artifact | Marker-panel reference only for strict Rht proof, because it combines `Rht-B1` and `Rht-D1` marker states |
 | Rht-B1b | plant height | any | blocked | Functional T allele has 0 phenotype-overlap carriers | Cannot validate scoring in current samples |
 | TaPIF4 | TGW / plant height | any | blocked | Public repository lacks final per-sample promoter haplotype table and matching phenotype table | Not usable until final data are obtained |
 
@@ -65,8 +67,8 @@ the tested score mode.
 | TaGW2-A1 / TaGW2-6A | Jaiswal et al. 2015, PLoS ONE, `https://doi.org/10.1371/journal.pone.0129400` | Promoter `SNP-494` is the causal/expression-regulating marker; favorable allele `A`; four-SNP Hap5 pattern tracked as `SNP-988/SNP-739/SNP-593/SNP-494 = G/A/G/A`. | Local WatSeq chr6A SNP VCF plus remote WheatOmics micro-VCF. | Local data miss `SNP-494`; remote data cover `chr6A:237734341 G>A`, but expected `A` has 0 complete Watkins carriers, so Hap5 is not observed. | No exact validation. Some top haplotypes match the first three promoter SNPs, but not the decisive `SNP-494 A` state. | Gene-level TGW signal only; cannot be used as exact functional-haplotype proof in current samples. |
 | TaGW2-D1 | WheatOmics GW2 homolog annotation and current WatSeq A/D run. | No precise published decisive D1 functional marker was configured for this validation; current target used two regional SNPs around `TraesCS6D02G176900`. | WatSeq chr6D SNP VCF; 820 Watkins TGW-overlap samples; 2 retained SNPs. | Region covered sparsely; no literature decisive allele/haplotype available in manifest. | Not applicable. | Low-confidence regional signal only; not a star-gene proof. |
 | Rht-B1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`; mechanism is GA-insensitive reduced height through truncated/stabilized DELLA repression of growth. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Marker is present, but expected `T` has 0 phenotype-overlap carriers. | No, blocked before scoring. | Data-blocked in current Watkins panel; not a method-negative result. |
-| Rht-D1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4D:18781242 G>T`, `c.181G>T`, `p.Glu61*`; same GA-insensitive DELLA mechanism as Rht-B1b. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Covered and segregating, but only 5 functional-allele carriers overall; robust top haplotype carrier count is 3. | Yes. Default and robust top haplotype contains the functional `T` allele and has lower plant height. | Weak positive control: exact variant recovered, but sample size and R2 are too small for strong proof. |
-| Rht-Zanke2014 | Zanke et al. 2014 PLOS ONE Table S2, `https://doi.org/10.1371/journal.pone.0113287`; candidate-gene genotypes use Ellis et al. Rht markers. | Diagnostic `Rht-B1b` and `Rht-D1b` marker states with multi-environment plant-height phenotypes. | Downloaded Table S2 workbook; 368 complete varieties; combined `Rht-B1/Rht-D1` marker panel. | Covered and segregating; `Rht-D1b` occurs in 216 samples and exact `Hap1=B1a\|D1b` has n=214. | Active score axis `directional_total` ranks exact `Rht-D1b` haplotype first; audit status is `matched_top_haplotype` and `matched_directional_top_haplotype`. | Positive proof after fixing direction handling; raw total is retained only as a diagnostic trace. |
+| Rht-D1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4D:18781242 G>T`, `c.181G>T`, `p.Glu61*`; same GA-insensitive DELLA mechanism as Rht-B1b. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Covered and segregating, but only 5 functional-allele carriers overall; robust top haplotype carrier count is 3. | Yes for raw strict top score: robust top haplotype is exact `T` (`Hap2`, n=3). Direction-aware support shrinkage chooses wild-type `Hap1`, so this remains weak. | Weak exact single-variant positive control: the decisive variant is recovered, but carrier count and R2 are too small for strong proof. |
+| Rht-Zanke2014 | Zanke et al. 2014 PLOS ONE Table S2, `https://doi.org/10.1371/journal.pone.0113287`; candidate-gene genotypes use Ellis et al. Rht markers. | Diagnostic `Rht-B1b` and `Rht-D1b` marker states with multi-environment plant-height phenotypes. | Downloaded Table S2 workbook; 368 complete varieties; combined `Rht-B1/Rht-D1` marker panel. | Covered and segregating; `Rht-D1b` occurs in 216 samples and exact `Hap1=B1a\|D1b` has n=214. | Active score axis `directional_total` ranks exact `Rht-D1b` marker combination first; audit status is `matched_top_haplotype` and `matched_directional_top_haplotype`. | Useful marker-panel reference after fixing direction handling, but not strict proof because it combines two Rht genes. |
 | VRN-Kiss2014 | Kiss et al. 2014 supplementary marker table; VRN1 biology supported by VRN literature on promoter/intron-1 structural variants. | Diagnostic spring/dominant marker states `VRN-A1=1`, `VRN-B1=1`, `VRN-D1=1`; exact causal events are often promoter or first-intron structural variants, so this is marker-level validation. | Extracted Kiss2014 workbook; 676 samples with VRN marker states and DEV49/DEV59 heading dates. | Covered and segregating; all-three `1\|1\|1` exists but n=2; `VRN-D1=1` single-state haplotype `0\|0\|1` has n=31. | Default: all-three `1\|1\|1` matched top; robust_discovery: top became stable `0\|0\|1`, so all-three is present but not top. | Useful marker-level check; not a strong causal-SV proof. Shows rare-candidate and stable-common ranks should be reported separately. |
 | TaPIF4 / TaSG-D1-TaPIF4 | Cao et al. 2024, Nature Communications, `https://doi.org/10.1038/s41467-024-46419-0`; code at `https://github.com/QinZhen1995/CAU-TaSG`. | Primary functional variant in that paper is `TaSG-D1 E286K`, which enhances TaPIF4 phosphorylation/stability under heat stress. TaPIF4 promoter haplotypes include `Del` with 275-bp and 12-bp deletions, and `InDel` with 405-bp deletion plus 1909-bp insertion; these reduce heat-induced TaPIF4 expression. | Current public GitHub exposes scripts and `samlist`; local project does not have final `PIF_hap.txt`, `coverage.martix`, or matching sample-level TGW/height/heat phenotype table. | Not covered in the current database. | No, not run. | Blocked. This target cannot prove scoring until final per-sample promoter haplotypes or raw BAM-derived coverage matrix plus phenotypes are obtained. |
 
@@ -510,10 +512,34 @@ Output:
 
 Robust result:
 Top-scored haplotype remained the functional T-allele haplotype `Hap2`,
-n=3, mean plant height `84.583`, score `1.1013`, reliability `0.1304`.
-`Hap1` has n=797, mean `99.615`, score `0.0772`. Score regression
-`R^2=0.005`, `P=0.0453`. Literature audit status:
+n=3, mean plant height `84.583`, score `1.0938`, reliability `0.1304`.
+`Hap1` has n=797, mean `99.615`, score `0.0000`. Score regression
+`R^2=0.0056`, `P=0.0334`. Literature audit status:
 `Rht-D1b_stop_gained = matched_top_haplotype`.
+
+2026-06-26 strict rerun:
+Commands:
+`python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --score-mode robust_discovery`
+
+Outputs:
+`star_gene_results/wheat_nature_2024/Rht-D1b__robust_discovery/Rht-D1b.html`
+
+`star_gene_results/wheat_nature_2024/Rht-D1b__robust_discovery/haplotype_score.html`
+
+The database rebuild used one exact stop-gained SNP and 802 phenotype-overlap
+samples. Haplotypes are `Hap1=G` (n=797), `Hap2=T` (n=3), and `Hap3=G/T`
+(n=2). The strict top-scored haplotype is `Hap2=T`, exactly matching the
+published `Rht-D1b` allele. The audit row records allele counts
+`G:797;G/T:2;T:3`, carrier count `5`, `top_haplotype_exact_expected=True`,
+and `validation_status=matched_top_haplotype`.
+
+The same run also shows the limitation: the support-shrunk directional top is
+`Hap1=G`, not `Hap2=T`, because the true functional class has only three
+pure-T top-haplotype samples. Therefore this result is valid evidence that the
+scorer can recover the decisive functional variant when it is present, but it
+is not strong enough to count as one of the teacher's robust three-proof set.
 
 Interpretation:
 Rht-D1b supports that robust mode can still recover a known functional
@@ -828,3 +854,67 @@ Single-gene VCF data are now available for VRN-A1/B1/D1, but the current data
 do not yet include VRN INDEL/SV/CNV calls. The next step is to build separate
 VCF-derived databases for each VRN gene and run robust discovery scoring
 without combining VRN-A1, VRN-B1, and VRN-D1 into one haplotype.
+
+### 2026-06-26 VRN WheatOmics SNP VCF robust-discovery run
+
+Purpose:
+Test the newly downloaded VRN SNP-only micro-VCFs as separate single-gene
+targets. This avoids the earlier Kiss2014 multi-marker panel issue and does
+not combine VRN-A1, VRN-B1, and VRN-D1 into one haplotype.
+
+Preparation command:
+`python prepare_wheat2024_vrn_remote_snps.py`
+
+Analysis command:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP --score-mode robust_discovery`
+
+Phenotype:
+Watkins CFLN06 growth habit was converted from `GrwHabit_E_sw-CFLN06` into
+`GrowthHabitSpringScore_CFLN06`, defined as the fraction of `s` calls in the
+spring/winter string. Non-`s/w` values were excluded. `PlantHeight_CFLN06` was
+retained only as a covariate/auxiliary column, not as the VRN validation trait.
+
+Output directories:
+- `star_gene_results/wheat_nature_2024/VRN-A1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-D1-remoteSNP__robust_discovery`
+
+VRN-A1-remoteSNP result:
+The database has 96 SNPs, 18 retained haplotypes, and 663 phenotype-overlap
+samples. Haplotype association with spring score is significant but modest:
+corrected P `2.1114e-02`, PVE `10.94%`. The top robust-scored haplotype is
+`Hap4`, n=39, mean spring score `0.9679`, score `1.1390`; direction is reported
+as consistent. However score-vs-phenotype regression is not significant
+(`R^2=0.0000`, P `0.8834`). Current verdict: weak/partial positive signal for
+ranking a spring-like haplotype, but not a strong proof that the generic score
+tracks phenotype across haplotypes.
+
+VRN-B1-remoteSNP result:
+The database has 127 SNPs, 26 retained haplotypes, and 511 phenotype-overlap
+samples. Haplotype association is strong: corrected P `4.7736e-06`, PVE
+`17.18%`, and score-vs-phenotype regression is significant (`R^2=0.0415`, P
+`3.4551e-06`). But the slope is negative and the audit reports direction as
+inconsistent. The top robust-scored haplotype is `Hap3`, n=15, mean spring score
+`0.4333`, score `1.3437`; the top score therefore favors a more winter-like
+haplotype rather than the expected spring-like direction. Current verdict:
+clear regional SNP signal, but not a positive proof of correct discovery
+direction under the current robust score.
+
+VRN-D1-remoteSNP result:
+The database has 58 SNPs, 21 retained haplotypes, and 712 phenotype-overlap
+samples. Haplotype association is significant: corrected P `7.0250e-05`, PVE
+`8.26%`. The top robust-scored haplotype is `Hap12`, n=4, mean spring score
+`1.0000`, score `1.1886`; direction is reported as consistent. But the top
+haplotype is very rare and score-vs-phenotype regression is not significant
+(`R^2=0.0036`, P `0.1094`). Current verdict: partial association evidence, not
+a strong proof.
+
+Overall interpretation:
+The SNP-only VRN VCF run does not yet give three strong proof cases. It shows
+that VRN regional SNP haplotypes carry growth-habit signal, especially at
+VRN-B1 and VRN-D1, but the discovery score has two limitations: rare
+high-scored haplotypes can dominate, and the score direction can disagree with
+the expected biological direction. Because the downloaded VRN data are SNP-only
+and do not include the known promoter/intron-1 deletion, CNV, or SV causal
+alleles, these results should be treated as regional linked-SNP validation, not
+as exact literature functional-variant validation.

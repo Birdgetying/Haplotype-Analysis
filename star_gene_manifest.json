@@ -816,6 +816,78 @@
           "notes": "Single-marker VRN-D1 validation target from Kiss et al. 2014. This is the most stable VRN component in the current marker-panel analysis."
         },
         {
+          "target_id": "VRN-A1-remoteSNP",
+          "gene_or_locus": "VRN-A1",
+          "target_type": "gene",
+          "aliases": ["TraesCS5A01G391700", "VRN-A1 WheatOmics SNP", "VRN-A1 remote SNP"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0",
+          "coordinates": {
+            "chrom": "5A",
+            "start": 587409454,
+            "end": 587425416
+          },
+          "required_database_source": "wheatomics_remote_vrn_snp_vcf",
+          "expected_direction": "increases_trait",
+          "traits": [
+            {
+              "name": "growth habit spring score",
+              "aliases": ["GrowthHabitSpringScore_CFLN06", "spring score", "spring growth habit"],
+              "local_columns": ["GrowthHabitSpringScore_CFLN06"],
+              "expected_direction": "increases_trait"
+            }
+          ],
+          "notes": "VRN-A1 single-gene SNP-only validation from WheatOmics merged SNP VCF and Watkins growth habit. Literature VRN-A1 causal alleles often involve promoter or intron-1 structural variation, so this target tests regional SNP haplotype signal but is not exact causal-SV proof."
+        },
+        {
+          "target_id": "VRN-B1-remoteSNP",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "gene",
+          "aliases": ["TraesCS5B01G396600", "VRN-B1 WheatOmics SNP", "VRN-B1 remote SNP"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0",
+          "coordinates": {
+            "chrom": "5B",
+            "start": 573800883,
+            "end": 573818070
+          },
+          "required_database_source": "wheatomics_remote_vrn_snp_vcf",
+          "expected_direction": "increases_trait",
+          "traits": [
+            {
+              "name": "growth habit spring score",
+              "aliases": ["GrowthHabitSpringScore_CFLN06", "spring score", "spring growth habit"],
+              "local_columns": ["GrowthHabitSpringScore_CFLN06"],
+              "expected_direction": "increases_trait"
+            }
+          ],
+          "notes": "VRN-B1 single-gene SNP-only validation from WheatOmics merged SNP VCF and Watkins growth habit. Literature VRN-B1 causal alleles can include copy-number or structural variation, so this target tests regional SNP haplotype signal but is not exact causal-SV proof."
+        },
+        {
+          "target_id": "VRN-D1-remoteSNP",
+          "gene_or_locus": "VRN-D1",
+          "target_type": "gene",
+          "aliases": ["TraesCS5D01G401500", "VRN-D1 WheatOmics SNP", "VRN-D1 remote SNP"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0",
+          "coordinates": {
+            "chrom": "5D",
+            "start": 467174609,
+            "end": 467186508
+          },
+          "required_database_source": "wheatomics_remote_vrn_snp_vcf",
+          "expected_direction": "increases_trait",
+          "traits": [
+            {
+              "name": "growth habit spring score",
+              "aliases": ["GrowthHabitSpringScore_CFLN06", "spring score", "spring growth habit"],
+              "local_columns": ["GrowthHabitSpringScore_CFLN06"],
+              "expected_direction": "increases_trait"
+            }
+          ],
+          "notes": "VRN-D1 single-gene SNP-only validation from WheatOmics merged SNP VCF and Watkins growth habit. This is independent of the Kiss2014 diagnostic-marker table but remains SNP-only and does not include known VRN deletion/SV/CNV alleles unless represented by linked SNP haplotypes."
+        },
+        {
           "target_id": "TaGW2-D1",
           "gene_or_locus": "TaGW2-D1",
           "target_type": "gene",
