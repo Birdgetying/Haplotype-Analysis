@@ -263,3 +263,42 @@ The still-needed sample-level WatSeq INDEL/SV/CNV genotype files could not be
 downloaded automatically in this pass. WWWG2B API endpoints currently return
 HTTP 526, and Earlham WatSeq URLs return HTML rejection pages rather than VCF
 data.
+
+### Phase 19: Rht-D1 single-marker Zanke2014 clarification
+
+Status: complete
+
+After the teacher objected that `Rht-Zanke2014` combines `Rht-B1` and
+`Rht-D1`, the Zanke2014 Table S2 adapter was extended with
+`--single-marker-targets`. This builds `Rht-B1-Zanke2014` and
+`Rht-D1-Zanke2014` from the same workbook while keeping each target to one
+marker column.
+
+Commands:
+
+```bash
+python prepare_wheat2024_rht_zanke2014.py --single-marker-targets
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1-Zanke2014 --score-mode robust_discovery
+```
+
+Output:
+
+`star_gene_results/wheat_nature_2024/Rht-D1-Zanke2014__robust_discovery/Rht-D1-Zanke2014.html`
+
+Result:
+
+`Rht-D1-Zanke2014` has 368 varieties and one marker. The haplotypes are
+`Hap1=D1b` n=214, `Hap2=Rht-D1a` n=152, and mixed `Hap3=D1b/Rht-D1a` n=2.
+The raw robust total top is the two-sample mixed `Hap3`, but the
+direction-aware top is exact `Hap1=D1b` with 214 samples. The literature audit
+reports `Rht-D1b_diagnostic_marker` as
+`matched_directional_top_haplotype`.
+
+Interpretation:
+
+This answers the "do not combine multiple genes" concern at marker level. It
+does not replace the exact SNP `Rht-D1b` route, because Zanke2014 encodes a
+diagnostic marker state rather than the nucleotide `chr4D:18781242 G>T`
+record. The two Rht routes should be described together: exact SNP evidence is
+weak but base-level; Zanke2014 single-marker evidence is stronger but
+marker-level.

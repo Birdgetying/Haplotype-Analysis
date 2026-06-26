@@ -2985,6 +2985,61 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("PlantHeight_BLUE", (db_dir / "phenotype_data.csv").read_text(encoding="utf-8"))
             self.assertIn("B1b|Rht-D1a", (db_dir / "haplotype_data.csv").read_text(encoding="utf-8"))
 
+    def test_wheat_rht_zanke2014_prepare_builds_single_marker_targets(self):
+        import pandas as pd
+        from openpyxl import Workbook
+        from prepare_wheat2024_rht_zanke2014 import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_path = tmp_path / "zanke_table_s2.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Table_S2"
+            ws.append(["Table S2: List of varieties, genotyping data of candidate genes and phenotypic data."])
+            ws.append([None, None, None, "Ellis et al., 2002, TAG", None, "Ellis et al., 2002, TAG"])
+            ws.append([
+                "Variety name", "GW no.", "habit", "Rht-B1", None, "Rht-D1", None,
+                "Rht8", None, None, None, None, None, None, "Ppd-D1 wildtype",
+                "Ppd-D1a mutant", "09.AND.PH", "09.SEL.PH", "09.WOH.PH",
+                "10.AND.PH", "10.JAN.PH", "10.SAU.PH", "10.SEL.PH",
+                "10.WOH.PH", "BLUES", "GAT_2012",
+            ])
+            ws.append([
+                None, None, None, "mutant (dwarfed)", "wild type (tall)",
+                "4D-mutant (DF-MR2)", "4D-wild type (DF2-WR2)",
+            ])
+            ws.append(["Tall1", "GW0001", "winter", None, 1, None, 1, None, None, None, None, None, None, None, 1, None, 110, 112, 108, 111, 109, 113, 107, 110, 110, 111])
+            ws.append(["B1short", "GW0002", "winter", 1, None, None, 1, None, None, None, None, None, None, None, 1, None, 88, 90, 86, 89, 87, 91, 85, 88, 88, 89])
+            ws.append(["D1short", "GW0003", "spring", None, 1, 1, None, None, None, None, None, None, None, None, 1, None, 82, 84, 80, 83, 81, 85, 79, 82, 82, 83])
+            ws.append(["DoubleShort", "GW0004", "spring", 1, None, 1, None, None, None, None, None, None, None, None, 1, None, 70, 72, 68, 71, 69, 73, 67, 70, 70, 71])
+            ws.append(["Sum", None, None, 2, 2, 2, 2])
+            wb.save(source_path)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            rc = prepare_main([
+                "--source-workbook", str(source_path),
+                "--output-root", str(output_root),
+                "--intermediate-root", str(intermediate_root),
+                "--min-haplotype-count", "1",
+                "--single-marker-targets",
+            ])
+
+            self.assertEqual(rc, 0)
+            db_dir = output_root / "Rht-D1-Zanke2014"
+            gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["gene_symbol"], "Rht-D1")
+            self.assertEqual(gene_info["marker_panel"], ["Rht-D1"])
+            variant_info = pd.read_csv(db_dir / "variant_info.csv")
+            self.assertEqual(variant_info["marker_id"].tolist(), ["Rht-D1"])
+            self.assertEqual(variant_info["ref"].tolist(), ["Rht-D1a"])
+            self.assertEqual(variant_info["alt"].tolist(), ["D1b"])
+            hap_text = (db_dir / "haplotype_data.csv").read_text(encoding="utf-8")
+            self.assertIn("D1b", hap_text)
+            self.assertIn("Rht-D1a", hap_text)
+            self.assertNotIn("|", hap_text)
+
     def test_wheat_vrn_kiss2014_prepare_builds_diagnostic_marker_database(self):
         from openpyxl import Workbook
         from prepare_wheat2024_vrn_kiss2014 import main as prepare_main

@@ -50,6 +50,7 @@ Current proof set for the teacher's "at least three" requirement:
 | Rht-D1b | plant height | default | tested | Top-scored haplotype contained functional T allele but only 5 carriers | Weak positive control |
 | Rht-D1b | plant height | robust_discovery | tested | 2026-06-26 strict rerun: exact stop-gained `chr4D:18781242 G>T`; top score is functional T haplotype `Hap2`, n=3, mean `84.583 cm`, score `1.0938`; audit `matched_top_haplotype` | Weak exact single-variant positive control; carrier count too small and support-shrunk directional top is wild-type `Hap1` |
 | Rht-Zanke2014 | plant height | robust_discovery + direction-aware score axis | tested | Active top-scored haplotype is `Hap1=B1a\|D1b`, n=214, matching the `Rht-D1b` diagnostic marker; retained raw total explains the old Hap2 artifact | Marker-panel reference only for strict Rht proof, because it combines `Rht-B1` and `Rht-D1` marker states |
+| Rht-D1-Zanke2014 | plant height | robust_discovery | tested | Single-marker Rht-D1 target from Zanke2014 Table S2. Directional top is exact `Hap1=D1b`, n=214; raw total top is `Hap3=D1b/Rht-D1a`, n=2 | Single-gene marker-level proof that avoids B1/D1 combination; read direction-aware top, not the n=2 mixed raw top |
 | Rht-B1b | plant height | any | blocked | Functional T allele has 0 phenotype-overlap carriers | Cannot validate scoring in current samples |
 | TaPIF4 | TGW / plant height | any | blocked | Public repository lacks final per-sample promoter haplotype table and matching phenotype table | Not usable until final data are obtained |
 
@@ -69,6 +70,7 @@ the tested score mode.
 | Rht-B1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4B:30861571 C>T`, `c.190C>T`, `p.Gln64*`; mechanism is GA-insensitive reduced height through truncated/stabilized DELLA repression of growth. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Marker is present, but expected `T` has 0 phenotype-overlap carriers. | No, blocked before scoring. | Data-blocked in current Watkins panel; not a method-negative result. |
 | Rht-D1b | Rht-1 DELLA literature, including Peng et al. 1999 and Ellis et al. 2002 perfect-marker work; WheatOmics annotation used for coordinate. | Canonical semi-dwarf stop-gained DELLA allele, `chr4D:18781242 G>T`, `c.181G>T`, `p.Glu61*`; same GA-insensitive DELLA mechanism as Rht-B1b. | WheatOmics merged SNP VCF plus Watkins CFLN06 plant-height phenotype. | Covered and segregating, but only 5 functional-allele carriers overall; robust top haplotype carrier count is 3. | Yes for raw strict top score: robust top haplotype is exact `T` (`Hap2`, n=3). Direction-aware support shrinkage chooses wild-type `Hap1`, so this remains weak. | Weak exact single-variant positive control: the decisive variant is recovered, but carrier count and R2 are too small for strong proof. |
 | Rht-Zanke2014 | Zanke et al. 2014 PLOS ONE Table S2, `https://doi.org/10.1371/journal.pone.0113287`; candidate-gene genotypes use Ellis et al. Rht markers. | Diagnostic `Rht-B1b` and `Rht-D1b` marker states with multi-environment plant-height phenotypes. | Downloaded Table S2 workbook; 368 complete varieties; combined `Rht-B1/Rht-D1` marker panel. | Covered and segregating; `Rht-D1b` occurs in 216 samples and exact `Hap1=B1a\|D1b` has n=214. | Active score axis `directional_total` ranks exact `Rht-D1b` marker combination first; audit status is `matched_top_haplotype` and `matched_directional_top_haplotype`. | Useful marker-panel reference after fixing direction handling, but not strict proof because it combines two Rht genes. |
+| Rht-D1-Zanke2014 | Zanke et al. 2014 PLOS ONE Table S2, `https://doi.org/10.1371/journal.pone.0113287`; single-marker extraction from the same candidate-gene table. | Diagnostic `Rht-D1b` marker state only. It is a marker-level proxy for the known Rht-D1b DELLA semi-dwarf allele, not a base-level `chr4D:18781242 G>T` VCF record. | Downloaded Table S2 workbook; 368 complete varieties; only the `Rht-D1` marker column is used. | Covered and segregating; `D1b` occurs in 216 samples, with exact `Hap1=D1b` n=214 and mixed `Hap3=D1b/Rht-D1a` n=2. | Direction-aware top is exact `Hap1=D1b` and audit `directional_validation_status=matched_directional_top_haplotype`. Raw total top is the tiny mixed `Hap3`, so it should not be interpreted as the biological top. | Single-gene marker-level proof that answers the teacher's no-combined-gene concern. It complements, but does not replace, the weak exact-SNP `Rht-D1b` result. |
 | VRN-Kiss2014 | Kiss et al. 2014 supplementary marker table; VRN1 biology supported by VRN literature on promoter/intron-1 structural variants. | Diagnostic spring/dominant marker states `VRN-A1=1`, `VRN-B1=1`, `VRN-D1=1`; exact causal events are often promoter or first-intron structural variants, so this is marker-level validation. | Extracted Kiss2014 workbook; 676 samples with VRN marker states and DEV49/DEV59 heading dates. | Covered and segregating; all-three `1\|1\|1` exists but n=2; `VRN-D1=1` single-state haplotype `0\|0\|1` has n=31. | Default: all-three `1\|1\|1` matched top; robust_discovery: top became stable `0\|0\|1`, so all-three is present but not top. | Useful marker-level check; not a strong causal-SV proof. Shows rare-candidate and stable-common ranks should be reported separately. |
 | TaPIF4 / TaSG-D1-TaPIF4 | Cao et al. 2024, Nature Communications, `https://doi.org/10.1038/s41467-024-46419-0`; code at `https://github.com/QinZhen1995/CAU-TaSG`. | Primary functional variant in that paper is `TaSG-D1 E286K`, which enhances TaPIF4 phosphorylation/stability under heat stress. TaPIF4 promoter haplotypes include `Del` with 275-bp and 12-bp deletions, and `InDel` with 405-bp deletion plus 1909-bp insertion; these reduce heat-induced TaPIF4 expression. | Current public GitHub exposes scripts and `samlist`; local project does not have final `PIF_hap.txt`, `coverage.martix`, or matching sample-level TGW/height/heat phenotype table. | Not covered in the current database. | No, not run. | Blocked. This target cannot prove scoring until final per-sample promoter haplotypes or raw BAM-derived coverage matrix plus phenotypes are obtained. |
 
@@ -974,6 +976,55 @@ micro-VCFs, but they do not provide a stronger proof set because they are not
 matched to the Watkins phenotype samples. For VRN, the decisive promoter or
 intron-1 deletion/CNV/SV data remain missing from the current accessible
 sources.
+
+### 2026-06-26 Rht-D1-Zanke2014 single-marker rerun
+
+Purpose:
+Respond to the teacher's concern that `Rht-Zanke2014` combines `Rht-B1` and
+`Rht-D1`. This rerun keeps only the Zanke2014 `Rht-D1` diagnostic marker
+column, so the haplotypes no longer encode multiple Rht genes.
+
+Literature validation object:
+`Rht-D1b` diagnostic marker state from Zanke et al. 2014 Table S2, derived
+from the Ellis et al. marker system. This is marker-level evidence for
+Rht-D1b, not the base-level `chr4D:18781242 G>T` stop-gained VCF proof.
+
+Data source:
+`external_data/literature/rht_zanke2014/Table_S2_candidate_genes_phenotypes.xlsx`
+
+Preparation command:
+`python prepare_wheat2024_rht_zanke2014.py --single-marker-targets`
+
+Database output:
+`star_gene_database/wheat_nature_2024/Rht-D1-Zanke2014`
+
+Analysis command:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1-Zanke2014 --score-mode robust_discovery`
+
+HTML output:
+`star_gene_results/wheat_nature_2024/Rht-D1-Zanke2014__robust_discovery/Rht-D1-Zanke2014.html`
+
+Haplotype split:
+- `Hap1=D1b`, n=214.
+- `Hap2=Rht-D1a`, n=152.
+- `Hap3=D1b/Rht-D1a`, n=2.
+
+Score/audit result:
+- For `PlantHeight_BLUE`, score regression `R^2=0.3932`, `P=1.3256e-41`.
+- For `PlantHeight_GAT_2012`, score regression `R^2=0.4406`, `P=1.0679e-46`.
+- Raw robust total top is `Hap3=D1b/Rht-D1a`, score `0.2409`, n=2.
+- Direction-aware top is exact `Hap1=D1b`, score `0.2`, n=214.
+- `literature_variant_audit.csv` reports allele counts
+  `D1b:214;D1b/Rht-D1a:2;Rht-D1a:152`, carrier count `216`, and
+  `directional_validation_status=matched_directional_top_haplotype`.
+
+Interpretation:
+This target is the cleanest current Rht marker-level validation because it
+uses one gene/marker only and recovers the known shorter-height `D1b` class
+as the stable direction-aware top. It should be presented alongside the strict
+base-level `Rht-D1b` SNP result: the SNP result is exact but weak because
+carrier count is tiny, while this Zanke2014 single-marker result is strong at
+marker level but not nucleotide-level VCF evidence.
 
 ### 2026-06-26 WheatOmics Zhai indel marker annotation supplement
 

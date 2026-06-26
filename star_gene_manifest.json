@@ -407,6 +407,47 @@
           "notes": "External Rht positive-control route from Zanke et al. 2014 PLOS ONE Table S2: per-variety Rht-B1/Rht-D1 candidate-gene marker states and multi-environment plant-height phenotypes. Prepared by prepare_wheat2024_rht_zanke2014.py."
         },
         {
+          "target_id": "Rht-D1-Zanke2014",
+          "gene_or_locus": "Rht-D1",
+          "target_type": "diagnostic_marker",
+          "aliases": ["Zanke2014-Rht-D1", "Rht-D1-single-marker", "Zanke2014-D1b"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Zanke et al. 2014 PLOS ONE Table S2",
+          "coordinates": {
+            "chrom": "diagnostic_marker_panel",
+            "start": 1,
+            "end": 1
+          },
+          "required_database_source": "zanke2014_rht_candidate_gene_table_s2",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "plant height BLUE",
+              "aliases": ["PlantHeight_BLUE", "BLUES", "plant_height"],
+              "local_columns": ["PlantHeight_BLUE"],
+              "expected_direction": "decreases_trait"
+            },
+            {
+              "name": "plant height GAT 2012",
+              "aliases": ["PlantHeight_GAT_2012", "GAT_2012"],
+              "local_columns": ["PlantHeight_GAT_2012"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "Rht-D1b_diagnostic_marker",
+              "variant_class": "functional_marker",
+              "chrom": "diagnostic_marker_panel",
+              "position": 1,
+              "marker_id": "Rht-D1",
+              "expected_allele": "D1b",
+              "source_note": "Zanke et al. 2014 Table S2 encodes the canonical Ellis et al. 2002 Rht-D1b mutant marker as the semi-dwarf Rht-D1 state. This single-marker target tests Rht-D1 alone and does not combine Rht-B1."
+            }
+          ],
+          "notes": "Single-gene/single-marker Rht-D1 positive-control route from Zanke et al. 2014 PLOS ONE Table S2. This is marker-state evidence for D1b, not base-level c.181G>T SNP evidence."
+        },
+        {
           "target_id": "TaGW2-A1",
           "gene_or_locus": "TaGW2-A1",
           "target_type": "gene",

@@ -28,6 +28,14 @@ DEFAULT_INTERMEDIATE_ROOT = Path("external_data/wheat_nature_2024/rht_zanke2014"
 TARGET_ID = "Rht-Zanke2014"
 SHEET_NAME = "Table_S2"
 MARKER_COLUMNS = ["Rht-B1", "Rht-D1"]
+MARKER_REF_ALT = {
+    "Rht-B1": ("B1a", "B1b"),
+    "Rht-D1": ("Rht-D1a", "D1b"),
+}
+MARKER_MEANING = {
+    "Rht-B1": "B1b=canonical Rht-B1b semi-dwarf mutant marker; B1a=wild type",
+    "Rht-D1": "D1b=canonical Rht-D1b semi-dwarf mutant marker; Rht-D1a=wild type",
+}
 PHENOTYPE_COLUMNS = [
     "PlantHeight_BLUE",
     "PlantHeight_GAT_2012",
@@ -82,6 +90,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Target id for the output database")
     parser.add_argument("--min-haplotype-count", type=int, default=1,
                         help="Minimum sample count for retaining a haplotype")
+    parser.add_argument("--single-marker-targets", action="store_true",
+                        help="Also build one-marker targets for Rht-B1 and Rht-D1")
     return parser
 
 
@@ -143,43 +153,56 @@ def load_zanke2014_table(source_workbook: Path, sheet_name: str = SHEET_NAME) ->
     return out.sort_values("SampleID")
 
 
-def write_precomputed_inputs(table: pd.DataFrame, intermediate_root: Path, target_id: str) -> tuple[Path, Path]:
+def write_precomputed_inputs(
+    table: pd.DataFrame,
+    intermediate_root: Path,
+    target_id: str,
+    marker_columns: Sequence[str],
+) -> tuple[Path, Path]:
     target_dir = intermediate_root / target_id
     target_dir.mkdir(parents=True, exist_ok=True)
     marker_output = target_dir / "marker_matrix.tsv"
     phenotype_output = target_dir / "phenotype.tsv"
     summary_output = target_dir / "marker_summary.tsv"
 
-    table[["SampleID", *MARKER_COLUMNS]].to_csv(marker_output, sep="\t", index=False)
+    table[["SampleID", *marker_columns]].to_csv(marker_output, sep="\t", index=False)
     table[["SampleID", *PHENOTYPE_COLUMNS]].to_csv(phenotype_output, sep="\t", index=False)
 
     rows = []
-    for marker in MARKER_COLUMNS:
+    for marker in marker_columns:
         for state, count in table[marker].value_counts(dropna=False).sort_index().items():
             rows.append({"marker": marker, "state": state, "count": int(count)})
     pd.DataFrame(rows).to_csv(summary_output, sep="\t", index=False)
     return marker_output, phenotype_output
 
 
-def update_metadata(db_dir: Path, source_workbook: Path, table: pd.DataFrame, target_id: str) -> None:
+def update_metadata(
+    db_dir: Path,
+    source_workbook: Path,
+    table: pd.DataFrame,
+    target_id: str,
+    marker_columns: Sequence[str],
+    gene_symbol: str = "Rht1",
+) -> None:
     gene_info_path = db_dir / "gene_info.json"
     with gene_info_path.open("r", encoding="utf-8") as f:
         gene_info = json.load(f)
     gene_info.update({
         "gene_id": target_id,
-        "gene_symbol": "Rht1",
+        "gene_symbol": gene_symbol,
         "chrom": "diagnostic_marker_panel",
         "start": 1,
-        "end": len(MARKER_COLUMNS),
+        "end": len(marker_columns),
         "gene_start": 1,
-        "gene_end": len(MARKER_COLUMNS),
+        "gene_end": len(marker_columns),
         "source": "zanke2014_rht_candidate_gene_table_s2",
         "source_workbook": str(source_workbook),
         "source_note": (
             "Zanke et al. 2014 PLOS ONE Table S2: varieties, candidate-gene "
             "genotypes and multi-environment plant-height phenotypes."
         ),
-        "marker_panel": MARKER_COLUMNS,
+        "marker_panel": list(marker_columns),
+        "available_rht_markers": MARKER_COLUMNS,
         "n_source_samples": int(len(table)),
     })
     with gene_info_path.open("w", encoding="utf-8") as f:
@@ -187,17 +210,19 @@ def update_metadata(db_dir: Path, source_workbook: Path, table: pd.DataFrame, ta
 
     variant_path = db_dir / "variant_info.csv"
     variant_df = pd.read_csv(variant_path)
-    variant_df["position"] = [1, 2]
-    variant_df["ref"] = ["B1a", "Rht-D1a"]
-    variant_df["alt"] = ["B1b", "D1b"]
+    for col in ["ref", "alt", "annotation", "marker_id"]:
+        if col in variant_df.columns:
+            variant_df[col] = variant_df[col].astype("object")
+    for idx, marker in enumerate(marker_columns):
+        ref, alt = MARKER_REF_ALT[marker]
+        variant_df.at[idx, "position"] = idx + 1
+        variant_df.at[idx, "ref"] = ref
+        variant_df.at[idx, "alt"] = alt
+        variant_df.at[idx, "marker_id"] = marker
+        variant_df.at[idx, "marker_meaning"] = MARKER_MEANING[marker]
     variant_df["len_diff"] = 0
     variant_df["is_sv"] = False
     variant_df["annotation"] = "functional_marker"
-    variant_df["marker_id"] = MARKER_COLUMNS
-    variant_df["marker_meaning"] = [
-        "B1b=canonical Rht-B1b semi-dwarf mutant marker; B1a=wild type",
-        "D1b=canonical Rht-D1b semi-dwarf mutant marker; Rht-D1a=wild type",
-    ]
     variant_df.to_csv(variant_path, index=False)
 
 
@@ -210,7 +235,34 @@ def build_rht_zanke_database(
     sheet_name: str = SHEET_NAME,
 ) -> Path:
     table = load_zanke2014_table(source_workbook, sheet_name=sheet_name)
-    marker_output, phenotype_output = write_precomputed_inputs(table, intermediate_root, target_id)
+    return build_rht_zanke_database_from_table(
+        table=table,
+        source_workbook=source_workbook,
+        output_root=output_root,
+        intermediate_root=intermediate_root,
+        target_id=target_id,
+        marker_columns=MARKER_COLUMNS,
+        min_haplotype_count=min_haplotype_count,
+        gene_symbol="Rht1",
+    )
+
+
+def build_rht_zanke_database_from_table(
+    table: pd.DataFrame,
+    source_workbook: Path,
+    output_root: Path,
+    intermediate_root: Path,
+    target_id: str,
+    marker_columns: Sequence[str],
+    min_haplotype_count: int,
+    gene_symbol: str,
+) -> Path:
+    marker_output, phenotype_output = write_precomputed_inputs(
+        table=table,
+        intermediate_root=intermediate_root,
+        target_id=target_id,
+        marker_columns=marker_columns,
+    )
     db_dir = build_database_from_marker_matrix(
         marker_matrix=marker_output,
         phenotype_table=phenotype_output,
@@ -218,16 +270,48 @@ def build_rht_zanke_database(
         target_id=target_id,
         chrom="diagnostic_marker_panel",
         start=1,
-        end=len(MARKER_COLUMNS),
+        end=len(marker_columns),
         phenotype_columns=PHENOTYPE_COLUMNS,
-        marker_columns=MARKER_COLUMNS,
-        marker_positions={marker: i + 1 for i, marker in enumerate(MARKER_COLUMNS)},
+        marker_columns=marker_columns,
+        marker_positions={marker: i + 1 for i, marker in enumerate(marker_columns)},
         expected_direction="decreases_trait",
         sample_column="SampleID",
         min_haplotype_count=min_haplotype_count,
     )
-    update_metadata(db_dir, source_workbook, table, target_id)
+    update_metadata(
+        db_dir=db_dir,
+        source_workbook=source_workbook,
+        table=table,
+        target_id=target_id,
+        marker_columns=marker_columns,
+        gene_symbol=gene_symbol,
+    )
     return db_dir
+
+
+def build_single_marker_databases(
+    source_workbook: Path,
+    output_root: Path,
+    intermediate_root: Path,
+    min_haplotype_count: int,
+    sheet_name: str = SHEET_NAME,
+) -> list[Path]:
+    table = load_zanke2014_table(source_workbook, sheet_name=sheet_name)
+    db_dirs = []
+    for marker in MARKER_COLUMNS:
+        db_dirs.append(
+            build_rht_zanke_database_from_table(
+                table=table,
+                source_workbook=source_workbook,
+                output_root=output_root,
+                intermediate_root=intermediate_root,
+                target_id=f"{marker}-Zanke2014",
+                marker_columns=[marker],
+                min_haplotype_count=min_haplotype_count,
+                gene_symbol=marker,
+            )
+        )
+    return db_dirs
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -248,6 +332,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"[OK] Built {args.target_id}: {gene_info.get('n_source_samples')} samples")
     print(f"[OK] Database: {db_dir}")
     print(f"[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 --target {args.target_id} --score-mode robust_discovery")
+    if args.single_marker_targets:
+        single_dirs = build_single_marker_databases(
+            source_workbook=source_workbook,
+            output_root=output_root,
+            intermediate_root=intermediate_root,
+            min_haplotype_count=args.min_haplotype_count,
+            sheet_name=args.sheet_name,
+        )
+        for single_dir in single_dirs:
+            print(f"[OK] Built single-marker target: {single_dir.name} -> {single_dir}")
+        print("[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 "
+              "--target Rht-D1-Zanke2014 --score-mode robust_discovery")
     return 0
 
 

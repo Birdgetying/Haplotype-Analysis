@@ -201,6 +201,15 @@
 - Support-shrunk direction-aware ranking selects the large wild-type `Hap1`, so `Rht-D1b` remains a weak exact single-SNP positive control rather than a strong proof. `Rht-Zanke2014` should be described as marker-panel reference only because it combines `Rht-B1` and `Rht-D1`.
 - Fixed target selection so an exact `--target Rht-D1b` request does not also select `Rht-Zanke2014` merely because that target lists `Rht-D1b` as an alias. Exact `target_id` matches now take precedence over alias matches.
 
+## 2026-06-26 Rht-D1-Zanke2014 single-marker clarification
+- Extended `prepare_wheat2024_rht_zanke2014.py` with `--single-marker-targets`, producing one-marker databases for `Rht-B1-Zanke2014` and `Rht-D1-Zanke2014` from Zanke2014 Table S2.
+- Added manifest target `Rht-D1-Zanke2014` so the analysis and literature audit can run without selecting the combined `Rht-B1/Rht-D1` panel.
+- Ran `python prepare_wheat2024_rht_zanke2014.py --single-marker-targets` and `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1-Zanke2014 --score-mode robust_discovery`.
+- New output: `star_gene_results/wheat_nature_2024/Rht-D1-Zanke2014__robust_discovery/Rht-D1-Zanke2014.html`.
+- Haplotype split is one marker only: `Hap1=D1b` n=214, `Hap2=Rht-D1a` n=152, `Hap3=D1b/Rht-D1a` n=2. This removes the old multi-gene `B1|D1` interpretation problem.
+- The raw robust total top is the two-sample mixed `Hap3`, but the stable direction-aware top is exact `Hap1=D1b`, n=214. The audit marks `Rht-D1b_diagnostic_marker` as `matched_directional_top_haplotype`.
+- Interpretation: this is a useful single-gene marker-level proof for Rht-D1, while the exact nucleotide SNP route remains weak but base-level evidence.
+
 ## 2026-06-26 WheatOmics INDEL supplement download
 - Downloaded WheatOmics `trackList.json` and VCF directory listing from `https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/`.
 - Added and ran `download_wheat2024_indel_microvcfs.py`, which extracts target-region micro-VCFs from `WEC_INDEL_IWGSCv1.0.eff.vcf.gz`, `GBS_filtered_Indels_IWGSCv1.0.eff.vcf.gz`, and `WildEmmer10WGS_INDEL_eff.vcf.gz`.
