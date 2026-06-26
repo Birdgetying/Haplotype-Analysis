@@ -525,6 +525,144 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertAlmostEqual(local_scores[100], local_scores[200], places=9)
         self.assertGreater(external_scores[200], external_scores[100])
 
+    def test_robust_discovery_site_weighted_score_is_phenotype_free(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "R1", "Hap_Name": "RefHap", "Haplotype_Seq": "G|C", "Trait": 1.0},
+            {"SampleID": "R2", "Hap_Name": "RefHap", "Haplotype_Seq": "G|C", "Trait": 2.0},
+            {"SampleID": "R3", "Hap_Name": "RefHap", "Haplotype_Seq": "G|C", "Trait": 3.0},
+            {"SampleID": "A1", "Hap_Name": "AltHap", "Haplotype_Seq": "A|T", "Trait": 90.0},
+            {"SampleID": "A2", "Hap_Name": "AltHap", "Haplotype_Seq": "A|T", "Trait": 91.0},
+            {"SampleID": "A3", "Hap_Name": "AltHap", "Haplotype_Seq": "A|T", "Trait": 92.0},
+        ])
+        shuffled_df = hap_sample_df.copy()
+        shuffled_df["Trait"] = [50.0, 10.0, 80.0, 20.0, 70.0, 30.0]
+        variant_info = {
+            100: {"ref": "G", "alt": "A", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+            200: {"ref": "C", "alt": "T", "annotation": "promoter_core", "maf": 0.5, "missing_rate": 0.0},
+        }
+
+        def score(df):
+            return HaplotypeScorer(
+                hap_sample_df=df,
+                variant_positions=[100, 200],
+                variant_info=variant_info,
+                phenotype_col="Trait",
+                gwas_data=[{"pos": 100, "pvalue": 1e-9, "external": True}],
+                score_mode="robust_discovery",
+            ).score_all()
+
+        original = score(hap_sample_df)
+        shuffled = score(shuffled_df)
+
+        self.assertIn("site_weighted", original["component_weights"])
+        self.assertIn("site_weighted", original["per_haplotype"]["AltHap"])
+        self.assertIn("site_weights", original)
+        self.assertTrue(original["site_weighting_policy"]["phenotype_free"])
+        self.assertFalse(original["site_weighting_policy"]["current_phenotype_used"])
+
+        by_pos = {row["position"]: row for row in original["site_weights"]}
+        self.assertGreater(by_pos[100]["external_weight"], 0)
+        self.assertEqual(by_pos[100]["current_phenotype_used"], False)
+        self.assertEqual(by_pos[200]["current_phenotype_used"], False)
+
+        self.assertEqual(original["site_weights"], shuffled["site_weights"])
+        for hap in ("RefHap", "AltHap"):
+            self.assertAlmostEqual(
+                original["per_haplotype"][hap]["site_weighted"],
+                shuffled["per_haplotype"][hap]["site_weighted"],
+                places=9,
+            )
+            self.assertAlmostEqual(
+                original["per_haplotype"][hap]["total"],
+                shuffled["per_haplotype"][hap]["total"],
+                places=9,
+            )
+
+    def test_site_weight_keeps_rare_high_impact_functional_sites(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(100):
+            rows.append({
+                "SampleID": f"R{i}",
+                "Hap_Name": "RefHap",
+                "Haplotype_Seq": "G",
+                "Trait": float(i),
+            })
+        rows.append({
+            "SampleID": "A1",
+            "Hap_Name": "RareStop",
+            "Haplotype_Seq": "T",
+            "Trait": 1.0,
+        })
+        hap_sample_df = pd.DataFrame(rows)
+        scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[18781242],
+            variant_info={
+                18781242: {
+                    "ref": "G",
+                    "alt": "T",
+                    "annotation": "stop_gain",
+                    "maf": 0.003,
+                    "missing_rate": 0.0,
+                }
+            },
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        )
+
+        result = scorer.score_all()
+
+        self.assertEqual(len(result["site_weights"]), 1)
+        self.assertEqual(result["site_weights"][0]["annotation"], "stop_gain")
+        self.assertGreater(result["per_haplotype"]["RareStop"]["site_weighted"], 0)
+
+    def test_site_weight_keeps_snp_eff_stop_gained_annotation(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(100):
+            rows.append({
+                "SampleID": f"R{i}",
+                "Hap_Name": "RefHap",
+                "Haplotype_Seq": "G",
+                "Trait": float(i),
+            })
+        rows.append({
+            "SampleID": "A1",
+            "Hap_Name": "RareStop",
+            "Haplotype_Seq": "T",
+            "Trait": 1.0,
+        })
+        hap_sample_df = pd.DataFrame(rows)
+        scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[18781242],
+            variant_info={
+                18781242: {
+                    "ref": "G",
+                    "alt": "T",
+                    "annotation": "stop_gained",
+                    "maf": 0.003,
+                    "missing_rate": 0.0,
+                }
+            },
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        )
+
+        result = scorer.score_all()
+
+        self.assertEqual(len(result["site_weights"]), 1)
+        self.assertEqual(result["site_weights"][0]["annotation"], "stop_gain")
+        self.assertGreater(result["per_haplotype"]["RareStop"]["site_weighted"], 0)
+
     def test_robust_discovery_adds_boundary_gene_body_signal_to_functional_groups(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
         import pandas as pd

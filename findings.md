@@ -219,3 +219,27 @@
 - WWWG2B API currently returns HTTP 526 for available table/file table/download URL endpoints, and Earlham OpenData WatSeq raw VCF URLs still return `Request Rejected` HTML. The 1051-sample WatSeq INDEL/SV files remain inaccessible from this environment in this pass.
 - Added and ran `download_wheat2024_indel_marker_annotations.py` for WheatOmics `Indel_marker_from_zhai`. It saves raw JBrowse chunks and target-window marker annotations under `external_data/wheat_nature_2024/zhai_indel_markers`.
 - With the default 1 Mb flank, exact target windows plus nearby sequence contain 8 Zhai marker rows near `TaGW2-B1` and 7 near `VRN-B1`; `Rht-B1`, `Rht-D1`, `TaGW2-A1`, `TaGW2-D1`, `VRN-A1`, and `VRN-D1` have 0 marker rows. These are primer/marker annotations, not per-accession genotype calls, so they are useful for manual follow-up but cannot be fed into current haplotype scoring.
+
+## 2026-06-26 Phenotype-Free Site-Weighted Robust Discovery
+- Implemented a PostGWAS-like `site_weighted` component for `robust_discovery`.
+  The component is phenotype-free: it uses annotation severity, explicit
+  external evidence, MAF stability, missingness, LD pruning, and gene-structure
+  context, but not the current validation phenotype, local haplotype means, or
+  local p-values.
+- Added `site_weights` and `site_weighting_policy` to score JSON and report
+  labels so reviewers can see that `current_phenotype_used=False` for each
+  weighted site.
+- Root cause for the first strict `Rht-D1b` failure was annotation vocabulary,
+  not absence of the variant. The real VCF/database annotation was snpEff
+  `stop_gained`, while the scorer only retained rare high-impact `stop_gain`.
+  The scorer now normalizes `stop_gained`, `stopgain`, and `nonsense` to
+  internal `stop_gain`.
+- Re-ran four robust targets:
+  `TaGW2-B1-remoteSNP`, `VRN-D1-Kiss2014`, `Rht-D1b`, and `Rht-Zanke2014`.
+  `Rht-D1b` now has one site-weight row at `chr4D:18781242`, normalized to
+  `stop_gain`, and `Hap2=T` is recovered as the raw top score.
+- Validation interpretation after this update: `VRN-D1-Kiss2014` remains the
+  strongest marker-level proof; strict `Rht-D1b` is exact but weak because only
+  5 T carriers overlap phenotype data; `TaGW2-B1` and `Rht-Zanke2014` are
+  still best described through direction-aware/functional-group validation,
+  not raw full-region top rank alone.

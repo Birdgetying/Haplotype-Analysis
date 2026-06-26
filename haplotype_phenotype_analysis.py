@@ -2973,6 +2973,7 @@ def _render_score_component_breakdown(candidate_rows: list, max_rows: int = 3) -
     if not candidate_rows:
         return '<div class="evidence-empty">No score components available.</div>'
     component_order = [
+        ("site_weighted", "SiteWt"),
         ("variant_effect", "Variant"),
         ("burden", "Burden"),
         ("eb_effect", "EB"),
@@ -5526,6 +5527,11 @@ class HaplotypeScorer:
         'intron': 0.5, 'synonymous': 0.5,
         'intergenic': 0.1, 'other': 0.1,
     }
+    FUNCTIONAL_ANNOTATION_ALIASES = {
+        'stop_gained': 'stop_gain',
+        'stopgain': 'stop_gain',
+        'nonsense': 'stop_gain',
+    }
 
     LD_BLOCK_R2 = 0.5  # LD剪枝阈值，归一化时共享
 
@@ -5548,6 +5554,7 @@ class HaplotypeScorer:
     }
 
     ROBUST_DISCOVERY_COMPONENT_WEIGHTS = {
+        'site_weighted': 1.1,
         'variant_effect': 1.0,
         'burden': 0.35,
         'multi_omics': 0.45,
@@ -5557,11 +5564,11 @@ class HaplotypeScorer:
     ROBUST_DISCOVERY_RELIABILITY_K = 20.0
     ROBUST_DISCOVERY_MODES = {'default', 'robust_discovery'}
     ROBUST_RELIABILITY_COMPONENTS = {
-        'burden', 'eb_effect', 'multi_omics', 'fine_mapping',
+        'site_weighted', 'burden', 'eb_effect', 'multi_omics', 'fine_mapping',
         'effect_size', 'genetic_distinct'
     }
     ROBUST_AMBIGUITY_COMPONENTS = {
-        'variant_effect', 'burden', 'eb_effect', 'genetic_distinct'
+        'site_weighted', 'variant_effect', 'burden', 'eb_effect', 'genetic_distinct'
     }
 
     def __init__(self, hap_sample_df, variant_positions, variant_info=None,
@@ -5666,6 +5673,15 @@ class HaplotypeScorer:
         }
         return mapping.get(value, 'unknown')
 
+    @classmethod
+    def _normalize_functional_annotation(cls, annotation):
+        """Normalize external annotation labels into scorer vocabulary."""
+        raw = str(annotation or '').strip()
+        key = raw.lower()
+        if key in cls.FUNCTIONAL_ANNOTATION_ALIASES:
+            return cls.FUNCTIONAL_ANNOTATION_ALIASES[key]
+        return raw
+
     def _classify_position(self, pos):
         """对位置进行功能分类，返回 FUNCTIONAL_WEIGHTS 中的 key
 
@@ -5677,7 +5693,7 @@ class HaplotypeScorer:
         """
         # 1. snp_effects 优先（含精细注释如 missense_conservative）
         if pos in self.snp_effects:
-            ann = self.snp_effects[pos]
+            ann = self._normalize_functional_annotation(self.snp_effects[pos])
             # 修正：通过 variant_info 检查 indel/SV
             if ann in ('UTR', 'other', 'promoter', 'intron') and pos in self.variant_info:
                 vinfo = self.variant_info[pos]
@@ -5713,6 +5729,9 @@ class HaplotypeScorer:
                 'splice_region': 'splice_region',
                 'missense': 'missense_conservative',
                 'stop_gain': 'stop_gain',
+                'stop_gained': 'stop_gain',
+                'stopgain': 'stop_gain',
+                'nonsense': 'stop_gain',
                 'frameshift': 'frameshift',
                 'ins': 'INS',
                 'del': 'DEL',
@@ -5854,14 +5873,21 @@ class HaplotypeScorer:
         """Build a phenotype-free site score used for robust discovery grouping."""
         maf = float(self.pos_maf.get(pos, 0.5) or 0.0)
         maf_minor = min(maf, 1.0 - maf)
-        if maf <= 0 or maf_minor < 0.005:
-            return None
-
         func_w = float(self.pos_func_weight.get(pos, 0.1))
         func_component = min(func_w / 2.5, 1.0)
         external_component = self._external_evidence_component(pos)
         boundary_component = 0.0
         annotation = self.pos_annotation.get(pos, 'other')
+        high_impact_annotations = {
+            'frameshift', 'stop_gain', 'splice_region',
+            'SV', 'INS', 'DEL', 'functional_marker', 'diagnostic_marker',
+            'missense_non_conservative',
+        }
+        keep_rare = annotation in high_impact_annotations or external_component > 0
+        if maf <= 0 and not keep_rare:
+            return None
+        if maf_minor < 0.005 and not keep_rare:
+            return None
         if (
             annotation in {'intron', 'synonymous', 'UTR', 'other'}
             and self._is_boundary_gene_body_position(pos)
@@ -5886,13 +5912,44 @@ class HaplotypeScorer:
         return {
             'position': int(pos),
             'score': float(score),
+            'total_site_weight': float(score),
+            'annotation_weight': float(func_component),
+            'quality_weight': float(missing_factor),
             'function_weight': func_w,
+            'external_weight': float(external_component),
             'external_evidence': float(external_component),
             'boundary_score': float(boundary_component),
+            'maf_stability': float(maf_stability),
             'maf': maf,
             'annotation': annotation,
             'missing_rate': missing,
+            'current_phenotype_used': False,
         }
+
+    def _site_weight_records(self):
+        """Return auditable phenotype-free site weights for discovery scoring."""
+        records = []
+        for pos in self.variant_positions:
+            item = self._site_weight_record(int(pos))
+            if item is not None:
+                records.append(item)
+        return sorted(records, key=lambda row: int(row['position']))
+
+    def compute_site_weighted_score(self):
+        """PostGWAS-like phenotype-free site-weighted haplotype score.
+
+        Site weights combine annotation severity, explicit external evidence,
+        local structural context, MAF stability, and missingness. They do not
+        use the current validation phenotype, haplotype means, effect sizes, or
+        locally computed phenotype p-values.
+        """
+        per_pos_contrib = {
+            int(row['position']): float(row['total_site_weight'])
+            for row in self._site_weight_records()
+        }
+        if not per_pos_contrib:
+            return {hap: 0.0 for hap in self.unique_haps}
+        return self._compute_ld_pruned_haplotype_score(per_pos_contrib)
 
     def _get_hap_seq_map(self):
         """构建 {hap_name: haplotype_sequence_string} 映射（带缓存）"""
@@ -6564,7 +6621,7 @@ class HaplotypeScorer:
             if info.get('is_sv', False):
                 t = 2
             elif snp_effects and pos in snp_effects:
-                eff = snp_effects[pos]
+                eff = HaplotypeScorer._normalize_functional_annotation(snp_effects[pos])
                 t = 1 if eff in ('frameshift', 'stop_gain') and 'missense' not in eff else 0
             else:
                 ref, alt = str(info.get('ref', '')), str(info.get('alt', ''))
@@ -7299,6 +7356,7 @@ class HaplotypeScorer:
         """
         zero_component = {hap: 0.0 for hap in self.unique_haps}
         raw_components = {
+            'site_weighted': self.compute_site_weighted_score(),
             'variant_effect': self.compute_variant_effect_score(),
             'burden': self.compute_burden_score(),
             'multi_omics': self.compute_multi_omics_score(),
@@ -7425,6 +7483,26 @@ class HaplotypeScorer:
             'slope': round(slope, 6),
             'intercept': round(intercept, 6),
             'component_weights': self.component_weights,
+            'site_weights': self._site_weight_records(),
+            'site_weighting_policy': {
+                'phenotype_free': True,
+                'current_phenotype_used': False,
+                'allowed_inputs': [
+                    'functional_annotation',
+                    'variant_quality',
+                    'maf_stability',
+                    'missing_rate',
+                    'ld_pruning',
+                    'explicit_external_evidence',
+                    'gene_structure_context',
+                ],
+                'forbidden_inputs': [
+                    'current_haplotype_mean',
+                    'current_trait_effect_size',
+                    'current_trait_pvalue',
+                    'validation_phenotype_direction',
+                ],
+            },
             'core_haplotype_groups': core_haplotype_groups,
             'functional_haplotype_groups': functional_haplotype_groups,
             'confidence_level': confidence_level,
@@ -11418,6 +11496,7 @@ function drawHaplotypeScorePlot(scoreData) {
             var ch = scoreData.per_haplotype ? scoreData.per_haplotype[d.haplotype] : null;
             if (ch) {
                 var compNames = {
+                    'site_weighted': 'Site Weight',
                     'variant_effect': 'Variant Effect', 'burden': 'Burden',
                     'eb_effect': 'EB Effect', 'multi_omics': 'Multi-Omics',
                     'fine_mapping': 'Fine-Map', 'effect_size': 'Effect Size',
@@ -11505,6 +11584,7 @@ function updateScoreStats(scoreData) {
     if (!statsEl) return;
     var weights = scoreData.component_weights || {};
     var compNames = {
+        'site_weighted': 'Site Weight',
         'variant_effect': 'Variant Effect',
         'burden': 'Burden',
         'eb_effect': 'EB Effect',
@@ -11522,6 +11602,9 @@ function updateScoreStats(scoreData) {
     var statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode)
         + ' | Axis=' + (scoreData.score_axis || 'total')
         + ' | Components: ' + parts.join(' | ');
+    if (scoreData.site_weighting_policy && scoreData.site_weighting_policy.phenotype_free) {
+        statsText += ' | Site weights: phenotype-free';
+    }
 
     // PVE 置信度标注
     var level = scoreData.confidence_level;
@@ -14619,7 +14702,7 @@ if (samples.length < 2) {{
 
     // Stats
     var weights = scoreData.component_weights || {{}};
-    var compNames = {{'variant_effect':'Variant Effect','burden':'Burden','eb_effect':'EB Effect','multi_omics':'Multi-Omics','fine_mapping':'Fine-Map','effect_size':'Effect Size','genetic_distinct':'Gen. Distinct'}};
+    var compNames = {{'site_weighted':'Site Weight','variant_effect':'Variant Effect','burden':'Burden','eb_effect':'EB Effect','multi_omics':'Multi-Omics','fine_mapping':'Fine-Map','effect_size':'Effect Size','genetic_distinct':'Gen. Distinct'}};
     var parts = [];
     for (var k in compNames) {{ if (weights[k] !== undefined) parts.push(compNames[k] + ': w=' + weights[k].toFixed(1)); }}
     var statsText = 'Components: ' + parts.join(' | ');
@@ -14627,6 +14710,9 @@ if (samples.length < 2) {{
     statsText = 'Mode=' + (scoreData.score_mode || currentScoreMode)
         + ' | Axis=' + (scoreData.score_axis || 'total')
         + ' | ' + statsText;
+    if (scoreData.site_weighting_policy && scoreData.site_weighting_policy.phenotype_free) {{
+        statsText += ' | Site weights: phenotype-free';
+    }}
     if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
     document.getElementById('stats').textContent = statsText;
     updateModeButtons();

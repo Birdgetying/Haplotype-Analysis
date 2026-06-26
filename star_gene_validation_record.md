@@ -1059,3 +1059,65 @@ This completes the reachable small-data supplement from WheatOmics for now:
 public INDEL micro-VCFs plus Zhai marker annotations are downloaded, but the
 still-needed validation-strengthening data are the 1051-sample WatSeq
 INDEL/SV/CNV genotype files or another sample-matched genotype/phenotype table.
+
+### 2026-06-26 Phenotype-free site-weighted robust discovery update
+
+Purpose:
+Revise `robust_discovery` toward a PostGWAS-like discovery model without using
+the current validation phenotype in scoring. Site weights are computed from
+variant annotation, explicit external evidence, MAF stability, missingness, LD
+pruning, and gene-structure context. Current haplotype means, local trait
+effect sizes, local p-values, and validation phenotype direction are excluded
+from discovery scoring and remain post hoc validation/audit fields only.
+
+Code changes:
+- Added the `site_weighted` component to robust discovery scoring.
+- Added auditable `site_weights` and `site_weighting_policy` fields to
+  `haplotype_scores.json`; every site-weight row records
+  `current_phenotype_used=False`.
+- Kept rare high-impact functional sites when MAF is below the ordinary
+  background threshold.
+- Fixed the snpEff annotation alias `stop_gained -> stop_gain`; this was why
+  the strict `Rht-D1b` stop-gained SNP had no site-weight record in the first
+  implementation pass.
+
+Regression tests:
+`python -m unittest test_star_gene_data.StarGeneDataTests.test_site_weight_keeps_rare_high_impact_functional_sites test_star_gene_data.StarGeneDataTests.test_site_weight_keeps_snp_eff_stop_gained_annotation test_star_gene_data.StarGeneDataTests.test_robust_discovery_site_weighted_score_is_phenotype_free test_star_gene_data.StarGeneDataTests.test_robust_discovery_score_is_unchanged_when_phenotype_is_inverted test_star_gene_data.StarGeneDataTests.test_robust_discovery_uses_only_explicit_external_site_evidence test_star_gene_data.StarGeneDataTests.test_robust_discovery_adds_boundary_gene_body_signal_to_functional_groups test_star_gene_data.StarGeneDataTests.test_robust_discovery_penalizes_tiny_ambiguous_haplotypes test_star_gene_data.StarGeneDataTests.test_expected_decrease_direction_reorders_raw_high_phenotype_score -v`
+
+Analysis command:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-D1b --target Rht-Zanke2014 --score-mode robust_discovery`
+
+Updated validation results:
+- `TaGW2-B1-remoteSNP`: 756 samples, 71 regional SNPs, 112 haplotypes.
+  `site_weights=39`, all phenotype-free. Raw top remains `Hap2`
+  (`total=1.5448`, `site_weighted=0.6662`), while the audit still supports the
+  Qin2014 promoter haplotype through directional/function-group evidence rather
+  than raw full-region top rank. Score regression: `R^2=0.0031`,
+  `P=0.12597`. This is a useful full-region stress test, not a raw-top proof.
+- `VRN-D1-Kiss2014`: one diagnostic marker. `site_weights=1`,
+  `Hap2` is both raw and directional top (`total=2.0155`,
+  `site_weighted=0.6552`). Audit: `matched_top_haplotype` and
+  `matched_directional_top_haplotype`. Score regression: `R^2=0.0382`,
+  `P=2.98e-07`. This remains a strong marker-level positive proof.
+- `Rht-D1b`: exact base-level stop-gained SNP `chr4D:18781242 G>T` now has one
+  site-weight row (`annotation=stop_gain`, `MAF=0.003741`,
+  `current_phenotype_used=False`). Raw and directional top in the regenerated
+  score JSON are `Hap2=T` (`total=1.2372`, `site_weighted=0.1304`). Audit:
+  `matched_top_haplotype`, but carrier support is still tiny
+  (`Hap2` n=3; total T carriers 5). Score regression: `R^2=0.0056`,
+  `P=0.0338`. This is exact but weak evidence.
+- `Rht-Zanke2014`: marker-panel target with two functional markers.
+  `site_weights=2`. Raw top is `Hap3` for the first trait, but the Rht-D1b
+  literature marker remains recovered by direction-aware validation as
+  `Hap1` (`matched_directional_top_haplotype`). Because this target combines
+  B1 and D1 marker states, use it only as marker-panel/directionality evidence,
+  not strict single-gene proof.
+
+Current interpretation:
+The site-weighted robust update makes the discovery score phenotype-free while
+retaining a PostGWAS-like weighted-site mechanism. It fixes the real Rht-D1b
+annotation-loss bug and provides clearer audit fields in the HTML/JSON. The
+current positive set is still strongest for `VRN-D1-Kiss2014`, usable but weak
+for exact `Rht-D1b`, and conditional for `TaGW2-B1`/`Rht-Zanke2014` because
+their strongest support depends on direction-aware or functional-group
+post hoc validation rather than raw full-region top rank.

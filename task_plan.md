@@ -302,3 +302,53 @@ diagnostic marker state rather than the nucleotide `chr4D:18781242 G>T`
 record. The two Rht routes should be described together: exact SNP evidence is
 weak but base-level; Zanke2014 single-marker evidence is stronger but
 marker-level.
+
+### Phase 20: Phenotype-free weighted-site robust scoring
+
+Status: complete
+
+Goal:
+
+Move `robust_discovery` closer to the PostGWAS-style model requested by the
+user: score weighted sites first, then let weighted sites contribute to
+haplotype discovery. The discovery score must not use the current validation
+phenotype.
+
+Implemented:
+
+- Added `site_weighted` as a robust-discovery component.
+- Added `site_weights` and `site_weighting_policy` to
+  `haplotype_scores.json` for auditability.
+- Site weights use annotation severity, explicit external evidence,
+  MAF stability, missingness, LD pruning, and gene-structure context.
+- Current phenotype, haplotype means, current-trait effect sizes, and local
+  current-trait p-values are forbidden inputs.
+- Rare high-impact functional sites are retained even when MAF is below the
+  ordinary background threshold.
+- Normalized snpEff `stop_gained` to internal `stop_gain`, fixing the strict
+  `Rht-D1b` site-weight omission.
+
+Verification command:
+
+```bash
+python -m unittest test_star_gene_data.StarGeneDataTests.test_site_weight_keeps_rare_high_impact_functional_sites test_star_gene_data.StarGeneDataTests.test_site_weight_keeps_snp_eff_stop_gained_annotation test_star_gene_data.StarGeneDataTests.test_robust_discovery_site_weighted_score_is_phenotype_free test_star_gene_data.StarGeneDataTests.test_robust_discovery_score_is_unchanged_when_phenotype_is_inverted test_star_gene_data.StarGeneDataTests.test_robust_discovery_uses_only_explicit_external_site_evidence test_star_gene_data.StarGeneDataTests.test_robust_discovery_adds_boundary_gene_body_signal_to_functional_groups test_star_gene_data.StarGeneDataTests.test_robust_discovery_penalizes_tiny_ambiguous_haplotypes test_star_gene_data.StarGeneDataTests.test_expected_decrease_direction_reorders_raw_high_phenotype_score -v
+python -m py_compile haplotype_phenotype_analysis.py star_gene_validation.py star_gene_literature_audit.py test_star_gene_data.py
+```
+
+Validation rerun:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-D1b --target Rht-Zanke2014 --score-mode robust_discovery
+```
+
+Result:
+
+- `VRN-D1-Kiss2014`: positive marker-level proof; top and directional top are
+  `Hap2`, with one phenotype-free diagnostic-marker site weight.
+- `Rht-D1b`: exact base-level proof restored at the scoring layer; the
+  `chr4D:18781242 G>T` stop-gained SNP is now included as a phenotype-free
+  `stop_gain` site weight and raw top is `Hap2=T`, but support is still weak.
+- `TaGW2-B1-remoteSNP`: still a full-region stress test. Qin2014 evidence is
+  best read through directional/function-group audit, not raw top score.
+- `Rht-Zanke2014`: useful marker-panel directionality evidence, but not strict
+  single-gene proof because B1 and D1 markers are combined in this target.
