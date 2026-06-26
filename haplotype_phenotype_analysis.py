@@ -5843,6 +5843,8 @@ class HaplotypeScorer:
             values.append(min(logp / 8.0, 1.0))
 
         info = self.variant_info.get(pos, {}) if self.variant_info else {}
+        if not self._is_external_evidence_record(info):
+            return max(values) if values else 0.0
         for key in ('postgwas_score', 'external_score', 'site_score', 'eqtl_score'):
             try:
                 value = float(info.get(key, 0.0) or 0.0)

@@ -663,6 +663,67 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(result["site_weights"][0]["annotation"], "stop_gain")
         self.assertGreater(result["per_haplotype"]["RareStop"]["site_weighted"], 0)
 
+    def test_site_weight_ignores_unmarked_variant_info_pvalues(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "HapRef", "Haplotype_Seq": "G|C", "Trait": 1.0},
+            {"SampleID": "S2", "Hap_Name": "HapRef", "Haplotype_Seq": "G|C", "Trait": 2.0},
+            {"SampleID": "S3", "Hap_Name": "HapAlt", "Haplotype_Seq": "A|T", "Trait": 99.0},
+            {"SampleID": "S4", "Hap_Name": "HapAlt", "Haplotype_Seq": "A|T", "Trait": 100.0},
+        ])
+        base_variant_info = {
+            100: {"ref": "G", "alt": "A", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+            200: {"ref": "C", "alt": "T", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+        }
+        local_variant_info = {
+            100: dict(base_variant_info[100]),
+            200: {
+                **base_variant_info[200],
+                "minus_log10_p": 12.0,
+                "gwas_pvalue": 1e-12,
+                "site_score": 1.0,
+            },
+        }
+        external_variant_info = {
+            100: dict(base_variant_info[100]),
+            200: {
+                **base_variant_info[200],
+                "minus_log10_p": 12.0,
+                "gwas_pvalue": 1e-12,
+                "site_score": 1.0,
+                "external": True,
+            },
+        }
+
+        def site_weights(variant_info):
+            result = HaplotypeScorer(
+                hap_sample_df=hap_sample_df,
+                variant_positions=[100, 200],
+                variant_info=variant_info,
+                phenotype_col="Trait",
+                score_mode="robust_discovery",
+            ).score_all()
+            return {row["position"]: row for row in result["site_weights"]}
+
+        base_weights = site_weights(base_variant_info)
+        local_weights = site_weights(local_variant_info)
+        external_weights = site_weights(external_variant_info)
+
+        self.assertAlmostEqual(
+            local_weights[200]["external_weight"],
+            base_weights[200]["external_weight"],
+            places=9,
+        )
+        self.assertAlmostEqual(
+            local_weights[200]["total_site_weight"],
+            base_weights[200]["total_site_weight"],
+            places=9,
+        )
+        self.assertGreater(external_weights[200]["external_weight"], base_weights[200]["external_weight"])
+        self.assertGreater(external_weights[200]["total_site_weight"], base_weights[200]["total_site_weight"])
+
     def test_robust_discovery_adds_boundary_gene_body_signal_to_functional_groups(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
         import pandas as pd

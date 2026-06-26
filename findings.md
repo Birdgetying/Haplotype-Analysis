@@ -243,3 +243,8 @@
   5 T carriers overlap phenotype data; `TaGW2-B1` and `Rht-Zanke2014` are
   still best described through direction-aware/functional-group validation,
   not raw full-region top rank alone.
+- Code-review follow-up: `variant_info` score/logp/p-value fields now require
+  explicit external evidence marking before contributing to `site_weighted`.
+  This closes the leak where an unmarked local `minus_log10_p`, `gwas_pvalue`,
+  or `site_score` could previously raise a site weight despite `gwas_data`
+  being correctly gated.

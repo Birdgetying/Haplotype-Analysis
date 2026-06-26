@@ -1121,3 +1121,22 @@ current positive set is still strongest for `VRN-D1-Kiss2014`, usable but weak
 for exact `Rht-D1b`, and conditional for `TaGW2-B1`/`Rht-Zanke2014` because
 their strongest support depends on direction-aware or functional-group
 post hoc validation rather than raw full-region top rank.
+
+Code-review follow-up:
+A review found that `gwas_data` required explicit external evidence flags, but
+`variant_info` fields such as `minus_log10_p`, `gwas_pvalue`, and `site_score`
+were still accepted as site-weight evidence without the same external/source
+gate. This has been fixed: `variant_info` score/logp/p-value fields are used
+only when the variant record is explicitly external (`external=True` or an
+external `source_type`/`evidence_type`). Regression coverage was added with
+`test_site_weight_ignores_unmarked_variant_info_pvalues`.
+
+Follow-up verification:
+- `python -m unittest test_star_gene_data.py -v` passed 90 tests.
+- `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-D1b --target Rht-Zanke2014 --score-mode robust_discovery` completed.
+- In the rerun, all four target `site_weights` have
+  `current_phenotype_used=False`; their `external_weight` values are 0 unless
+  explicitly external evidence is supplied. The previously recorded validation
+  conclusions are unchanged: `VRN-D1-Kiss2014` remains the strongest positive,
+  exact `Rht-D1b` remains weak but recovered, and TaGW2/Rht-Zanke2014 remain
+  direction-aware or functional-group evidence rather than raw-top-only proof.
