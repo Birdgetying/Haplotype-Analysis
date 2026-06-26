@@ -200,3 +200,13 @@
 - `literature_variant_audit.csv` reports `Rht-D1b_stop_gained=matched_top_haplotype`, allele counts `G:797;G/T:2;T:3`, carrier count `5`, and `top_haplotype_exact_expected=True`.
 - Support-shrunk direction-aware ranking selects the large wild-type `Hap1`, so `Rht-D1b` remains a weak exact single-SNP positive control rather than a strong proof. `Rht-Zanke2014` should be described as marker-panel reference only because it combines `Rht-B1` and `Rht-D1`.
 - Fixed target selection so an exact `--target Rht-D1b` request does not also select `Rht-Zanke2014` merely because that target lists `Rht-D1b` as an alias. Exact `target_id` matches now take precedence over alias matches.
+
+## 2026-06-26 WheatOmics INDEL supplement download
+- Downloaded WheatOmics `trackList.json` and VCF directory listing from `https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/`.
+- Added and ran `download_wheat2024_indel_microvcfs.py`, which extracts target-region micro-VCFs from `WEC_INDEL_IWGSCv1.0.eff.vcf.gz`, `GBS_filtered_Indels_IWGSCv1.0.eff.vcf.gz`, and `WildEmmer10WGS_INDEL_eff.vcf.gz`.
+- Outputs are under `external_data/wheat_nature_2024/indel_microvcfs`; the summary is `microvcf_status.tsv`.
+- VRN-A1/VRN-B1/VRN-D1 regions had 0 INDEL records in all three public WheatOmics INDEL tracks, so the VRN causal deletion/CNV/SV blocker remains.
+- Rht-B1, TaGW2-A1, TaGW2-B1, and TaGW2-D1 regions have a few INDEL records in WEC/GBS/WildEmmer tracks, but all queried sources have 0 overlap with Watkins phenotype samples. These data cannot directly strengthen the current Watkins-based validations.
+- WWWG2B API currently returns HTTP 526 for available table/file table/download URL endpoints, and Earlham OpenData WatSeq raw VCF URLs still return `Request Rejected` HTML. The 1051-sample WatSeq INDEL/SV files remain inaccessible from this environment in this pass.
+- Added and ran `download_wheat2024_indel_marker_annotations.py` for WheatOmics `Indel_marker_from_zhai`. It saves raw JBrowse chunks and target-window marker annotations under `external_data/wheat_nature_2024/zhai_indel_markers`.
+- With the default 1 Mb flank, exact target windows plus nearby sequence contain 8 Zhai marker rows near `TaGW2-B1` and 7 near `VRN-B1`; `Rht-B1`, `Rht-D1`, `TaGW2-A1`, `TaGW2-D1`, `VRN-A1`, and `VRN-D1` have 0 marker rows. These are primer/marker annotations, not per-accession genotype calls, so they are useful for manual follow-up but cannot be fed into current haplotype scoring.

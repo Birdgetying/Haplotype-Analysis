@@ -918,3 +918,93 @@ the expected biological direction. Because the downloaded VRN data are SNP-only
 and do not include the known promoter/intron-1 deletion, CNV, or SV causal
 alleles, these results should be treated as regional linked-SNP validation, not
 as exact literature functional-variant validation.
+
+### 2026-06-26 WheatOmics public INDEL micro-VCF supplement
+
+Purpose:
+Download the other publicly reachable INDEL data needed to check whether the
+current star-gene targets can be augmented beyond SNP-only genotypes. The goal
+was to find target-region INDEL records for VRN, Rht, and GW2 without
+downloading multi-GB whole-genome VCFs.
+
+Downloaded/queried source list:
+- WheatOmics JBrowse track list:
+  `https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/trackList.json`
+- WheatOmics VCF directory:
+  `https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/tracks/vcf/`
+- `WEC_INDEL_IWGSCv1.0.eff.vcf.gz`
+- `GBS_filtered_Indels_IWGSCv1.0.eff.vcf.gz`
+- `WildEmmer10WGS_INDEL_eff.vcf.gz`
+
+Reproducible extraction command:
+`python download_wheat2024_indel_microvcfs.py`
+
+Output directory:
+`external_data/wheat_nature_2024/indel_microvcfs`
+
+Status table:
+`external_data/wheat_nature_2024/indel_microvcfs/microvcf_status.tsv`
+
+Main findings:
+- VRN-A1, VRN-B1, and VRN-D1 target regions had 0 INDEL records in all three
+  queried WheatOmics public INDEL tracks. This does not solve the VRN
+  causal-SV/CNV blocker.
+- Rht-B1 had INDEL records in WEC and WildEmmer tracks, including one WEC
+  frameshift insertion at `chr4B:30862060` in `TraesCS4B01G043100`, but this
+  source has 62 samples and 0 Watkins phenotype-sample overlap.
+- TaGW2-A1/B1/D1 had a few INDEL records in GBS or WildEmmer tracks, mostly
+  intronic/upstream records, but all queried INDEL sources had 0 Watkins sample
+  overlap.
+- The queried INDEL tracks therefore cannot be merged into the current Watkins
+  phenotype validations as population-level evidence. They are useful only as
+  external regional-variant annotations unless a matching phenotype table is
+  obtained for those INDEL source panels.
+
+WWWG2B/Earlham status:
+WWWG2B API calls that previously supplied OneDrive URLs now return HTTP 526 in
+this environment, including `availableTable`, `fileTable`, and
+`get_download_url_form_onedrive`. Earlham OpenData requests for WatSeq raw VCF
+directories still return `Request Rejected` HTML. Therefore the still-needed
+1051-sample WatSeq INDEL/SV/CNV files could not be fetched automatically in
+this pass.
+
+Current interpretation:
+The additional reachable INDEL data have been downloaded as target-region
+micro-VCFs, but they do not provide a stronger proof set because they are not
+matched to the Watkins phenotype samples. For VRN, the decisive promoter or
+intron-1 deletion/CNV/SV data remain missing from the current accessible
+sources.
+
+### 2026-06-26 WheatOmics Zhai indel marker annotation supplement
+
+Purpose:
+Download the remaining small, reachable WheatOmics indel marker annotation
+track for the same teacher star-gene targets, including flanking sequence,
+without treating marker annotations as sample-level genotypes.
+
+Reproducible extraction command:
+`python download_wheat2024_indel_marker_annotations.py`
+
+Output directory:
+`external_data/wheat_nature_2024/zhai_indel_markers`
+
+Status table:
+`external_data/wheat_nature_2024/zhai_indel_markers/zhai_indel_marker_status.tsv`
+
+Main findings:
+- The script queries the WheatOmics `Indel_marker_from_zhai` JBrowse track and
+  saves raw `trackData.json` plus relevant lazy chunks for each chromosome.
+- With the default 1 Mb flank, `TaGW2-B1` has 8 marker rows near the target
+  interval and `VRN-B1` has 7 marker rows near the target interval.
+- `Rht-B1`, `Rht-D1`, `TaGW2-A1`, `TaGW2-D1`, `VRN-A1`, and `VRN-D1` have 0
+  marker rows in the same 1 Mb flanking query.
+- These rows contain marker coordinates, indel size, polymorphism ratio, and
+  primers, but no per-accession genotype matrix. Therefore they are not direct
+  inputs to discovery scoring and cannot prove haplotype-score effectiveness
+  in the current Watkins phenotype panel.
+
+Current interpretation:
+This completes the reachable small-data supplement from WheatOmics for now:
+public INDEL micro-VCFs plus Zhai marker annotations are downloaded, but the
+still-needed validation-strengthening data are the 1051-sample WatSeq
+INDEL/SV/CNV genotype files or another sample-matched genotype/phenotype table.

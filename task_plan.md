@@ -229,3 +229,37 @@ Decision:
 Implementation note:
 
 The first 2026-06-26 `--target Rht-D1b` run also selected `Rht-Zanke2014` because alias matching treated the marker-panel target's `Rht-D1b` alias as equal to the exact target. `StarGeneValidator.iter_targets()` now gives exact `target_id` filters precedence over alias matches, with a regression test in `test_star_gene_data.py`.
+
+### Phase 18: Wheat INDEL/SV supplement acquisition
+
+Status: complete
+
+After the user asked to download the other needed data, the reachable public
+WheatOmics INDEL resources were downloaded or extracted:
+
+- `download_wheat2024_indel_microvcfs.py` extracts target-region micro-VCFs
+  from `WEC_INDEL_IWGSCv1.0.eff.vcf.gz`,
+  `GBS_filtered_Indels_IWGSCv1.0.eff.vcf.gz`, and
+  `WildEmmer10WGS_INDEL_eff.vcf.gz`.
+- `download_wheat2024_indel_marker_annotations.py` extracts nearby marker
+  annotations from the WheatOmics `Indel_marker_from_zhai` JBrowse track.
+
+Outputs:
+
+- `external_data/wheat_nature_2024/indel_microvcfs/microvcf_status.tsv`
+- `external_data/wheat_nature_2024/zhai_indel_markers/zhai_indel_marker_status.tsv`
+
+Result:
+
+The public INDEL VCF tracks do not strengthen the Watkins validations because
+they have 0 Watkins phenotype-sample overlap. VRN target regions have 0 public
+INDEL VCF records. The Zhai marker annotation track has nearby marker rows for
+`TaGW2-B1` and `VRN-B1` with a 1 Mb flank, but it contains marker/primer
+annotations rather than per-accession genotype calls.
+
+Blocked data:
+
+The still-needed sample-level WatSeq INDEL/SV/CNV genotype files could not be
+downloaded automatically in this pass. WWWG2B API endpoints currently return
+HTTP 526, and Earlham WatSeq URLs return HTML rejection pages rather than VCF
+data.
