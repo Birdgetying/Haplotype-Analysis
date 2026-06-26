@@ -780,3 +780,51 @@ teacher's "at least 3 positive controls" standard without phenotype leakage,
 the next data improvement should add external GWAS/eQTL/PostGWAS-like weights
 or richer functional annotations, not reintroduce validation phenotype into
 the discovery score.
+
+### 2026-06-26 VRN WheatOmics SNP VCF download
+
+Purpose:
+The previous VRN positive control used Kiss2014 diagnostic marker states, not
+nucleotide-level VCF genotypes. To avoid using a multi-gene marker panel as
+single-gene evidence, VRN-A1, VRN-B1, and VRN-D1 were downloaded as separate
+single-gene SNP micro-VCFs from the WheatOmics 1051-accession merged SNP VCF.
+
+Data source:
+`https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/tracks/vcf/merge.SNP.Missing-unphasing.ID.ann.finalSID.allele2_retain.hard_retain.InbreedingCoeff_retain.clean.anno.vcf.gz`
+
+Reproducible download command:
+`python download_wheat2024_vrn_remote_snps.py`
+
+Output directory:
+`external_data/wheat_nature_2024/vrn_remote`
+
+Downloaded targets:
+- `VRN-A1`, gene `TraesCS5A01G391700`, region
+  `chr5A:587409454-587425416`, output
+  `VRN-A1.wheatomics_snp.vcf.gz`, 97 SNP records, 1051 samples.
+- `VRN-B1`, gene `TraesCS5B01G396600`, region
+  `chr5B:573800883-573818070`, output
+  `VRN-B1.wheatomics_snp.vcf.gz`, 182 SNP records, 1051 samples.
+- `VRN-D1`, gene `TraesCS5D01G401500`, region
+  `chr5D:467174609-467186508`, output
+  `VRN-D1.wheatomics_snp.vcf.gz`, 62 SNP records, 1051 samples.
+
+Score mode:
+Not run yet. This entry records data acquisition only.
+
+Top-scored haplotype:
+Not available yet.
+
+Post hoc literature match:
+Not available yet. Literature VRN decisive alleles often include promoter,
+intron-1 deletion, and copy-number/structural variation. These downloaded
+files are SNP-only micro-VCFs, so they can support nucleotide-level SNP
+haplotype scoring but cannot by themselves prove recovery of a causal VRN
+deletion/SV/CNV allele unless that allele is separately added from an INDEL/SV
+source.
+
+Reliability limitation / blocked reason:
+Single-gene VCF data are now available for VRN-A1/B1/D1, but the current data
+do not yet include VRN INDEL/SV/CNV calls. The next step is to build separate
+VCF-derived databases for each VRN gene and run robust discovery scoring
+without combining VRN-A1, VRN-B1, and VRN-D1 into one haplotype.
