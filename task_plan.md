@@ -352,3 +352,53 @@ Result:
   best read through directional/function-group audit, not raw top score.
 - `Rht-Zanke2014`: useful marker-panel directionality evidence, but not strict
   single-gene proof because B1 and D1 markers are combined in this target.
+
+### Phase 21: Base-level genotype scoring and data search
+
+Status: in_progress
+
+Goal:
+
+Use true per-accession REF/ALT genotype calls for validation whenever possible.
+Targets built from marker labels such as `D1b`, `VRN-D1=1`, `P/W/PAR`, or
+paper haplotype names must be treated as marker-level evidence only. They can
+help explain biology, but they cannot be counted as strict base-level proof.
+
+Current base-level rerun:
+
+```bash
+python prepare_wheat2024_vrn_remote_snps.py
+python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b
+python prepare_wheat2024_tagw2_b1_remote_snp.py --vcf D:\Desktop\data\GW2\chr6B.HARD.SNP.Missing-unphasing.ID.ann.finalSID.1047.allele2_retain.hard_retain.InbreedingCoeff_retain.vcf.gz --min-haplotype-count 1 --max-missing-rate 0.2
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP --score-mode robust_discovery
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --target TaGW2-B1-remoteSNP --score-mode robust_discovery
+```
+
+Output:
+
+- `star_gene_results/wheat_nature_2024/VRN-A1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-D1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/Rht-D1b__robust_discovery`
+- `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery`
+
+Interim result:
+
+- `Rht-D1b` is strict base-level evidence: exact SNP
+  `chr4D:18781242 G>T` is recovered as top robust haplotype `Hap2=T`, but only
+  5 carriers overlap phenotype data, so it remains weak proof.
+- `TaGW2-B1-remoteSNP` is base-level regional SNP evidence: 71 SNPs and 756
+  samples. Literature Qin2014 promoter alleles are covered, but full-region
+  raw top is not the exact literature promoter haplotype; use this as
+  direction-aware/full-region stress evidence, not raw-top-only proof.
+- `VRN-A1/B1/D1-remoteSNP` are base-level SNP-only regional runs. They detect
+  growth-habit signal, especially `VRN-B1`, but they do not include the known
+  VRN promoter/intron-1 deletion or CNV/SV alleles and therefore cannot yet
+  replace causal VRN validation.
+
+Data search status:
+
+WWWG2B APIs currently return HTTP 526, and Earlham OpenData WatSeq URLs return
+`Request Rejected` HTML. The next data priority remains sample-level
+WatSeq/WWWG2B INDEL/SV/CNV VCFs or another accession-matched causal-variant
+table for VRN and TaPIF4.

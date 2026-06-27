@@ -248,3 +248,55 @@
   This closes the leak where an unmarked local `minus_log10_p`, `gwas_pvalue`,
   or `site_score` could previously raise a site weight despite `gwas_data`
   being correctly gated.
+## 2026-06-27 Base-Level Genotype Rerun
+
+The current validation standard was tightened to true per-accession base calls:
+VCF-derived REF/ALT SNP/INDEL/SV genotypes are acceptable; marker labels or
+paper haplotype classes are not strict base-level proof.
+
+Rebuilt base-level databases:
+
+- `VRN-A1-remoteSNP`, `VRN-B1-remoteSNP`, and `VRN-D1-remoteSNP` from
+  WheatOmics SNP micro-VCFs.
+- `Rht-D1b` from the exact WheatOmics stop-gained SNP
+  `chr4D:18781242 G>T`.
+- `TaGW2-B1-remoteSNP` from the full local WWWG2B chr6B SNP VCF over
+  `chr6B:291759689-291778752`.
+
+Rerun commands:
+
+```bash
+python prepare_wheat2024_vrn_remote_snps.py
+python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b
+python prepare_wheat2024_tagw2_b1_remote_snp.py --vcf D:\Desktop\data\GW2\chr6B.HARD.SNP.Missing-unphasing.ID.ann.finalSID.1047.allele2_retain.hard_retain.InbreedingCoeff_retain.vcf.gz --min-haplotype-count 1 --max-missing-rate 0.2
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP --score-mode robust_discovery
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --target TaGW2-B1-remoteSNP --score-mode robust_discovery
+```
+
+Base-level result table:
+
+| Target | Data type | Samples / sites | Robust score result | Interpretation |
+| --- | --- | --- | --- | --- |
+| `Rht-D1b` | exact SNP VCF | 802 samples / 1 SNP | top `Hap2=T`, n=3; carrier total 5; `R^2=0.0056`, `P=0.0338` | strict base-level proof, but weak because the functional T allele is rare in phenotype-overlap samples |
+| `TaGW2-B1-remoteSNP` | full-region SNP VCF | 756 samples / 71 SNPs | raw top `Hap2`, n=133; Qin2014 haplotype is `present_but_not_top` but `matched_directional_top_haplotype`; `R^2=0.0031`, `P=0.12597` | base-level regional stress test; useful but not raw-top proof under full-region haplotype splitting |
+| `VRN-A1-remoteSNP` | SNP-only regional VCF | 663 samples / 96 SNPs | top `Hap4`, n=39; `R^2=0.0081`, `P=0.02045` | real-base regional signal, but not causal VRN SV/CNV proof |
+| `VRN-B1-remoteSNP` | SNP-only regional VCF | 511 samples / 127 SNPs | raw top `Hap8`, n=10; `R^2=0.0475`, `P=6.62e-07` | strongest VRN SNP-only regional signal, still not causal VRN SV/CNV proof |
+| `VRN-D1-remoteSNP` | SNP-only regional VCF | 712 samples / 58 SNPs | raw top `Hap2`, n=97; `R^2=0.0028`, `P=0.1590` | weak SNP-only regional signal |
+
+Data-source blocker:
+
+- Earlham OpenData WatSeq URLs currently return a 2261-byte `Request Rejected`
+  HTML page, even with a browser User-Agent.
+- WWWG2B `availableTable` and `fileTable` API calls currently return HTTP 526
+  invalid SSL certificate.
+- Public WheatOmics INDEL micro-VCFs and Zhai marker annotations are already
+  downloaded, but they do not provide sample-level Watkins-matched causal VRN
+  or TaPIF4 genotypes.
+
+Current proof status after tightening:
+
+`Rht-D1b` is the only strict exact causal base-level positive control, but it
+is weak. `TaGW2-B1` is strong biological/base-level regional evidence but not
+raw full-region top proof. `VRN` currently has base-level SNP regional signals,
+but the causal deletion/CNV/SV genotypes remain missing, so marker-level
+Kiss2014 results should not be counted as strict base-level proof.

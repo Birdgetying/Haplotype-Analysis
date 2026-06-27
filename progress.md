@@ -206,3 +206,24 @@
 - Added regression coverage for phenotype-free site-weight scoring, rare high-impact site retention, and snpEff `stop_gained` alias handling. The new `stop_gained` test failed before the fix because `site_weights` was empty, then passed after normalizing to internal `stop_gain`.
 - Re-ran `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --target VRN-D1-Kiss2014 --target Rht-D1b --target Rht-Zanke2014 --score-mode robust_discovery`.
 - Current rerun summary: `VRN-D1-Kiss2014` remains a strong marker-level proof (`Hap2`, `R^2=0.0382`, `P=2.98e-07`); strict `Rht-D1b` now includes `chr4D:18781242` as a phenotype-free `stop_gain` site weight and recovers `Hap2=T` as raw top but remains weak due to tiny carrier count; `TaGW2-B1` and `Rht-Zanke2014` remain useful mainly via direction-aware/functional-group audit rather than raw full-region top rank.
+- 2026-06-27: user requested strict base-level genotype scoring and allowed long downloads/searches. Rebuilt current true-VCF targets rather than relying on marker labels:
+  `python prepare_wheat2024_vrn_remote_snps.py`;
+  `python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b`;
+  `python prepare_wheat2024_tagw2_b1_remote_snp.py --vcf D:\Desktop\data\GW2\chr6B.HARD.SNP.Missing-unphasing.ID.ann.finalSID.1047.allele2_retain.hard_retain.InbreedingCoeff_retain.vcf.gz --min-haplotype-count 1 --max-missing-rate 0.2`.
+- Ran base-level robust analyses:
+  `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP --score-mode robust_discovery`;
+  `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --target TaGW2-B1-remoteSNP --score-mode robust_discovery`.
+- Base-level rerun outputs:
+  `VRN-A1-remoteSNP__robust_discovery`, `VRN-B1-remoteSNP__robust_discovery`,
+  `VRN-D1-remoteSNP__robust_discovery`, `Rht-D1b__robust_discovery`, and
+  `TaGW2-B1-remoteSNP__robust_discovery`.
+- Base-level rerun result summary:
+  `VRN-A1-remoteSNP`: 96 SNPs, 663 samples, 18 haplotypes, `R^2=0.0081`, `P=0.02045`, top `Hap4` n=39.
+  `VRN-B1-remoteSNP`: 127 SNPs, 511 samples, 26 haplotypes, `R^2=0.0475`, `P=6.62e-07`, raw top `Hap8` n=10, directional top `Hap13` n=6.
+  `VRN-D1-remoteSNP`: 58 SNPs, 712 samples, 21 haplotypes, `R^2=0.0028`, `P=0.1590`, raw top `Hap2` n=97.
+  These VRN runs are real-base SNP regional tests, but they are SNP-only and do not contain causal VRN deletion/CNV/SV calls.
+- Strict `Rht-D1b` base-level rerun: one exact stop-gained SNP `chr4D:18781242 G>T`, 802 samples, 3 haplotypes, `site_weights=1`, top `Hap2=T` n=3, total T carriers 5, score regression `R^2=0.0056`, `P=0.0338`. This remains exact but weak proof.
+- `TaGW2-B1-remoteSNP` base-level rerun: 71 regional SNPs, 756 samples, 112 haplotypes, `site_weights=39`, raw top `Hap2` n=133, score regression `R^2=0.0031`, `P=0.12597`; literature audit still reports Qin2014 `Hap-6B-1` as `present_but_not_top` at full-haplotype level and `matched_directional_top_haplotype` through the direction-aware top `Hap1`.
+- Retried public data channels for missing causal/SV data. Earlham WatSeq OpenData returns a 2261-byte `Request Rejected` HTML page even with browser User-Agent. WWWG2B `availableTable`/`fileTable` API calls currently return HTTP 526 invalid SSL certificate. No new sample-level INDEL/SV/CNV VCF was obtained in this pass.
+- Verification after documentation update: `python -m py_compile haplotype_phenotype_analysis.py star_gene_validation.py star_gene_literature_audit.py test_star_gene_data.py` passed; `python -m unittest test_star_gene_data.py -v` passed 90 tests; `python run_star_gene_validation.py --check-only --paper wheat2024 --target Rht-D1b --target TaGW2-B1-remoteSNP --target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP --no-download` reported all five targets ready for analysis.
+- Git note: the first commit command used `&&`, which this PowerShell version does not support; reran with `;` and created commit `4128d99`. `git push origin work/star-gene-validation` failed because GitHub port 443 could not be reached after about 21 seconds.

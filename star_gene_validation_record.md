@@ -1140,3 +1140,71 @@ Follow-up verification:
   conclusions are unchanged: `VRN-D1-Kiss2014` remains the strongest positive,
   exact `Rht-D1b` remains weak but recovered, and TaGW2/Rht-Zanke2014 remain
   direction-aware or functional-group evidence rather than raw-top-only proof.
+### 2026-06-27 Base-level genotype scoring rerun
+
+Purpose:
+Tighten the validation standard to true base-level genotype calls. From this
+point, strict proof requires per-accession REF/ALT SNP/INDEL/SV genotypes.
+Marker labels such as `D1b`, `VRN-D1=1`, `P/W/PAR`, or paper haplotype names
+are recorded as marker-level or paper-haplotype evidence only.
+
+Preparation commands:
+`python prepare_wheat2024_vrn_remote_snps.py`
+
+`python prepare_wheat2024_rht1_functional_snps.py --min-haplotype-count 1 --target Rht-D1b`
+
+`python prepare_wheat2024_tagw2_b1_remote_snp.py --vcf D:\Desktop\data\GW2\chr6B.HARD.SNP.Missing-unphasing.ID.ann.finalSID.1047.allele2_retain.hard_retain.InbreedingCoeff_retain.vcf.gz --min-haplotype-count 1 --max-missing-rate 0.2`
+
+Analysis commands:
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP --score-mode robust_discovery`
+
+`python run_star_gene_validation.py --run-analysis --paper wheat2024 --target Rht-D1b --target TaGW2-B1-remoteSNP --score-mode robust_discovery`
+
+Output directories:
+- `star_gene_results/wheat_nature_2024/VRN-A1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-D1-remoteSNP__robust_discovery`
+- `star_gene_results/wheat_nature_2024/Rht-D1b__robust_discovery`
+- `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery`
+
+Target results:
+
+- `Rht-D1b`: exact causal base SNP `chr4D:18781242 G>T`, `c.181G>T`,
+  `p.Glu61*`. Database has 802 samples and 1 SNP. Robust top is `Hap2=T`,
+  n=3, with total T carriers 5. `site_weights=1`,
+  `current_phenotype_used=False`, score regression `R^2=0.0056`,
+  `P=0.0338`. Literature audit: `Rht-D1b_stop_gained=matched_top_haplotype`.
+  Verdict: strict base-level proof, but weak because carrier support is tiny.
+- `TaGW2-B1-remoteSNP`: full-region base SNP panel from complete chr6B WWWG2B
+  VCF. Database has 756 samples, 71 SNPs, and 112 haplotypes. Qin2014
+  promoter states are real bases at `chr6B:291759689 C>A`,
+  `chr6B:291760677 G>A`, and `chr6B:291761315 T>C`. Robust raw top is
+  `Hap2`, n=133; score regression `R^2=0.0031`, `P=0.12597`. Literature audit:
+  `Qin2014_Hap-6B-1` is `present_but_not_top` at exact full-region haplotype
+  level but `matched_directional_top_haplotype` through directional top
+  `Hap1`. Verdict: base-level regional evidence and useful stress test, not
+  raw-top-only proof.
+- `VRN-A1-remoteSNP`: SNP-only VCF region, 663 samples, 96 SNPs, 18 haplotypes.
+  Top is `Hap4`, n=39; score regression `R^2=0.0081`, `P=0.02045`.
+  Verdict: real-base regional SNP signal, but not causal VRN SV/CNV proof.
+- `VRN-B1-remoteSNP`: SNP-only VCF region, 511 samples, 127 SNPs, 26 haplotypes.
+  Raw top is `Hap8`, n=10; directional top `Hap13`, n=6; score regression
+  `R^2=0.0475`, `P=6.62e-07`. Verdict: strongest current VRN base-level
+  regional signal, but still SNP-only and not causal VRN SV/CNV proof.
+- `VRN-D1-remoteSNP`: SNP-only VCF region, 712 samples, 58 SNPs, 21 haplotypes.
+  Raw top `Hap2`, n=97; score regression `R^2=0.0028`, `P=0.1590`.
+  Verdict: weak base-level regional SNP signal.
+
+Data search and blocker:
+Earlham OpenData WatSeq URLs return a 2261-byte `Request Rejected` HTML page.
+WWWG2B `availableTable`/`fileTable` APIs return HTTP 526 invalid SSL
+certificate. Therefore the missing data are still sample-level
+WatSeq/WWWG2B INDEL/SV/CNV VCFs or equivalent accession-matched causal-variant
+tables, especially for VRN and TaPIF4.
+
+Current strict-proof interpretation:
+After moving to base-level scoring, only `Rht-D1b` is exact causal-base proof,
+and it is weak. `TaGW2-B1` remains biologically useful base-level regional
+evidence, but full-region background SNPs split the Qin2014 promoter haplotype.
+`VRN` marker-level Kiss2014 proof should not be counted as strict base-level
+proof until causal deletion/CNV/SV genotypes are obtained.
