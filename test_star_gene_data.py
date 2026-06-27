@@ -61,6 +61,17 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(3, len(phenotype_df))
         self.assertEqual(["SampleID", "VRN-B1_deletion_6851"], list(single_marker_df.columns))
 
+    def test_frontiers2022_vrn_b1_single_marker_target_is_opt_in(self):
+        from prepare_wheat2024_vrn_b1_frontiers2022 import build_arg_parser
+
+        parser = build_arg_parser()
+
+        default_args = parser.parse_args([])
+        opt_in_args = parser.parse_args(["--include-single-marker-target"])
+
+        self.assertFalse(default_args.include_single_marker_target)
+        self.assertTrue(opt_in_args.include_single_marker_target)
+
     def test_rice_figshare_is_large_and_skipped_by_default(self):
         from star_gene_data import build_download_commands, iter_data_files
 

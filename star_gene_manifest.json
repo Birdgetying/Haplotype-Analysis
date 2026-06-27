@@ -937,12 +937,12 @@
               "source_note": "Makhoul et al. 2022 Supplementary Table S12 records the 6,851 bp first-intron VRN-B1 deletion as Vrn-B1a."
             }
           ],
-          "notes": "Strict structural-variant positive control from Frontiers 2022: Supplementary Table S12 encodes VRN-B1 838 bp duplication, 6,851 bp first-intron deletion, and 37 bp deletion; Supplementary Table S1 supplies heading-date phenotypes. Prepared by prepare_wheat2024_vrn_b1_frontiers2022.py. This is not a Watkins VCF run, but it is an accession-level literature structural-variant table."
+          "notes": "Discovery-eligible structural-variant validation target from Frontiers 2022: Supplementary Table S12 encodes the available VRN-B1 structural marker panel (838 bp duplication, 6,851 bp first-intron deletion, and 37 bp deletion); Supplementary Table S1 supplies heading-date phenotypes. Prepared by prepare_wheat2024_vrn_b1_frontiers2022.py. This is not a Watkins VCF run, but it is an accession-level literature structural-variant table. Validation must use this full marker panel first, then audit whether discovered candidates include the literature Vrn-B1a deletion."
         },
         {
           "target_id": "VRN-B1a-Frontiers2022",
           "gene_or_locus": "VRN-B1",
-          "target_type": "single_structural_variant_marker",
+          "target_type": "single_literature_site_sanity_check_not_discovery_proof",
           "aliases": ["Vrn-B1a single marker", "VRN-B1 6851bp deletion single marker"],
           "requires_coordinate_resolution": false,
           "coordinate_source": "Makhoul et al. 2022 Frontiers Supplementary Tables S1/S12",
@@ -972,7 +972,7 @@
               "source_note": "Makhoul et al. 2022 Supplementary Table S12 records the 6,851 bp first-intron VRN-B1 deletion as Vrn-B1a."
             }
           ],
-          "notes": "Single-causal-marker Frontiers 2022 positive control for the VRN-B1 6,851 bp first-intron deletion. This target is used to test whether scoring recovers the decisive structural variant without confounding from the separate 838 bp duplication or the 37 bp deletion."
+          "notes": "Literature-site-only sanity check for the VRN-B1 6,851 bp first-intron deletion. This target must not be counted as discovery proof because the literature variant is selected before scoring; use only to confirm allele coding and phenotype direction after full-panel discovery has been evaluated."
         },
         {
           "target_id": "VRN-D1-remoteSNP",

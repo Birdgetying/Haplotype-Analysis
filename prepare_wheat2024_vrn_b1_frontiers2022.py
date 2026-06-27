@@ -58,7 +58,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--intermediate-root", default=str(DEFAULT_INTERMEDIATE_ROOT))
     parser.add_argument("--target-id", default=TARGET_ID)
     parser.add_argument("--single-marker-target-id", default=SINGLE_MARKER_TARGET_ID)
-    parser.add_argument("--skip-single-marker-target", action="store_true")
+    parser.add_argument(
+        "--include-single-marker-target",
+        action="store_true",
+        help="also build the literature-site-only sanity-check target; do not use it as discovery proof",
+    )
     parser.add_argument("--min-haplotype-count", type=int, default=1)
     return parser
 
@@ -260,7 +264,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         min_haplotype_count=args.min_haplotype_count,
     )
     print(f"[INFO] Built Frontiers 2022 VRN-B1 structural database: {db_dir}")
-    if not args.skip_single_marker_target:
+    targets = [args.target_id]
+    if args.include_single_marker_target:
         single_db_dir = build_database(
             source_workbook=Path(args.source_workbook),
             output_root=Path(args.output_root),
@@ -270,8 +275,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             marker_columns=["VRN-B1_deletion_6851"],
         )
         print(f"[INFO] Built Frontiers 2022 Vrn-B1a single-marker database: {single_db_dir}")
+        targets.append(args.single_marker_target_id)
     print("[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 "
-          f"--target {args.target_id} --target {args.single_marker_target_id} --score-mode robust_discovery")
+          + " ".join(f"--target {target}" for target in targets)
+          + " --score-mode robust_discovery")
     return 0
 
 

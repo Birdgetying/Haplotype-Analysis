@@ -428,7 +428,7 @@ Commands:
 
 ```bash
 python prepare_wheat2024_vrn_b1_frontiers2022.py
-python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-Frontiers2022 --target VRN-B1a-Frontiers2022 --score-mode robust_discovery
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-Frontiers2022 --score-mode robust_discovery
 ```
 
 Outputs:
@@ -441,14 +441,19 @@ Outputs:
 Interim interpretation:
 
 - Full VRN-B1 structural panel: `Hap2=Vrn-B1f|-|-`, n=9, ranks top; `Vrn-B1a`
-  is present but split across `Hap3` and `Hap4`, so this panel is not a direct
-  `Vrn-B1a` top proof.
+  is present but split across `Hap3` and `Hap4`. Site-weight discovery ranks
+  the 838 bp duplication #1, the literature `Vrn-B1a` 6,851 bp deletion #2,
+  and the 37 bp deletion #3. Therefore this panel is not a direct `Vrn-B1a`
+  top proof.
 - Single causal marker: `Hap2=Vrn-B1a`, n=4, ranks top and the literature audit
-  reports `matched_top_haplotype`. This is a strict structural-variant positive
-  control, but reliability is low because the carrier count is only four.
+  reports `matched_top_haplotype`. This is now classified as a sanity check
+  only, not discovery proof, because the literature site is selected before
+  scoring.
 
 Next:
 
-Run full verification, update the evidence matrix, commit the new script/data
-record/docs, and then continue searching for similarly decisive accession-level
-tables or VCF/SV data for the remaining star genes.
+Run full verification, update the evidence matrix, commit the corrected
+script/data record/docs, and then continue searching for similarly decisive
+accession-level tables or VCF/SV data for the remaining star genes. Future
+positive controls must use full available gene/region marker sets for discovery
+first and only then audit whether literature sites appear among top candidates.
