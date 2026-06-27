@@ -9,9 +9,58 @@ import gzip
 import json
 import tempfile
 import unittest
+import pandas as pd
 
 
 class StarGeneDataTests(unittest.TestCase):
+    def test_frontiers2022_vrn_b1_builds_structural_marker_tables(self):
+        from prepare_wheat2024_vrn_b1_frontiers2022 import build_frontiers2022_marker_tables
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            workbook = tmp_path / "frontiers_vrn1.xlsx"
+            with pd.ExcelWriter(workbook) as writer:
+                pd.DataFrame([
+                    ["title", None, None, None],
+                    ["Genotype ID", "Cultivar name", "Heading date", "Plant height [cm]"],
+                    ["TG001", "WinterA", 154.0, 90.0],
+                    ["TG002", "Highbury", 150.0, 82.0],
+                    ["TG003", "Joss", 151.0, 95.0],
+                ]).to_excel(writer, sheet_name="S1", header=False, index=False)
+                pd.DataFrame([
+                    ["title", None, None, None, None, None, None, None],
+                    [None, None, "VRN-A1", "VRN-B1", None, None, "VRN-D1", None],
+                    ["NO", "Genotype name", "Insertion(231bp)", "Duplication(838bp)",
+                     "Deletion(6851bp)", "Deletion(37bp)", "Insertion(163bp)", "Deletion(17bp)"],
+                    [1, "Highbury", "Vrn-A1a", "-", "Vrn-B1a", "-", "-", "-"],
+                    [2, "Joss", "-", "Vrn-B1f", "-", "-", "-", "-"],
+                ]).to_excel(writer, sheet_name="S12", header=False, index=False)
+                pd.DataFrame([
+                    ["title", None, None, None, None, None],
+                    ["Cultivar name", "VRN-A1 sequence type", "Genotype of VRN-A1",
+                     "Haplotype of VRN-A1", "Haplotype of VRN-B1", "Haplotype of VRN-D1"],
+                    ["WinterA", "Weebil", "GT4", "Hap3", "Hap1", "Hap1"],
+                    ["Highbury", "Weebil", "GT4", "Hap3", "Hap5", "Hap1"],
+                    ["Joss", "Weebil", "GT4", "Hap3", "Hap2", "Hap3"],
+                ]).to_excel(writer, sheet_name="S13", header=False, index=False)
+
+            marker_df, phenotype_df = build_frontiers2022_marker_tables(workbook)
+            single_marker_df, _ = build_frontiers2022_marker_tables(
+                workbook,
+                marker_columns=["VRN-B1_deletion_6851"],
+            )
+
+        self.assertEqual(
+            ["SampleID", "VRN-B1_insertion_838_duplication", "VRN-B1_deletion_6851", "VRN-B1_deletion_37"],
+            list(marker_df.columns),
+        )
+        highbury = marker_df.set_index("SampleID").loc["Highbury"]
+        self.assertEqual("Vrn-B1a", highbury["VRN-B1_deletion_6851"])
+        self.assertEqual("-", highbury["VRN-B1_insertion_838_duplication"])
+        self.assertEqual(["SampleID", "Heading_date"], list(phenotype_df.columns))
+        self.assertEqual(3, len(phenotype_df))
+        self.assertEqual(["SampleID", "VRN-B1_deletion_6851"], list(single_marker_df.columns))
+
     def test_rice_figshare_is_large_and_skipped_by_default(self):
         from star_gene_data import build_download_commands, iter_data_files
 

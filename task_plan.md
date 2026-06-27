@@ -402,3 +402,53 @@ WWWG2B APIs currently return HTTP 526, and Earlham OpenData WatSeq URLs return
 `Request Rejected` HTML. The next data priority remains sample-level
 WatSeq/WWWG2B INDEL/SV/CNV VCFs or another accession-matched causal-variant
 table for VRN and TaPIF4.
+
+### Phase 22: VRN-B1 causal structural table validation
+
+Status: in_progress
+
+Goal:
+
+Use an accession-level table with the published `Vrn-B1a` 6,851 bp first-intron
+deletion, so the VRN-B1 check is no longer limited to SNP-only regional VCF
+data.
+
+Data obtained:
+
+- Article/source: Makhoul et al. 2022 Frontiers in Plant Science,
+  `10.3389/fpls.2022.942461`, PMCID `PMC9676936`.
+- Local workbook:
+  `external_data/literature/vrn_b1_structural/PMC9676936_Table_1.xlsx`.
+- Relevant sheets: `S1` for heading-date phenotypes, `S12` for structural
+  calls, and `S13` for paper VRN1 haplotype labels.
+- Relevant structural marker: `VRN-B1_deletion_6851`, source column
+  `Deletion(6851bp)`, allele `Vrn-B1a`.
+
+Commands:
+
+```bash
+python prepare_wheat2024_vrn_b1_frontiers2022.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-Frontiers2022 --target VRN-B1a-Frontiers2022 --score-mode robust_discovery
+```
+
+Outputs:
+
+- `star_gene_database/wheat_nature_2024/VRN-B1-Frontiers2022`
+- `star_gene_database/wheat_nature_2024/VRN-B1a-Frontiers2022`
+- `star_gene_results/wheat_nature_2024/VRN-B1-Frontiers2022__robust_discovery`
+- `star_gene_results/wheat_nature_2024/VRN-B1a-Frontiers2022__robust_discovery`
+
+Interim interpretation:
+
+- Full VRN-B1 structural panel: `Hap2=Vrn-B1f|-|-`, n=9, ranks top; `Vrn-B1a`
+  is present but split across `Hap3` and `Hap4`, so this panel is not a direct
+  `Vrn-B1a` top proof.
+- Single causal marker: `Hap2=Vrn-B1a`, n=4, ranks top and the literature audit
+  reports `matched_top_haplotype`. This is a strict structural-variant positive
+  control, but reliability is low because the carrier count is only four.
+
+Next:
+
+Run full verification, update the evidence matrix, commit the new script/data
+record/docs, and then continue searching for similarly decisive accession-level
+tables or VCF/SV data for the remaining star genes.

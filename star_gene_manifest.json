@@ -905,6 +905,76 @@
           "notes": "VRN-B1 single-gene SNP-only validation from WheatOmics merged SNP VCF and Watkins growth habit. Literature VRN-B1 causal alleles can include copy-number or structural variation, so this target tests regional SNP haplotype signal but is not exact causal-SV proof."
         },
         {
+          "target_id": "VRN-B1-Frontiers2022",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "structural_variant_marker_panel",
+          "aliases": ["Vrn-B1a", "VRN-B1 6851bp deletion", "Makhoul2022 VRN-B1"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Makhoul et al. 2022 Frontiers Supplementary Tables S1/S12/S13",
+          "coordinates": {
+            "chrom": "VRN-B1_structural_marker_panel",
+            "start": 1,
+            "end": 3
+          },
+          "required_database_source": "frontiers2022_vrn1_structural_variants",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date",
+              "aliases": ["Heading_date", "heading date"],
+              "local_columns": ["Heading_date"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "Vrn-B1a_6851bp_first_intron_deletion",
+              "chrom": "VRN-B1_structural_marker_panel",
+              "position": 2,
+              "marker_id": "VRN-B1_deletion_6851",
+              "expected_allele": "Vrn-B1a",
+              "effect": "dominant spring/earlier-heading VRN-B1 allele",
+              "source_note": "Makhoul et al. 2022 Supplementary Table S12 records the 6,851 bp first-intron VRN-B1 deletion as Vrn-B1a."
+            }
+          ],
+          "notes": "Strict structural-variant positive control from Frontiers 2022: Supplementary Table S12 encodes VRN-B1 838 bp duplication, 6,851 bp first-intron deletion, and 37 bp deletion; Supplementary Table S1 supplies heading-date phenotypes. Prepared by prepare_wheat2024_vrn_b1_frontiers2022.py. This is not a Watkins VCF run, but it is an accession-level literature structural-variant table."
+        },
+        {
+          "target_id": "VRN-B1a-Frontiers2022",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "single_structural_variant_marker",
+          "aliases": ["Vrn-B1a single marker", "VRN-B1 6851bp deletion single marker"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "Makhoul et al. 2022 Frontiers Supplementary Tables S1/S12",
+          "coordinates": {
+            "chrom": "VRN-B1_structural_marker_panel",
+            "start": 2,
+            "end": 2
+          },
+          "required_database_source": "frontiers2022_vrn1_structural_variants",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date",
+              "aliases": ["Heading_date", "heading date"],
+              "local_columns": ["Heading_date"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "literature_variants": [
+            {
+              "variant_name": "Vrn-B1a_6851bp_first_intron_deletion",
+              "chrom": "VRN-B1_structural_marker_panel",
+              "position": 2,
+              "marker_id": "VRN-B1_deletion_6851",
+              "expected_allele": "Vrn-B1a",
+              "effect": "dominant spring/earlier-heading VRN-B1 allele",
+              "source_note": "Makhoul et al. 2022 Supplementary Table S12 records the 6,851 bp first-intron VRN-B1 deletion as Vrn-B1a."
+            }
+          ],
+          "notes": "Single-causal-marker Frontiers 2022 positive control for the VRN-B1 6,851 bp first-intron deletion. This target is used to test whether scoring recovers the decisive structural variant without confounding from the separate 838 bp duplication or the 37 bp deletion."
+        },
+        {
           "target_id": "VRN-D1-remoteSNP",
           "gene_or_locus": "VRN-D1",
           "target_type": "gene",

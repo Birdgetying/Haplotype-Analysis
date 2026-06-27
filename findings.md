@@ -305,3 +305,31 @@ The staged advisor-facing summary is saved as
 `star_gene_stage_evidence_matrix.csv`. It should be treated as the current
 evidence matrix: strict exact base, base-level regional SNP, SNP-only regional,
 and literature-label/data-blocked cases are deliberately separated.
+
+## 2026-06-27 VRN-B1 Structural-Variant Positive Control
+
+The missing causal VRN-B1 SV problem was partially resolved with an independent
+accession-level paper table rather than the Watkins SNP-only VCF. Makhoul et al.
+2022 Frontiers/PMC9676936 Supplementary Table S12 contains the VRN-B1 structural
+calls, including `Deletion(6851bp)` annotated as `Vrn-B1a`; Supplementary Table
+S1 contains heading-date phenotypes. The valid downloaded workbook is
+`external_data/literature/vrn_b1_structural/PMC9676936_Table_1.xlsx`.
+
+Added `prepare_wheat2024_vrn_b1_frontiers2022.py`, manifest targets
+`VRN-B1-Frontiers2022` and `VRN-B1a-Frontiers2022`, plus a unit test for parsing
+the Frontiers structural marker tables.
+
+Results:
+
+| Target | Input | Samples / markers | Top scored haplotype | Literature audit | Interpretation |
+| --- | --- | --- | --- | --- | --- |
+| `VRN-B1-Frontiers2022` | 838 bp duplication + 6,851 bp deletion + 37 bp deletion | 192 / 3 | `Hap2=Vrn-B1f|-|-`, n=9 | `Vrn-B1a` is `present_but_not_top`; carriers split across `Hap3` and `Hap4` | panel stress test; not a direct `Vrn-B1a` top proof |
+| `VRN-B1a-Frontiers2022` | single causal marker `VRN-B1_deletion_6851` | 192 / 1 | `Hap2=Vrn-B1a`, n=4 | `matched_top_haplotype` | positive strict structural-variant validation, but low support because only four carriers overlap the phenotype table |
+
+For `VRN-B1a-Frontiers2022`, robust discovery uses phenotype-free site
+weighting (`current_phenotype_used=False`), recovers `Vrn-B1a` as the raw top
+haplotype, and gives `R^2=0.0217`, `regression_pvalue=0.0413`, `PVE=0.0217`.
+This strengthens the validation set because it shows the method can recover a
+published decisive structural variant when the correct per-accession genotype
+table is supplied. It should be presented separately from the SNP-only Watkins
+`VRN-B1-remoteSNP` run.

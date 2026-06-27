@@ -1244,3 +1244,82 @@ contains SNP calls only and no INDEL/SV/CNV genotype. `Hap8` is a rare
 SNP-defined regional haplotype, not a `Vrn-B1a` 6.85 kb intron-1 deletion
 carrier call. The VRN-B1 result should therefore remain classified as
 SNP-only regional evidence, not causal-variant validation.
+
+### 2026-06-27 VRN-B1 Frontiers 2022 structural-variant validation
+
+Question:
+Can we stop relying on the SNP-only VRN-B1 remote region and test the
+published `Vrn-B1a` structural deletion directly?
+
+Literature/data source:
+Makhoul et al. 2022, Frontiers in Plant Science
+(`10.3389/fpls.2022.942461`) states that dominant spring `Vrn-B1a` is caused
+by a first-intron deletion of about 6.85 kb in `VRN-B1`. The article's
+Supplementary Table S12 records `Deletion(6851bp)` as `Vrn-B1a`; Supplementary
+Table S1 provides heading-date phenotypes. The downloaded accession-level
+workbook is:
+`external_data/literature/vrn_b1_structural/PMC9676936_Table_1.xlsx`.
+
+Download route:
+The direct PMC supplemental file was obtained from
+`https://pmc.ncbi.nlm.nih.gov/articles/instance/9676936/bin/Table_1.xlsx`.
+PMC required a browser proof-of-work cookie in this environment; after solving
+the challenge, the valid workbook size was 207,791 bytes and contained sheets
+`S1` through `S13`.
+
+Code/data added:
+
+```bash
+python prepare_wheat2024_vrn_b1_frontiers2022.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-Frontiers2022 --target VRN-B1a-Frontiers2022 --score-mode robust_discovery
+```
+
+Generated databases:
+
+- `star_gene_database/wheat_nature_2024/VRN-B1-Frontiers2022`
+- `star_gene_database/wheat_nature_2024/VRN-B1a-Frontiers2022`
+
+Generated HTML/report outputs:
+
+- `star_gene_results/wheat_nature_2024/VRN-B1-Frontiers2022__robust_discovery/VRN-B1-Frontiers2022.html`
+- `star_gene_results/wheat_nature_2024/VRN-B1a-Frontiers2022__robust_discovery/VRN-B1a-Frontiers2022.html`
+
+Panel target result (`VRN-B1-Frontiers2022`):
+
+- Marker panel: 838 bp duplication (`Vrn-B1f`), 6,851 bp deletion
+  (`Vrn-B1a`), and 37 bp deletion (`Vrn-B1b`).
+- Samples: 192; markers: 3; haplotypes: 4.
+- Haplotype split: `Hap1=-|-|-` n=179; `Hap2=Vrn-B1f|-|-` n=9;
+  `Hap3=-|Vrn-B1a|-` n=3; `Hap4=-|Vrn-B1a|Vrn-B1b` n=1.
+- Robust discovery score axis: `total`; top haplotype is `Hap2`, score
+  `0.0437`, n=9.
+- Literature audit for `Vrn-B1a`: `present_but_not_top`; carriers are split
+  between `Hap3` and `Hap4`.
+- Regression: `R^2=0.0712`, `regression_pvalue=0.000183`, `PVE=0.0793`.
+- Interpretation: useful full-panel stress test, but it does not prove
+  `Vrn-B1a` is the highest-scored regional haplotype because the separate
+  `Vrn-B1f` duplication ranks higher and `Vrn-B1a` is split by the 37 bp
+  deletion.
+
+Single-causal-marker result (`VRN-B1a-Frontiers2022`):
+
+- Marker panel: only `VRN-B1_deletion_6851`.
+- Samples: 192; markers: 1; haplotypes: 2.
+- Haplotype split: `Hap1=-` n=188; `Hap2=Vrn-B1a` n=4.
+- Robust discovery score axis: `total`; top haplotype is `Hap2`, score
+  `0.0750`, n=4.
+- Literature audit: `matched_top_haplotype`; all 4 carriers are in top
+  `Hap2`, and the top haplotype contains the expected `Vrn-B1a` allele.
+- Regression: `R^2=0.0217`, `regression_pvalue=0.0413`, `PVE=0.0217`.
+- Site-weight policy remains phenotype-free:
+  `site_weighting_policy.current_phenotype_used=False`.
+
+Current verdict:
+`VRN-B1a-Frontiers2022` is now a positive strict structural-variant validation
+of the scoring procedure: when the decisive 6,851 bp intron-1 deletion is
+available as per-accession genotype data, the highest-scored single-marker
+haplotype is the published `Vrn-B1a` carrier haplotype. Reliability is still
+limited because only 4 of 192 materials carry the allele, so this should be
+reported as a positive but low-support proof, not as a high-powered population
+test. `VRN-B1-remoteSNP` remains SNP-only regional evidence and should not be
+used to answer whether the causal `Vrn-B1a` deletion was recovered.
