@@ -1215,3 +1215,32 @@ one table. It separates strict exact-base proof, base-level regional SNP
 evidence, SNP-only regional signals, and label-only/data-blocked evidence. This
 matrix should be used for advisor-facing summaries until causal INDEL/SV/CNV
 genotypes are obtained.
+
+### 2026-06-27 VRN-B1 literature decisive-variant check
+
+Question:
+Does the highest-scored haplotype in
+`star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP__robust_discovery/VRN-B1-remoteSNP.html`
+contain the published VRN-B1 decisive variant?
+
+Literature variant:
+The canonical dominant spring VRN-B1 allele is a structural deletion in the
+first intron, usually described as the `Vrn-B1a`/VRN-B1 intron-1 6,850 bp
+deletion. Other VRN-B1 alleles also involve structural changes, but this
+validation target should not be judged by ordinary SNPs alone.
+
+Current data checked:
+- Database: `star_gene_database/wheat_nature_2024/VRN-B1-remoteSNP`
+- Source: WheatOmics remote SNP micro-VCF over
+  `5B:573800883-573818070`
+- `variant_info.csv`: 127 variants, all `is_sv=False`, all `len_diff=0`
+- HTML raw top haplotype: `Hap8`, n=10, total score `1.6888`
+- Direction-aware top haplotype: `Hap13`, n=6, directional total `0.8858`
+
+Conclusion:
+No. The current highest-scored HTML haplotype does not contain the published
+VRN-B1 decisive structural deletion, because the current VRN-B1 remote target
+contains SNP calls only and no INDEL/SV/CNV genotype. `Hap8` is a rare
+SNP-defined regional haplotype, not a `Vrn-B1a` 6.85 kb intron-1 deletion
+carrier call. The VRN-B1 result should therefore remain classified as
+SNP-only regional evidence, not causal-variant validation.
