@@ -300,3 +300,8 @@ is weak. `TaGW2-B1` is strong biological/base-level regional evidence but not
 raw full-region top proof. `VRN` currently has base-level SNP regional signals,
 but the causal deletion/CNV/SV genotypes remain missing, so marker-level
 Kiss2014 results should not be counted as strict base-level proof.
+
+The staged advisor-facing summary is saved as
+`star_gene_stage_evidence_matrix.csv`. It should be treated as the current
+evidence matrix: strict exact base, base-level regional SNP, SNP-only regional,
+and literature-label/data-blocked cases are deliberately separated.

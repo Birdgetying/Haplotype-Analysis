@@ -1208,3 +1208,10 @@ and it is weak. `TaGW2-B1` remains biologically useful base-level regional
 evidence, but full-region background SNPs split the Qin2014 promoter haplotype.
 `VRN` marker-level Kiss2014 proof should not be counted as strict base-level
 proof until causal deletion/CNV/SV genotypes are obtained.
+
+Stage evidence matrix:
+`star_gene_stage_evidence_matrix.csv` records the current staged conclusion in
+one table. It separates strict exact-base proof, base-level regional SNP
+evidence, SNP-only regional signals, and label-only/data-blocked evidence. This
+matrix should be used for advisor-facing summaries until causal INDEL/SV/CNV
+genotypes are obtained.
