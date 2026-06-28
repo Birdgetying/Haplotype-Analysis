@@ -163,6 +163,72 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(["SampleID", "GrowthHabitSpringScore"], list(phenotype_df.columns))
         self.assertEqual(1.0, phenotype_df.set_index("SampleID").loc["Anza", "GrowthHabitSpringScore"])
 
+    def test_vrn_b1_full_sequence_merges_promoter_and_gene_markers(self):
+        from prepare_wheat2024_vrn_b1_full_sequence import build_full_sequence_marker_matrix
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            promoter_fasta = tmp_path / "prom.fasta"
+            gene_fasta = tmp_path / "gene.fasta"
+            promoter_fasta.write_text(
+                ">S1\n"
+                "ACGT\n"
+                ">S2\n"
+                "ATGT\n"
+                ">S3\n"
+                "AC-T\n",
+                encoding="utf-8",
+            )
+            gene_fasta.write_text(
+                ">S1\n"
+                "GGAA\n"
+                ">S2\n"
+                "GGTA\n"
+                ">S3\n"
+                "GGAA\n",
+                encoding="utf-8",
+            )
+
+            marker_df, marker_metadata, layout = build_full_sequence_marker_matrix(
+                promoter_fasta,
+                gene_fasta,
+                sample_id_fn=lambda header: header,
+                max_missing_rate=0.5,
+                min_minor_count=1,
+            )
+
+        self.assertEqual(["S1", "S2", "S3"], marker_df["SampleID"].tolist())
+        self.assertIn("VRNB1prom_snp_2", marker_df.columns)
+        self.assertIn("VRNB1gene_snp_7", marker_df.columns)
+        self.assertEqual(1, layout["promoter_start"])
+        self.assertEqual(4, layout["promoter_end"])
+        self.assertEqual(5, layout["gene_start"])
+        self.assertEqual(8, layout["gene_end"])
+        metadata_by_id = {row["marker_id"]: row for row in marker_metadata}
+        self.assertEqual("promoter", metadata_by_id["VRNB1prom_snp_2"]["segment"])
+        self.assertEqual(2, metadata_by_id["VRNB1prom_snp_2"]["alignment_start"])
+        self.assertEqual("gene", metadata_by_id["VRNB1gene_snp_7"]["segment"])
+        self.assertEqual(7, metadata_by_id["VRNB1gene_snp_7"]["alignment_start"])
+
+    def test_promoter_report_can_use_preloaded_full_promoter_coordinates(self):
+        from haplotype_phenotype_analysis import PromoterAnnotator
+
+        report = PromoterAnnotator().generate_promoter_report(
+            gene_id="VRN-B1-fullSequence-IJMS2021",
+            chrom="VRN-B1_IJMS2021_alignment",
+            gene_start=4673,
+            gene_end=17867,
+            strand="+",
+            variants_positions=[1, 3952, 4966],
+            promoter_start=1,
+            promoter_end=4672,
+        )
+
+        self.assertEqual(1, report["promoter_start"])
+        self.assertEqual(4672, report["promoter_end"])
+        self.assertEqual(2, report["variants_in_promoter"])
+        self.assertEqual([1, 3952], report["variant_positions"])
+
     def test_vrn_b1_full_sequence_can_merge_continuous_heading_phenotypes(self):
         from prepare_wheat2024_vrn_b1_full_sequence import merge_continuous_phenotypes
 

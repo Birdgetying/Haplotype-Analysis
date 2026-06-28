@@ -5354,9 +5354,11 @@ class PromoterAnnotator:
         
         return df
     
-    def generate_promoter_report(self, gene_id: str, chrom: str, 
+    def generate_promoter_report(self, gene_id: str, chrom: str,
                                   gene_start: int, gene_end: int, strand: str,
-                                  variants_positions: list = None) -> dict:
+                                  variants_positions: list = None,
+                                  promoter_start: int = None,
+                                  promoter_end: int = None) -> dict:
         """
         生成启动子分析报告
         
@@ -5371,9 +5373,10 @@ class PromoterAnnotator:
         Returns:
             dict: 启动子分析报告
         """
-        promoter_start, promoter_end = self.get_promoter_region(
-            chrom, gene_start, gene_end, strand
-        )
+        if promoter_start is None or promoter_end is None:
+            promoter_start, promoter_end = self.get_promoter_region(
+                chrom, gene_start, gene_end, strand
+            )
         
         report = {
             'gene_id': gene_id,
@@ -16278,7 +16281,9 @@ class HaplotypePhenotypeAnalyzer:
             gene_start=gene_body_start,  # 使用GTF中的真实基因体坐标
             gene_end=gene_body_end,
             strand=strand,  # 使用 Step 0 获取的真实链方向
-            variants_positions=self.positions
+            variants_positions=self.positions,
+            promoter_start=promoter_start_pos,
+            promoter_end=promoter_end_pos,
         )
         all_results['promoter_analysis'] = promoter_report
         logger.info(f"  - 启动子区域: {promoter_report['promoter_start']}-{promoter_report['promoter_end']}")

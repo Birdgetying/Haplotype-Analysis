@@ -29,6 +29,9 @@ from star_gene_data import (
 DEFAULT_GENE_FASTA = Path(
     "external_data/literature/vrn1_full_sequence/esm1_alignments/ESM1/VRNB1_gene.fasta"
 )
+DEFAULT_PROMOTER_FASTA = Path(
+    "external_data/literature/vrn1_full_sequence/esm1_alignments/ESM1/VRNB1_prom.fasta"
+)
 DEFAULT_ESM2_WORKBOOK = Path(
     "external_data/literature/vrn1_full_sequence/s001_extracted/ESM2.xlsx"
 )
@@ -50,6 +53,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--gene-fasta", default=str(DEFAULT_GENE_FASTA))
+    parser.add_argument("--promoter-fasta", default=str(DEFAULT_PROMOTER_FASTA))
     parser.add_argument("--esm2-workbook", default=str(DEFAULT_ESM2_WORKBOOK))
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--intermediate-root", default=str(DEFAULT_INTERMEDIATE_ROOT))
@@ -214,6 +218,122 @@ def make_vrn_b1_fasta_sample_id_fn(code_to_sample: Dict[str, str]) -> Callable[[
     return sample_id
 
 
+def _aligned_fasta_length(fasta_path: Path) -> int:
+    seq_parts = []
+    in_first_record = False
+    with Path(fasta_path).open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            text = line.strip()
+            if not text:
+                continue
+            if text.startswith(">"):
+                if in_first_record:
+                    break
+                in_first_record = True
+                continue
+            if in_first_record:
+                seq_parts.append(text)
+    if not seq_parts:
+        raise ValueError(f"no FASTA sequence records found: {fasta_path}")
+    return len("".join(seq_parts))
+
+
+def _shift_marker_metadata(
+    marker_metadata: Sequence[Dict[str, object]],
+    prefix: str,
+    offset: int,
+    segment: str,
+) -> list[Dict[str, object]]:
+    shifted = []
+    for row in marker_metadata:
+        source_marker_id = str(row["marker_id"])
+        new_start = int(row["alignment_start"]) + offset
+        new_end = int(row["alignment_end"]) + offset
+        kind = str(row.get("kind", ""))
+        if kind == "snp":
+            marker_id = f"{prefix}_snp_{new_start}"
+        elif kind == "indel":
+            marker_id = f"{prefix}_indel_{new_start}_{new_end}"
+        else:
+            suffix = source_marker_id.split("_", 1)[1] if "_" in source_marker_id else source_marker_id
+            marker_id = f"{prefix}_{suffix}"
+        shifted.append({
+            **dict(row),
+            "marker_id": marker_id,
+            "alignment_start": new_start,
+            "alignment_end": new_end,
+            "segment": segment,
+            "source_marker_id": source_marker_id,
+        })
+    return shifted
+
+
+def _rename_marker_columns(marker_df: pd.DataFrame, marker_metadata: Sequence[Dict[str, object]]) -> pd.DataFrame:
+    rename_map = {
+        str(row["source_marker_id"]): str(row["marker_id"])
+        for row in marker_metadata
+        if "source_marker_id" in row
+    }
+    return marker_df.rename(columns=rename_map)
+
+
+def build_full_sequence_marker_matrix(
+    promoter_fasta: Path,
+    gene_fasta: Path,
+    sample_id_fn: Callable[[str], str],
+    max_missing_rate: float,
+    min_minor_count: int,
+) -> tuple[pd.DataFrame, list[Dict[str, object]], Dict[str, int]]:
+    """Build one VRN-B1 marker matrix from promoter and gene-body alignments."""
+    promoter_fasta = Path(promoter_fasta)
+    gene_fasta = Path(gene_fasta)
+    promoter_length = _aligned_fasta_length(promoter_fasta)
+    gene_length = _aligned_fasta_length(gene_fasta)
+
+    promoter_df, promoter_metadata = build_marker_matrix_from_aligned_fasta(
+        promoter_fasta,
+        marker_prefix="VRNB1prom",
+        sample_id_fn=sample_id_fn,
+        max_missing_rate=max_missing_rate,
+        min_minor_count=min_minor_count,
+    )
+    gene_df, gene_metadata = build_marker_matrix_from_aligned_fasta(
+        gene_fasta,
+        marker_prefix="VRNB1gene",
+        sample_id_fn=sample_id_fn,
+        max_missing_rate=max_missing_rate,
+        min_minor_count=min_minor_count,
+    )
+
+    promoter_metadata = _shift_marker_metadata(
+        promoter_metadata,
+        prefix="VRNB1prom",
+        offset=0,
+        segment="promoter",
+    )
+    gene_metadata = _shift_marker_metadata(
+        gene_metadata,
+        prefix="VRNB1gene",
+        offset=promoter_length,
+        segment="gene",
+    )
+    promoter_df = _rename_marker_columns(promoter_df, promoter_metadata)
+    gene_df = _rename_marker_columns(gene_df, gene_metadata)
+    marker_df = promoter_df.merge(gene_df, on="SampleID", how="inner")
+    if marker_df.empty:
+        raise ValueError("no samples overlap between VRN-B1 promoter and gene alignments")
+
+    layout = {
+        "promoter_start": 1,
+        "promoter_end": promoter_length,
+        "gene_start": promoter_length + 1,
+        "gene_end": promoter_length + gene_length,
+        "promoter_length": promoter_length,
+        "gene_length": gene_length,
+    }
+    return marker_df, [*promoter_metadata, *gene_metadata], layout
+
+
 def write_intermediate_tables(
     marker_df: pd.DataFrame,
     phenotype_df: pd.DataFrame,
@@ -240,6 +360,7 @@ def write_intermediate_tables(
 def update_database_metadata(
     db_dir: Path,
     target_id: str,
+    promoter_fasta: Path,
     gene_fasta: Path,
     esm2_workbook: Path,
     phenotype_source: str,
@@ -247,6 +368,7 @@ def update_database_metadata(
     marker_metadata: Sequence[Dict[str, object]],
     marker_df: pd.DataFrame,
     phenotype_df: pd.DataFrame,
+    layout: Dict[str, int],
 ) -> None:
     metadata_by_id = {str(row["marker_id"]): dict(row) for row in marker_metadata}
 
@@ -263,19 +385,25 @@ def update_database_metadata(
         "gene_symbol": "VRN-B1",
         "chrom": "VRN-B1_IJMS2021_alignment",
         "start": 1,
-        "end": int(max(row["alignment_end"] for row in marker_metadata)) if marker_metadata else 1,
-        "gene_start": 1,
-        "gene_end": int(max(row["alignment_end"] for row in marker_metadata)) if marker_metadata else 1,
+        "end": int(layout["gene_end"]),
+        "gene_start": int(layout["gene_start"]),
+        "gene_end": int(layout["gene_end"]),
+        "length": int(layout["gene_end"]),
+        "promoter_start": int(layout["promoter_start"]),
+        "promoter_end": int(layout["promoter_end"]),
+        "promoter_length": int(layout["promoter_length"]),
+        "promoter_actual_length": int(layout["promoter_length"]),
         "source": source_id,
+        "source_promoter_fasta": str(promoter_fasta),
         "source_fasta": str(gene_fasta),
         "source_workbook": str(esm2_workbook),
         "phenotype_source": phenotype_source,
         "source_note": (
             "In-Depth Sequence Analysis of Bread Wheat VRN1 Genes, IJMS 2021 "
-            "ESM1 VRNB1_gene.fasta. "
+            "ESM1 VRNB1_prom.fasta plus VRNB1_gene.fasta. "
             f"{phenotype_source_note} "
             "Discovery markers are all polymorphic A/C/G/T columns and indel blocks "
-            "retained from the full gene-body alignment."
+            "retained from the full promoter plus gene-body alignment."
         ),
         "n_alignment_records": int(len(marker_df)),
         "n_phenotype_samples": int(len(phenotype_df)),
@@ -294,15 +422,26 @@ def update_database_metadata(
         marker_id = str(row["marker_id"])
         meta = metadata_by_id.get(marker_id, {})
         kind = meta.get("kind", "")
-        variant_df.at[idx, "annotation"] = "base_indel" if kind == "indel" else "base_snp"
+        segment = str(meta.get("segment", ""))
+        if segment == "promoter":
+            annotation = "promoter"
+        else:
+            annotation = "base_indel" if kind == "indel" else "base_snp"
+        variant_df.at[idx, "annotation"] = annotation
         variant_df.at[idx, "alignment_start"] = meta.get("alignment_start", "")
         variant_df.at[idx, "alignment_end"] = meta.get("alignment_end", "")
         variant_df.at[idx, "alignment_length"] = meta.get("length", "")
-        variant_df.at[idx, "source"] = "ijms2021_vrnb1_full_gene_alignment"
+        variant_df.at[idx, "alignment_segment"] = segment
+        variant_df.at[idx, "source"] = (
+            "ijms2021_vrnb1_promoter_alignment"
+            if segment == "promoter"
+            else "ijms2021_vrnb1_full_gene_alignment"
+        )
     variant_df.to_csv(variant_path, index=False)
 
 
 def build_database(
+    promoter_fasta: Path,
     gene_fasta: Path,
     esm2_workbook: Path,
     output_root: Path,
@@ -339,9 +478,9 @@ def build_database(
         raise ValueError(f"unsupported phenotype source: {phenotype_source}")
 
     sample_id_fn = make_vrn_b1_fasta_sample_id_fn(code_to_sample)
-    marker_df, marker_metadata = build_marker_matrix_from_aligned_fasta(
+    marker_df, marker_metadata, layout = build_full_sequence_marker_matrix(
+        promoter_fasta,
         gene_fasta,
-        marker_prefix="VRNB1gene",
         sample_id_fn=sample_id_fn,
         max_missing_rate=max_missing_rate,
         min_minor_count=min_minor_count,
@@ -350,6 +489,7 @@ def build_database(
         raise ValueError("No polymorphic base/indel markers were retained from the VRN-B1 alignment")
 
     source_summary = {
+        "promoter_fasta": str(promoter_fasta),
         "gene_fasta": str(gene_fasta),
         "esm2_workbook": str(esm2_workbook),
         "phenotype_source": phenotype_source,
@@ -358,6 +498,10 @@ def build_database(
         "alignment_records": int(len(marker_df)),
         "phenotype_samples": int(len(phenotype_df)),
         "retained_markers": int(len(marker_metadata)),
+        "promoter_length": int(layout["promoter_length"]),
+        "gene_length": int(layout["gene_length"]),
+        "promoter_marker_count": int(sum(1 for row in marker_metadata if row.get("segment") == "promoter")),
+        "gene_marker_count": int(sum(1 for row in marker_metadata if row.get("segment") == "gene")),
         "max_missing_rate": max_missing_rate,
         "min_minor_count": min_minor_count,
         "unmatched_alignment_records": sorted(
@@ -384,7 +528,7 @@ def build_database(
         target_id=target_id,
         chrom="VRN-B1_IJMS2021_alignment",
         start=1,
-        end=max(marker_positions.values()),
+        end=int(layout["gene_end"]),
         phenotype_columns=phenotype_columns,
         marker_columns=marker_columns,
         marker_positions=marker_positions,
@@ -394,6 +538,7 @@ def build_database(
     update_database_metadata(
         db_dir,
         target_id,
+        promoter_fasta,
         gene_fasta,
         esm2_workbook,
         phenotype_source,
@@ -401,6 +546,7 @@ def build_database(
         marker_metadata,
         marker_df,
         phenotype_df,
+        layout,
     )
     return db_dir
 
@@ -417,6 +563,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.phenotype_source == "kiss2014_heading" and target_id == TARGET_ID:
         target_id = KISS2014_HEADING_TARGET_ID
     db_dir = build_database(
+        promoter_fasta=Path(args.promoter_fasta),
         gene_fasta=Path(args.gene_fasta),
         esm2_workbook=Path(args.esm2_workbook),
         output_root=Path(args.output_root),

@@ -1619,3 +1619,55 @@ Obtain the WWWG2B `INDEL_matrix_1047` `chr5B` VCF/fileId or another
 Watkins-matched sample-level INDEL/SV/CNV genotype matrix. Until then, a
 large-sample continuous VRN-B1 complete-variant HTML cannot be generated
 honestly.
+
+### 2026-06-28 VRN-B1 full-sequence IJMS2021 promoter-coordinate fix
+
+Target:
+`VRN-B1-fullSequence-IJMS2021`
+
+Issue:
+The HTML large figure did not show the real IJMS2021 VRN-B1 promoter region.
+The source data already contained `VRNB1_prom.fasta`, but the prepared database
+used only `VRNB1_gene.fasta`; `gene_info.json` therefore had
+`promoter_length=0`. A second report-layer issue recomputed the promoter as a
+default 2 kb upstream interval, which clipped the 4,672 bp promoter alignment.
+
+Data source:
+`external_data/literature/vrn1_full_sequence/esm1_alignments/ESM1/VRNB1_prom.fasta`
+plus
+`external_data/literature/vrn1_full_sequence/esm1_alignments/ESM1/VRNB1_gene.fasta`;
+growth habit phenotype from IJMS2021 ESM2 Table S1.
+
+Commands:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+
+Result:
+
+- Database coordinates: `VRN-B1_IJMS2021_alignment:1-17867`.
+- Promoter coordinates: `1-4672`; gene body: `4673-17867`.
+- Retained discovery markers: 251 total, including 1 promoter indel marker
+  (`VRNB1prom_indel_1_3952`) and 250 gene-body markers.
+- HTML check: `regionStart=1`, `regionEnd=17867`, `Promoter` label present,
+  promoter marker present as `data-pos="1" data-ann="promoter"`.
+- Score mode: `robust_discovery`.
+- Samples/haplotypes: 102 samples, 24 haplotypes.
+- Association: corrected P `2.896100761095e-04`, PVE `0.7130918464`.
+- Haplotype-score regression: `R^2=0.0165`, P `0.1985923433`.
+- Top-scored haplotype: `Hap11`, score `1.0391`, n=2.
+- Direction-aware top haplotype: `Hap2`, score `0.3541`, n=12,
+  direction consistency `consistent`.
+
+Validation interpretation:
+This fixes the visualization/data-preparation problem: the HTML now includes
+the full promoter alignment instead of only the gene body or a default 2 kb
+promoter window. This rerun should not be counted as a new proof of discovery
+accuracy by itself because the phenotype is still binary growth habit and the
+raw top-scored haplotype has only two samples. Literature functional alleles
+remain post hoc validation only and were not used as discovery scoring input.

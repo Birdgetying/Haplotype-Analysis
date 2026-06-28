@@ -973,7 +973,7 @@
           "coordinates": {
             "chrom": "VRN-B1_IJMS2021_alignment",
             "start": 1,
-            "end": 13195
+            "end": 17867
           },
           "required_database_source": "ijms2021_vrn_b1_full_gene_alignment",
           "expected_direction": "increases_trait",
@@ -985,7 +985,7 @@
               "expected_direction": "increases_trait"
             }
           ],
-          "notes": "Discovery-style full-gene base/indel target from IJMS 2021: ESM1 VRNB1_gene.fasta is converted into all retained polymorphic A/C/G/T columns and indel blocks across the complete VRN-B1 gene-body alignment; ESM2 Table S1 supplies spring/winter growth habit. Literature alleles such as Vrn-B1a/Vrn-B1f are post hoc audit targets only and are not used to select discovery markers."
+          "notes": "Discovery-style full-sequence base/indel target from IJMS 2021: ESM1 VRNB1_prom.fasta plus VRNB1_gene.fasta are converted into all retained polymorphic A/C/G/T columns and indel blocks across the complete VRN-B1 promoter plus gene-body alignment; ESM2 Table S1 supplies spring/winter growth habit. Literature alleles such as Vrn-B1a/Vrn-B1f are post hoc audit targets only and are not used to select discovery markers."
         },
         {
           "target_id": "VRN-B1-fullSequence-IJMS2021-Kiss2014Heading",
@@ -997,7 +997,7 @@
           "coordinates": {
             "chrom": "VRN-B1_IJMS2021_alignment",
             "start": 1,
-            "end": 13195
+            "end": 17867
           },
           "required_database_source": "ijms2021_vrn_b1_full_gene_alignment_plus_kiss2014_heading",
           "expected_direction": "decreases_trait",
