@@ -12,6 +12,7 @@ import pandas as pd
 class WheatVrnRemoteSnpPrepareTests(unittest.TestCase):
     def test_build_target_database_from_single_gene_snp_vcf(self):
         from prepare_wheat2024_vrn_remote_snps import TARGETS, build_target_database
+        from prepare_wheat2024_vrn_remote_snps import GROWTH_HABIT_PHENOTYPE_COLUMNS
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -34,6 +35,10 @@ class WheatVrnRemoteSnpPrepareTests(unittest.TestCase):
                 target=TARGETS["VRN-A1-remoteSNP"],
                 vcf_path=vcf_path,
                 phenotype_df=phenotype_df,
+                phenotype_columns=GROWTH_HABIT_PHENOTYPE_COLUMNS,
+                expected_direction="increases_trait",
+                source_id="wheatomics_remote_vrn_snp_vcf",
+                phenotype_mode="growth_habit",
                 phenotype_xlsx=tmp_path / "phenotype.xlsx",
                 output_root=tmp_path / "db",
                 intermediate_root=tmp_path / "intermediate",

@@ -1500,3 +1500,68 @@ Kiss2014 heading-date values, and the raw top-scored haplotype is a singleton.
 Use this HTML as a continuous-trait visualization/sensitivity check, not as one
 of the strongest "at least three proofs" unless a larger matched continuous
 phenotype source for the IJMS full-sequence cultivars is found.
+
+### 2026-06-28 VRN-B1 larger continuous heading-date SNP-region rerun
+
+Question:
+Can we increase the continuous heading-date sample size after the IJMS 2021
+full-sequence + Kiss2014 merge produced only 10 matched samples?
+
+Data-source decision:
+No larger continuous heading-date phenotype table was found for the same 105
+IJMS full-sequence cultivars. The practical larger-sample route is to use the
+existing WheatOmics VRN-B1 SNP micro-VCF together with Watkins/JIC continuous
+heading date (`Hd_dto_days-CFLN06`). This changes the genotype source from IJMS
+full-sequence base/indel alignment to WheatOmics SNP-only regional calls, but it
+keeps base-level genotype scoring and avoids paper haplotype labels.
+
+Download/verification:
+
+```bash
+python download_wheat2024_vrn_remote_snps.py --target VRN-B1
+```
+
+The download helper found the local micro-VCF already present and verified it:
+`VRN-B1.wheatomics_snp.vcf.gz`, 182 records, 1051 samples, gene
+`TraesCS5B01G396600`.
+
+Code/data added:
+
+```bash
+python prepare_wheat2024_vrn_remote_snps.py --target VRN-B1-remoteSNP --phenotype-mode heading_date --min-haplotype-count 1 --max-missing-rate 0.2
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-remoteSNP-HeadingDate --score-mode robust_discovery
+```
+
+Generated database/report:
+
+- `star_gene_database/wheat_nature_2024/VRN-B1-remoteSNP-HeadingDate`
+- `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP-HeadingDate__robust_discovery/VRN-B1-remoteSNP-HeadingDate.html`
+- `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP-HeadingDate__robust_discovery/haplotype_score.html`
+
+Input policy:
+Discovery markers are 127 retained SNP calls from the VRN-B1 gene/flank region.
+The continuous phenotype is Watkins/JIC WGIN CFLN06 days-to-heading, renamed
+`HeadingDate_CFLN06`. No current phenotype p-values or literature labels are
+used as discovery-score input.
+
+Result:
+
+- Watkins heading-date phenotypes loaded: 795 samples.
+- Database after VCF/phenotype complete filtering: 565 samples, 127 SNPs,
+  72 haplotypes.
+- Haplotype association for `HeadingDate_CFLN06`: corrected P
+  `3.522324e-07`, PVE `0.251146`, high confidence.
+- Haplotype-score regression: `R^2=0.0340`, P `1.0172446e-05`.
+- Raw top-scored haplotype: `Hap8`, n=9, score `1.4718`, mean heading date
+  `110.389`, which is later than the main reference haplotype and directionally
+  inconsistent for an expected early-heading VRN signal.
+- Direction-aware summaries are more biologically plausible:
+  directional top core/functional group n=15, mean heading date `89.467`.
+
+Current verdict:
+This successfully fixes the sample-size problem for a continuous VRN-B1
+visualization (565 samples instead of 10), but it is not a clean proof that the
+raw discovery score recovers a known early-heading VRN-B1 allele. It is best
+classified as a large-sample SNP-only continuous-trait stress test. The result
+is statistically real, but directionally mixed; known VRN-B1 causal SV/CNV
+events are still absent from this SNP-only data source.

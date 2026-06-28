@@ -158,6 +158,26 @@ Status: complete
 
 Implemented `score_mode=robust_discovery` as a new scoring mode rather than changing the historical default. This mode is designed for discovery ranking and does not use literature-positive labels. It reduces over-weighted duplicate rare/special signals, applies sample reliability `n/(n+20)` to unstable components, penalizes ambiguous allele tokens such as `C/A`, and writes reliability diagnostics into `haplotype_scores.json`.
 
+### Phase 15: Larger continuous phenotype data for VRN-B1
+
+Status: complete
+
+Current goal: fix the small-sample limitation of `VRN-B1-fullSequence-IJMS2021-Kiss2014Heading` by finding or building a larger continuous heading-date / flowering-time / vernalization-response dataset.
+
+Candidate routes:
+
+- Keep IJMS 2021 full-sequence genotypes and find continuous phenotypes for the same 105 cultivars. Current evidence says this is unlikely: IJMS ESM2 has growth habit only; Frontiers2022 overlaps 7 cultivars; Kiss2014 overlaps 10; Watkins/JIC overlaps 1 by cultivar name.
+- Build a separate large-sample VRN-B1 SNP-region target from WheatOmics/WatSeq genotype data plus Watkins/JIC continuous heading-date columns such as `Hd_dto_days-CFLN06`. This is not full IJMS sequence, but it should solve the sample-size problem and remains base-level SNP scoring.
+
+Decision for current execution: implement the second route first as a new target, without overwriting existing binary growth-habit or IJMS full-sequence outputs.
+
+Outcome: built `VRN-B1-remoteSNP-HeadingDate` from the existing verified
+WheatOmics VRN-B1 micro-VCF and Watkins/JIC `Hd_dto_days-CFLN06`. The new
+target has 565 samples, 127 SNPs, and 72 haplotypes, and generated a robust HTML
+report. The result solves the continuous phenotype sample-size problem but is
+directionally mixed: raw top `Hap8` is late-heading, so it is a large-sample
+SNP-only stress test rather than a clean positive proof.
+
 `run_star_gene_validation.py --score-mode robust_discovery` is now wired through the analyzer and writes to a suffix directory, e.g. `star_gene_results/wheat_nature_2024/TaGW2-B1-remoteSNP__robust_discovery`, so default and robust outputs can be compared directly.
 
 Real-data TaGW2-B1 robust result: `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target TaGW2-B1-remoteSNP --score-mode robust_discovery` ranks exact Qin2014 `Hap1=A|G|C` first (`n=371`, score `1.8132`, reliability `0.9488`, ambiguity `1.0`) and demotes rare ambiguous `Hap5=C/A|G|C` to third (`n=7`, score `0.9733`, reliability `0.2593`, ambiguity `0.7333`). The robust literature audit marks `Qin2014_Hap-6B-1` as `matched_top_haplotype`. This is the clearest current evidence that the scoring method can recover a published star-gene functional haplotype after adding discovery-oriented stability controls.

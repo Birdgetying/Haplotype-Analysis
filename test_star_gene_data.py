@@ -195,6 +195,60 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(211.0, by_sample.loc["Atlas 66", "DEV49_mean"])
         self.assertEqual(214.0, by_sample.loc["Pannonia NS", "DEV59_mean"])
 
+    def test_vrn_remote_snp_prepare_can_build_heading_date_target(self):
+        from openpyxl import Workbook
+        from prepare_wheat2024_vrn_remote_snps import main as prepare_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vcf_dir = tmp_path / "vcfs"
+            vcf_dir.mkdir()
+            vcf_path = vcf_dir / "VRN-B1.wheatomics_snp.vcf.gz"
+            with gzip.open(vcf_path, "wt", encoding="utf-8") as f:
+                f.write("\n".join([
+                    "##fileformat=VCFv4.2",
+                    "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWATDE0001\tWATDE0002\tWATDE0003\tWATDE0004",
+                    "chr5B\t573801000\tchr5B_573801000\tA\tG\t.\t.\t.\tGT\t0/0\t1/1\t0/0\t1/1",
+                    "chr5B\t573802000\tchr5B_573802000\tC\tT\t.\t.\t.\tGT\t0/0\t0/0\t1/1\t1/1",
+                    "",
+                ]))
+
+            phenotype_xlsx = tmp_path / "phenotypes.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "WGIN_Watkins_JIC_CFLN06"
+            ws.append(["StoreCode", "Hd_dto_days-CFLN06", "PH_M_cm-CFLN06", "GrwHabit_E_sw-CFLN06"])
+            ws.append(["WATDE0001", 84.0, 95.5, "ssss"])
+            ws.append(["WATDE0002", 88.0, 90.0, "ssss"])
+            ws.append(["WATDE0003", 92.0, 100.0, "wwww"])
+            ws.append(["WATDE0004", 96.0, 102.0, "wwww"])
+            wb.save(phenotype_xlsx)
+
+            output_root = tmp_path / "db"
+            intermediate_root = tmp_path / "intermediate"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                rc = prepare_main([
+                    "--phenotype-xlsx", str(phenotype_xlsx),
+                    "--vcf-dir", str(vcf_dir),
+                    "--output-root", str(output_root),
+                    "--intermediate-root", str(intermediate_root),
+                    "--target", "VRN-B1-remoteSNP",
+                    "--phenotype-mode", "heading_date",
+                    "--min-haplotype-count", "1",
+                ])
+
+            self.assertEqual(rc, 0)
+            db_dir = output_root / "VRN-B1-remoteSNP-HeadingDate"
+            self.assertTrue((db_dir / "gene_info.json").exists())
+            gene_info = json.loads((db_dir / "gene_info.json").read_text(encoding="utf-8"))
+            self.assertEqual(gene_info["source"], "wheatomics_remote_vrn_snp_vcf_heading_date")
+            self.assertEqual(gene_info["expected_direction"], "decreases_trait")
+            phenotype_data = (db_dir / "phenotype_data.csv").read_text(encoding="utf-8")
+            self.assertIn("HeadingDate_CFLN06", phenotype_data)
+            self.assertNotIn("GrowthHabitSpringScore_CFLN06", phenotype_data)
+            self.assertIn("WATDE0001", phenotype_data)
+
     def test_rice_figshare_is_large_and_skipped_by_default(self):
         from star_gene_data import build_download_commands, iter_data_files
 

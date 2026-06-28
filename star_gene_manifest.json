@@ -905,6 +905,30 @@
           "notes": "VRN-B1 single-gene SNP-only validation from WheatOmics merged SNP VCF and Watkins growth habit. Literature VRN-B1 causal alleles can include copy-number or structural variation, so this target tests regional SNP haplotype signal but is not exact causal-SV proof."
         },
         {
+          "target_id": "VRN-B1-remoteSNP-HeadingDate",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "gene_snp_region_continuous_heading_date",
+          "aliases": ["TraesCS5B01G396600", "VRN-B1 WheatOmics SNP heading date", "Watkins heading date"],
+          "requires_coordinate_resolution": true,
+          "coordinate_source": "WheatOmics Chinese Spring RefSeq v1.0",
+          "coordinates": {
+            "chrom": "5B",
+            "start": 573800883,
+            "end": 573818070
+          },
+          "required_database_source": "wheatomics_remote_vrn_snp_vcf_heading_date",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date CFLN06",
+              "aliases": ["HeadingDate_CFLN06", "Hd_dto_days-CFLN06", "heading date", "days to heading"],
+              "local_columns": ["HeadingDate_CFLN06"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "notes": "Large-sample continuous phenotype VRN-B1 SNP-region target. Genotypes are WheatOmics SNP-only calls across the VRN-B1 gene/flank interval; phenotype is Watkins/JIC WGIN CFLN06 days-to-heading. This improves sample size for continuous-trait visualization but does not contain known VRN-B1 causal deletion/CNV/SV alleles unless tagged by regional SNPs."
+        },
+        {
           "target_id": "VRN-B1-Frontiers2022",
           "gene_or_locus": "VRN-B1",
           "target_type": "structural_variant_marker_panel",

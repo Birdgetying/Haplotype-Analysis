@@ -240,3 +240,23 @@
 - Ran `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery`: generated `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`.
 - Post hoc Table S5 audit maps raw top `Hap4` (n=6, score `1.2850`, spring mean `1.0`) to `GROUP 18B` / `Vrn-B1c`, a published dominant VRN-B1 functional allele group. `Vrn-B1a` appears as `Hap7` rank #2 and `Hap2` rank #6; `Vrn-B1f` appears as `Hap6` rank #7.
 - Interpretation update: this is positive evidence for full-sequence gene/functional-haplotype discovery, but not yet for exact causal-site localization because phenotype-free `site_weights` do not rank the known structural intervals as top single sites.
+- 2026-06-28 follow-up to "download more data" for the VRN-B1 continuous phenotype sample-size problem:
+  extended `prepare_wheat2024_vrn_remote_snps.py` with `--phenotype-mode heading_date`.
+  The default growth-habit mode remains unchanged; heading-date mode creates a
+  new `*-HeadingDate` target and uses Watkins/JIC `Hd_dto_days-CFLN06` as
+  `HeadingDate_CFLN06`.
+- Verified existing VRN-B1 WheatOmics micro-VCF with
+  `python download_wheat2024_vrn_remote_snps.py --target VRN-B1`: 182 records,
+  1051 samples.
+- Built the new large-sample target with
+  `python prepare_wheat2024_vrn_remote_snps.py --target VRN-B1-remoteSNP --phenotype-mode heading_date --min-haplotype-count 1 --max-missing-rate 0.2`:
+  `VRN-B1-remoteSNP-HeadingDate` has 565 samples, 127 SNPs, and 72 haplotypes.
+- Ran
+  `python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-remoteSNP-HeadingDate --score-mode robust_discovery`.
+  Output HTML:
+  `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP-HeadingDate__robust_discovery/VRN-B1-remoteSNP-HeadingDate.html`.
+- Result caveat: association is significant (`HeadingDate_CFLN06` P `3.52e-07`,
+  PVE `25.1%`; score `R^2=0.034`, P `1.02e-05`), but raw top `Hap8` is
+  late-heading and directionally inconsistent. This fixes sample size for
+  continuous phenotype visualization but should not be counted as a clean
+  raw-top proof of early-heading VRN-B1 causal discovery.

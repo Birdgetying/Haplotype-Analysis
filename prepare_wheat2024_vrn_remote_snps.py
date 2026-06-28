@@ -32,7 +32,8 @@ DEFAULT_PHENOTYPE_XLSX = Path(
 DEFAULT_OUTPUT_ROOT = Path("star_gene_database/wheat_nature_2024")
 DEFAULT_INTERMEDIATE_ROOT = Path("external_data/wheat_nature_2024/vrn_remote")
 
-PHENOTYPE_COLUMNS = ["GrowthHabitSpringScore_CFLN06", "PlantHeight_CFLN06"]
+GROWTH_HABIT_PHENOTYPE_COLUMNS = ["GrowthHabitSpringScore_CFLN06", "PlantHeight_CFLN06"]
+HEADING_DATE_PHENOTYPE_COLUMNS = ["HeadingDate_CFLN06"]
 
 TARGETS = {
     "VRN-A1-remoteSNP": {
@@ -92,6 +93,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Directory for marker and phenotype TSV intermediates")
     parser.add_argument("--target", action="append", choices=sorted(TARGETS),
                         help="Target to prepare; repeatable. Defaults to all VRN targets.")
+    parser.add_argument("--phenotype-mode", choices=["growth_habit", "heading_date"], default="growth_habit",
+                        help="Phenotype set to merge with the VRN SNP genotypes")
     parser.add_argument("--min-haplotype-count", type=int, default=3,
                         help="Minimum sample count for retained haplotypes")
     parser.add_argument("--max-missing-rate", type=float, default=0.2,
@@ -139,7 +142,52 @@ def load_watkins_growth_habit_phenotypes(phenotype_xlsx: Path) -> pd.DataFrame:
     })
     if out.empty:
         raise ValueError("no complete Watkins growth-habit phenotypes after filtering")
-    return out[["SampleID", *PHENOTYPE_COLUMNS]]
+    return out[["SampleID", *GROWTH_HABIT_PHENOTYPE_COLUMNS]]
+
+
+def load_watkins_heading_date_phenotypes(phenotype_xlsx: Path) -> pd.DataFrame:
+    if not phenotype_xlsx.exists():
+        raise FileNotFoundError(f"phenotype workbook is missing: {phenotype_xlsx}")
+
+    df = pd.read_excel(phenotype_xlsx, sheet_name="WGIN_Watkins_JIC_CFLN06")
+    required = ["StoreCode", "Hd_dto_days-CFLN06"]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"WGIN_Watkins_JIC_CFLN06 missing columns: {', '.join(missing)}")
+
+    out = df[required].copy()
+    out = out.rename(columns={
+        "StoreCode": "SampleID",
+        "Hd_dto_days-CFLN06": "HeadingDate_CFLN06",
+    })
+    out["SampleID"] = out["SampleID"].astype(str).str.strip()
+    out["HeadingDate_CFLN06"] = pd.to_numeric(out["HeadingDate_CFLN06"], errors="coerce")
+    out = out.dropna(subset=["SampleID", "HeadingDate_CFLN06"])
+    out = out[out["SampleID"] != ""]
+    out = out.groupby("SampleID", as_index=False).agg({"HeadingDate_CFLN06": "mean"})
+    if out.empty:
+        raise ValueError("no complete Watkins heading-date phenotypes after filtering")
+    return out[["SampleID", *HEADING_DATE_PHENOTYPE_COLUMNS]]
+
+
+def load_watkins_phenotypes(phenotype_xlsx: Path, phenotype_mode: str) -> tuple[pd.DataFrame, List[str], str, str, str]:
+    if phenotype_mode == "growth_habit":
+        return (
+            load_watkins_growth_habit_phenotypes(phenotype_xlsx),
+            GROWTH_HABIT_PHENOTYPE_COLUMNS,
+            "increases_trait",
+            "",
+            "wheatomics_remote_vrn_snp_vcf",
+        )
+    if phenotype_mode == "heading_date":
+        return (
+            load_watkins_heading_date_phenotypes(phenotype_xlsx),
+            HEADING_DATE_PHENOTYPE_COLUMNS,
+            "decreases_trait",
+            "HeadingDate",
+            "wheatomics_remote_vrn_snp_vcf_heading_date",
+        )
+    raise ValueError(f"unsupported phenotype mode: {phenotype_mode}")
 
 
 def genotype_to_state(sample_value: str, fmt: str, ref: str, alt: str) -> Optional[str]:
@@ -308,6 +356,9 @@ def update_gene_and_variant_metadata(
     source_vcf: Path,
     phenotype_xlsx: Path,
     marker_metadata: Dict[str, Dict[str, object]],
+    expected_direction: str,
+    source_id: str,
+    phenotype_mode: str,
 ) -> None:
     gene_info_path = db_dir / "gene_info.json"
     with gene_info_path.open("r", encoding="utf-8") as f:
@@ -324,10 +375,11 @@ def update_gene_and_variant_metadata(
         "gene_start": int(target["gene_start"]),
         "gene_end": int(target["gene_end"]),
         "strand": target["strand"],
-        "expected_direction": "increases_trait",
-        "source": "wheatomics_remote_vrn_snp_vcf",
+        "expected_direction": expected_direction,
+        "source": source_id,
         "source_vcf": str(source_vcf),
         "source_phenotype": str(phenotype_xlsx),
+        "phenotype_mode": phenotype_mode,
         "source_note": (
             "Single-gene VRN SNP-only micro-VCF from WheatOmics merged SNP VCF; "
             "known VRN promoter/intron-1 deletion and CNV/SV alleles require a separate INDEL/SV source."
@@ -357,6 +409,10 @@ def build_target_database(
     target: Dict[str, object],
     vcf_path: Path,
     phenotype_df: pd.DataFrame,
+    phenotype_columns: Sequence[str],
+    expected_direction: str,
+    source_id: str,
+    phenotype_mode: str,
     phenotype_xlsx: Path,
     output_root: Path,
     intermediate_root: Path,
@@ -381,7 +437,7 @@ def build_target_database(
     phenotype_output = target_intermediate / "phenotype.tsv"
     target_intermediate.mkdir(parents=True, exist_ok=True)
     marker_df.to_csv(marker_output, sep="\t", index=False)
-    phenotype_subset[["SampleID", *PHENOTYPE_COLUMNS]].to_csv(phenotype_output, sep="\t", index=False)
+    phenotype_subset[["SampleID", *phenotype_columns]].to_csv(phenotype_output, sep="\t", index=False)
 
     db_dir = build_database_from_marker_matrix(
         marker_matrix=marker_output,
@@ -391,10 +447,10 @@ def build_target_database(
         chrom=str(target["chrom"]),
         start=int(target["region_start"]),
         end=int(target["region_end"]),
-        phenotype_columns=PHENOTYPE_COLUMNS,
+        phenotype_columns=phenotype_columns,
         marker_columns=[c for c in marker_df.columns if c != "SampleID"],
         marker_positions=marker_positions,
-        expected_direction="increases_trait",
+        expected_direction=expected_direction,
         sample_column="SampleID",
         min_haplotype_count=min_haplotype_count,
     )
@@ -405,6 +461,9 @@ def build_target_database(
         source_vcf=vcf_path,
         phenotype_xlsx=phenotype_xlsx,
         marker_metadata=marker_metadata,
+        expected_direction=expected_direction,
+        source_id=source_id,
+        phenotype_mode=phenotype_mode,
     )
     return db_dir
 
@@ -415,13 +474,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     vcf_dir = Path(args.vcf_dir)
     output_root = Path(args.output_root)
     intermediate_root = Path(args.intermediate_root)
-    phenotype_df = load_watkins_growth_habit_phenotypes(phenotype_xlsx)
+    phenotype_df, phenotype_columns, expected_direction, target_suffix, source_id = load_watkins_phenotypes(
+        phenotype_xlsx,
+        args.phenotype_mode,
+    )
     selected_targets = args.target or sorted(TARGETS)
 
-    print(f"[INFO] Loaded Watkins growth-habit phenotypes: {len(phenotype_df)} samples")
+    print(f"[INFO] Loaded Watkins {args.phenotype_mode} phenotypes: {len(phenotype_df)} samples")
     status_rows: List[Dict[str, object]] = []
-    for target_id in selected_targets:
-        target = TARGETS[target_id]
+    for base_target_id in selected_targets:
+        target = TARGETS[base_target_id]
+        target_id = f"{base_target_id}-{target_suffix}" if target_suffix else base_target_id
         vcf_path = vcf_dir / str(target["vcf"])
         print(f"[INFO] Preparing {target_id} from {vcf_path}")
         try:
@@ -430,6 +493,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 target=target,
                 vcf_path=vcf_path,
                 phenotype_df=phenotype_df,
+                phenotype_columns=phenotype_columns,
+                expected_direction=expected_direction,
+                source_id=source_id,
+                phenotype_mode=args.phenotype_mode,
                 phenotype_xlsx=phenotype_xlsx,
                 output_root=output_root,
                 intermediate_root=intermediate_root,
@@ -437,7 +504,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 max_missing_rate=args.max_missing_rate,
             )
         except ValueError as e:
-            status_rows.append({"target_id": target_id, "status": "blocked", "reason": str(e)})
+            status_rows.append({"target_id": target_id, "base_target_id": base_target_id, "status": "blocked", "reason": str(e)})
             print(f"[BLOCKED] {target_id}: {e}")
             continue
 
@@ -446,7 +513,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         haplotype_count = len(pd.read_csv(db_dir / "haplotype_data.csv"))
         status_rows.append({
             "target_id": target_id,
+            "base_target_id": base_target_id,
             "status": "built",
+            "phenotype_mode": args.phenotype_mode,
+            "phenotype_columns": phenotype_columns,
             "variant_count": variant_count,
             "sample_count": sample_count,
             "haplotype_count": haplotype_count,
@@ -460,11 +530,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     intermediate_root.mkdir(parents=True, exist_ok=True)
     with (intermediate_root / "prepare_status.json").open("w", encoding="utf-8") as f:
         json.dump(status_rows, f, ensure_ascii=False, indent=2)
-    print(
-        "[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 "
-        "--target VRN-A1-remoteSNP --target VRN-B1-remoteSNP --target VRN-D1-remoteSNP "
-        "--score-mode robust_discovery"
-    )
+    built_targets = [str(row["target_id"]) for row in status_rows if row["status"] == "built"]
+    if built_targets:
+        target_args = " ".join(f"--target {target_id}" for target_id in built_targets)
+        print(
+            "[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 "
+            f"{target_args} --score-mode robust_discovery"
+        )
     return 0 if any(row["status"] == "built" for row in status_rows) else 1
 
 

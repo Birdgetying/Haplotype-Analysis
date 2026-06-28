@@ -384,3 +384,41 @@ stronger for finding functional haplotype groups than for identifying the exact
 causal base/indel within a new gene. The next algorithmic improvement should
 prioritize unsupervised indel-block scoring and LD-collapsed haplotype group
 summaries rather than relying on raw full-length haplotype strings.
+
+## 2026-06-28 Larger VRN-B1 Continuous-Phenotype Data Search
+
+The continuous phenotype rerun of IJMS 2021 VRN-B1 full sequence is sample-limited:
+Kiss2014 heading-date phenotypes overlap only 10 of the 105 IJMS full-sequence
+cultivars. Additional candidate checks:
+
+- IJMS 2021 ESM2: growth habit only; no continuous heading-date / flowering-time
+  values found in local sheets.
+- Frontiers2022 VRN-B1 structural-variant table: heading date available, but
+  only 7 normalized cultivar-name overlaps with IJMS.
+- Watkins/JIC phenotype workbook: has continuous `Hd_dto_days-CFLN06` and other
+  heading-date columns, but only 1 normalized cultivar-name overlap with IJMS.
+- Existing WheatOmics/Watkins VRN remote SNP route has the right sample universe
+  for Watkins `StoreCode` IDs and should allow a larger continuous heading-date
+  target if `prepare_wheat2024_vrn_remote_snps.py` is extended beyond its current
+  growth-habit/plant-height phenotype columns.
+
+Working direction: create a new large-sample `VRN-B1-remoteSNP-HeadingDate`
+target using base-level SNP calls from the existing VRN-B1 remote VCF and the
+Watkins/JIC `Hd_dto_days-CFLN06` phenotype. This is not a replacement for the
+IJMS full-sequence evidence, but it is the practical way to increase continuous
+phenotype sample size.
+
+Follow-up result:
+
+- `download_wheat2024_vrn_remote_snps.py --target VRN-B1` verified the existing
+  local micro-VCF: 182 records, 1051 samples.
+- `prepare_wheat2024_vrn_remote_snps.py --target VRN-B1-remoteSNP
+  --phenotype-mode heading_date --min-haplotype-count 1 --max-missing-rate 0.2`
+  built `VRN-B1-remoteSNP-HeadingDate` with 565 samples, 127 SNPs, and
+  72 haplotypes.
+- Robust analysis generated
+  `star_gene_results/wheat_nature_2024/VRN-B1-remoteSNP-HeadingDate__robust_discovery/VRN-B1-remoteSNP-HeadingDate.html`.
+- Association with `HeadingDate_CFLN06` is strong (`P=3.52e-07`, PVE `25.1%`)
+  and score regression is significant (`R^2=0.034`, P `1.02e-05`), but raw top
+  `Hap8` is late-heading and directionally inconsistent. This is therefore a
+  large-sample SNP-only stress test, not a strong raw-top validation proof.
