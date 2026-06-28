@@ -1336,3 +1336,104 @@ duplication. Therefore VRN-B1 should currently be classified as
 recovers the decisive variant. `VRN-B1-remoteSNP` remains SNP-only regional
 evidence and should not be used to answer whether the causal `Vrn-B1a` deletion
 was recovered.
+
+### 2026-06-28 VRN-B1 full gene-body sequence validation
+
+Question:
+Can the discovery workflow use complete base-level VRN-B1 sequence variation,
+without preselecting literature variants, and then recover a published
+functional VRN-B1 allele afterward?
+
+Literature/data source:
+IJMS 2021, "In-Depth Sequence Analysis of Bread Wheat VRN1 Genes"
+(`10.3390/ijms222212284`, PMCID `PMC8626038`). The paper sequenced complete
+`VRN-A1`, `VRN-B1`, and `VRN-D1` genes and promoters for 105 cultivars.
+For VRN-B1, Table S5 groups the full gene-body sequence into 20 groups:
+Groups 1B-15B are recessive `vrn-B1`; Groups 16B-17B are `Vrn-B1a`;
+Groups 18B-19B are `Vrn-B1c`; Group 20B is the novel `Vrn-B1f` allele.
+The article states that `Vrn-B1a` and `Vrn-B1c` are dominant alleles and that
+`Vrn-B1f` carries an 837 bp first-intron insertion affecting heading time.
+
+Downloaded data:
+
+- `external_data/literature/vrn1_full_sequence/ijms-22-12284-s001.zip`
+- `external_data/literature/vrn1_full_sequence/esm1_alignments/ESM1/VRNB1_gene.fasta`
+- `external_data/literature/vrn1_full_sequence/s001_extracted/ESM2.xlsx`
+
+Code/data added:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Generated database/report:
+
+- `star_gene_database/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021`
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+- Post hoc group audit:
+  `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/vrn_b1_full_sequence_posthoc_group_audit.csv`
+
+Input policy:
+The discovery input is the complete `VRNB1_gene.fasta` alignment converted into
+all retained polymorphic A/C/G/T columns and indel blocks. Literature allele
+labels (`Vrn-B1a`, `Vrn-B1c`, `Vrn-B1f`) are not used to build marker columns
+or score haplotypes; they are used only after scoring to audit the result
+against Table S5.
+
+Full-sequence result:
+
+- Alignment records: 106; phenotype-matched samples: 105; one unmatched record
+  is `AY747604`.
+- Retained discovery markers: 250 total, 226 SNPs and 24 indel blocks.
+- Haplotypes: 21.
+- Robust total top haplotype: `Hap4`, n=6, score `1.2850`, spring mean `1.0`.
+- `Hap4` maps post hoc to Table S5 `GROUP 18B`, literature allele class
+  `Vrn-B1c`.
+- Next functional allele hits:
+  `Hap7` = `GROUP 17B`/`Vrn-B1a`, rank #2, n=3, score `1.1260`;
+  `Hap2` = `GROUP 16B`/`Vrn-B1a`, rank #6, n=12, score `0.9613`;
+  `Hap6` = `GROUP 20B`/`Vrn-B1f`, rank #7, n=3, score `0.7901`.
+- Score regression: `R^2=0.4406`, `regression_pvalue=1.19e-14`,
+  `PVE=0.6873`.
+- Site-weight policy says `current_phenotype_used=False`.
+
+Interpretation:
+This is valid full-sequence discovery evidence at the haplotype/allele-group
+level. Without being told the literature allele names, the complete base/indel
+VRN-B1 gene-body analysis ranks `Vrn-B1c` as the top-scored haplotype group and
+also ranks `Vrn-B1a` and `Vrn-B1f` among high-scoring spring groups. Therefore
+this result supports the claim that full-gene base/indel haplotype scoring can
+recover a known functional VRN-B1 allele group.
+
+Important limitation:
+The phenotype-free `site_weights` do not precisely rank the known structural
+variant intervals as the top single sites. The top single-site weights are
+driven by generic gene-boundary/quality/MAF terms, while `Vrn-B1c`/`Vrn-B1a`
+region markers appear lower. So this run supports gene/functional-haplotype
+discovery better than exact causal-base localization. Future algorithm work
+should improve unsupervised indel-block prioritization and haplotype-group
+compression before claiming precise de novo causal-site discovery.
+
+2026-06-28 score-plot display rerun:
+The robust report was regenerated after changing only the Haplotype Score vs
+Phenotype display policy. Command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/haplotype_score.html`
+
+Display-only change:
+
+- The score plot now hides haplotypes with fewer than 3 samples and caps the
+  visible haplotype set at 5, selected by score after the sample-count filter.
+- For this VRN-B1 run the displayed haplotypes are `Hap4` (n=6), `Hap7`
+  (n=3), `Hap2` (n=12), `Hap6` (n=3), and `Hap3` (n=7).
+- The original per-sample score data remain embedded for audit; discovery
+  scoring, top haplotype (`Hap4`/`Vrn-B1c`), regression, and validation
+  interpretation are unchanged.

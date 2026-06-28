@@ -457,3 +457,45 @@ script/data record/docs, and then continue searching for similarly decisive
 accession-level tables or VCF/SV data for the remaining star genes. Future
 positive controls must use full available gene/region marker sets for discovery
 first and only then audit whether literature sites appear among top candidates.
+
+### Phase 23: VRN-B1 full-sequence base/indel discovery
+
+Status: completed
+
+Goal:
+
+Answer the stricter user requirement: for a new gene, discovery must operate on
+the complete gene-level base/indel sequence, not on known paper marker labels or
+preselected literature sites.
+
+Implementation:
+
+- Added `build_marker_matrix_from_aligned_fasta()` in `star_gene_data.py`.
+- Added `prepare_wheat2024_vrn_b1_full_sequence.py`.
+- Added manifest target `VRN-B1-fullSequence-IJMS2021`.
+- Added tests for aligned FASTA SNP/indel parsing and VRN-B1 FASTA header to
+  cultivar mapping.
+
+Commands:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Result:
+
+- 106 aligned VRN-B1 gene-body records, 105 phenotype-matched cultivars.
+- 250 retained full-gene base/indel markers: 226 SNPs and 24 indel blocks.
+- Top robust haplotype is `Hap4`, n=6, score `1.2850`, spring mean `1.0`.
+- Post hoc Table S5 audit maps `Hap4` to `GROUP 18B` / `Vrn-B1c`, a published
+  dominant VRN-B1 functional allele group.
+- `Vrn-B1a` groups are also high-scoring (`Hap7` rank #2 and `Hap2` rank #6);
+  `Vrn-B1f` is rank #7.
+
+Interpretation:
+
+This supports discovery at the gene/functional-haplotype level using complete
+base/indel sequence. It does not yet prove precise causal-site localization,
+because phenotype-free `site_weights` do not rank the structural intervals as
+top single sites.

@@ -12,7 +12,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -355,6 +355,140 @@ def _infer_marker_len_diff(marker: str, ref: str, alt: str) -> int:
         length = int(match.group(2))
         return length if match.group(1) == "insertion" else -length
     return len(alt) - len(ref) if alt else 0
+
+
+def _default_fasta_sample_id(header: str) -> str:
+    return header.strip().split()[0]
+
+
+def _read_aligned_fasta(
+    fasta_path: Path,
+    sample_id_fn: Optional[Callable[[str], str]] = None,
+) -> List[Tuple[str, str]]:
+    sample_id_fn = sample_id_fn or _default_fasta_sample_id
+    records: List[Tuple[str, str]] = []
+    header: Optional[str] = None
+    seq_parts: List[str] = []
+
+    with Path(fasta_path).open("r", encoding="utf-8", errors="replace") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if header is not None:
+                    records.append((sample_id_fn(header), "".join(seq_parts).upper()))
+                header = line[1:]
+                seq_parts = []
+            else:
+                seq_parts.append(line)
+
+    if header is not None:
+        records.append((sample_id_fn(header), "".join(seq_parts).upper()))
+    if not records:
+        raise ValueError(f"FASTA alignment is empty: {fasta_path}")
+
+    lengths = {len(seq) for _, seq in records}
+    if len(lengths) != 1:
+        raise ValueError(f"FASTA records are not aligned to one length: {sorted(lengths)}")
+
+    sample_counts = Counter(sample for sample, _ in records)
+    duplicate_samples = sorted(sample for sample, count in sample_counts.items() if count > 1)
+    if duplicate_samples:
+        raise ValueError("duplicate FASTA sample IDs: " + ", ".join(duplicate_samples[:10]))
+
+    return records
+
+
+def _is_missing_alignment_allele(allele: str) -> bool:
+    return allele in {"", "N", "NA", "NAN", ".", "?"}
+
+
+def _alignment_block_allele(block: str) -> str:
+    if not block:
+        return "N"
+    if any(base not in {"A", "C", "G", "T", "-"} for base in block):
+        return "N"
+    ungapped = block.replace("-", "")
+    if not ungapped:
+        return f"DEL_{len(block)}"
+    return ungapped
+
+
+def _marker_is_polymorphic(alleles: Sequence[str], min_minor_count: int) -> bool:
+    observed = [
+        allele for allele in alleles
+        if not _is_missing_alignment_allele(allele)
+    ]
+    counts = Counter(observed)
+    if len(counts) < 2:
+        return False
+    return counts.most_common()[-1][1] >= min_minor_count
+
+
+def build_marker_matrix_from_aligned_fasta(
+    fasta_path: Path,
+    marker_prefix: str,
+    sample_id_fn: Optional[Callable[[str], str]] = None,
+    max_missing_rate: float = 0.0,
+    min_minor_count: int = 1,
+):
+    """Convert a whole-gene alignment into sample-by-base/indel markers.
+
+    Literature variants are intentionally not used here. Every retained marker
+    is discovered from polymorphism in the alignment itself.
+    """
+    import pandas as pd
+
+    records = _read_aligned_fasta(fasta_path, sample_id_fn=sample_id_fn)
+    alignment_length = len(records[0][1])
+    samples = [sample for sample, _ in records]
+    seqs = [seq for _, seq in records]
+
+    marker_values: Dict[str, List[str]] = {}
+    marker_metadata: List[Dict[str, object]] = []
+
+    i = 0
+    while i < alignment_length:
+        column = [seq[i] for seq in seqs]
+        start_i = i
+
+        if any(base == "-" for base in column):
+            while i < alignment_length and any(seq[i] == "-" for seq in seqs):
+                i += 1
+            end_i = i - 1
+            alleles = [_alignment_block_allele(seq[start_i:i]) for seq in seqs]
+            marker_kind = "indel"
+            marker_id = f"{marker_prefix}_indel_{start_i + 1}_{end_i + 1}"
+        else:
+            alleles = [
+                base if base in {"A", "C", "G", "T"} else "N"
+                for base in column
+            ]
+            marker_kind = "snp"
+            marker_id = f"{marker_prefix}_snp_{start_i + 1}"
+            i += 1
+            end_i = start_i
+
+        missing_rate = sum(_is_missing_alignment_allele(allele) for allele in alleles) / len(alleles)
+        if missing_rate > max_missing_rate:
+            continue
+        if not _marker_is_polymorphic(alleles, min_minor_count=min_minor_count):
+            continue
+
+        marker_values[marker_id] = alleles
+        marker_metadata.append({
+            "marker_id": marker_id,
+            "kind": marker_kind,
+            "alignment_start": start_i + 1,
+            "alignment_end": end_i + 1,
+            "length": end_i - start_i + 1,
+            "missing_rate": round(missing_rate, 6),
+        })
+
+    marker_df = pd.DataFrame({"SampleID": samples, **marker_values})
+
+    return marker_df, marker_metadata
 
 
 def _normal_chrom(value: object) -> str:

@@ -72,6 +72,97 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertFalse(default_args.include_single_marker_target)
         self.assertTrue(opt_in_args.include_single_marker_target)
 
+    def test_alignment_fasta_is_converted_to_base_and_indel_markers(self):
+        from star_gene_data import build_marker_matrix_from_aligned_fasta
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fasta_path = tmp_path / "aligned.fasta"
+            fasta_path.write_text(
+                ">S1\n"
+                "ACGTAA\n"
+                ">S2\n"
+                "ATG--A\n"
+                ">S3\n"
+                "ATGTCA\n"
+                ">S4\n"
+                "ACGTAA\n",
+                encoding="utf-8",
+            )
+
+            marker_df, marker_metadata = build_marker_matrix_from_aligned_fasta(
+                fasta_path,
+                marker_prefix="GeneA",
+            )
+
+        self.assertEqual(
+            ["SampleID", "GeneA_snp_2", "GeneA_indel_4_5"],
+            list(marker_df.columns),
+        )
+        self.assertEqual(["S1", "S2", "S3", "S4"], marker_df["SampleID"].tolist())
+        self.assertEqual(["C", "T", "T", "C"], marker_df["GeneA_snp_2"].tolist())
+        self.assertEqual(["TA", "DEL_2", "TC", "TA"], marker_df["GeneA_indel_4_5"].tolist())
+        self.assertEqual(
+            [
+                {
+                    "marker_id": "GeneA_snp_2",
+                    "kind": "snp",
+                    "alignment_start": 2,
+                    "alignment_end": 2,
+                    "length": 1,
+                    "missing_rate": 0.0,
+                },
+                {
+                    "marker_id": "GeneA_indel_4_5",
+                    "kind": "indel",
+                    "alignment_start": 4,
+                    "alignment_end": 5,
+                    "length": 2,
+                    "missing_rate": 0.0,
+                },
+            ],
+            marker_metadata,
+        )
+
+    def test_vrn_b1_full_sequence_maps_fasta_headers_to_cultivars(self):
+        from prepare_wheat2024_vrn_b1_full_sequence import (
+            build_sample_maps_from_esm2,
+            make_vrn_b1_fasta_sample_id_fn,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workbook = Path(tmp) / "esm2.xlsx"
+            with pd.ExcelWriter(workbook) as writer:
+                pd.DataFrame([
+                    ["title", None, None, None],
+                    ["note", None, None, None],
+                    ["note", None, None, None],
+                    [None, None, None, None],
+                    ["Code", "Accession number", "Name", "Habit"],
+                    [4, "ACC4", "Batis", "W"],
+                    [71, "ACC71", "Apache", "W"],
+                    ["S2", "ACCS2", "Anza", "S"],
+                ]).to_excel(writer, sheet_name="Table S1", header=False, index=False)
+                pd.DataFrame([
+                    ["Table S5", None],
+                    [None, None],
+                    [34, "TDC"],
+                    ["GROUP 1B", None],
+                    [4, "Batis"],
+                    [71, "Apache"],
+                    ["GROUP 20B", None],
+                    ["S2", "Anza"],
+                ]).to_excel(writer, sheet_name="Table S5", header=False, index=False)
+
+            code_to_sample, phenotype_df = build_sample_maps_from_esm2(workbook)
+            sample_id_fn = make_vrn_b1_fasta_sample_id_fn(code_to_sample)
+
+        self.assertEqual("Batis", sample_id_fn("4_Batis_2_NODE_1_length_16886_cov_77"))
+        self.assertEqual("Apache", sample_id_fn("71_NODE_1_length_16886_cov_150"))
+        self.assertEqual("Anza", sample_id_fn("S2B_merged_extraction 2 reads"))
+        self.assertEqual(["SampleID", "GrowthHabitSpringScore"], list(phenotype_df.columns))
+        self.assertEqual(1.0, phenotype_df.set_index("SampleID").loc["Anza", "GrowthHabitSpringScore"])
+
     def test_rice_figshare_is_large_and_skipped_by_default(self):
         from star_gene_data import build_download_commands, iter_data_files
 
@@ -901,6 +992,59 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertIn("switchScoreMode('default')", html)
             self.assertIn("switchScoreMode('robust_discovery')", html)
             self.assertIn("mode-toggle-btn", html)
+
+    def test_score_plot_display_haplotypes_filter_tiny_groups_and_cap_at_five(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+
+        hap_counts = {
+            "Hap1": 6,
+            "Hap2": 1,
+            "Hap3": 5,
+            "Hap4": 3,
+            "Hap5": 4,
+            "Hap6": 3,
+            "Hap7": 3,
+        }
+        hap_scores = {
+            "Hap1": 1.1,
+            "Hap2": 9.9,
+            "Hap3": 1.7,
+            "Hap4": 1.3,
+            "Hap5": 1.6,
+            "Hap6": 1.5,
+            "Hap7": 1.4,
+        }
+        per_sample = []
+        for hap, n in hap_counts.items():
+            for i in range(n):
+                per_sample.append({
+                    "sample_id": f"{hap}_S{i}",
+                    "haplotype": hap,
+                    "score": hap_scores[hap],
+                    "phenotype": float(i),
+                })
+
+        generator = ReportGenerator(output_dir=tempfile.mkdtemp())
+        score_data = {
+            "score_mode": "robust_discovery",
+            "per_sample": per_sample,
+            "per_haplotype": {
+                hap: {"total": score, "sample_count": hap_counts[hap]}
+                for hap, score in hap_scores.items()
+            },
+        }
+
+        mode_data = generator._collect_score_mode_data({"Trait": score_data})
+        trait_data = mode_data["modes"]["robust_discovery"]["Trait"]
+
+        self.assertEqual(
+            ["Hap3", "Hap5", "Hap6", "Hap7", "Hap4"],
+            trait_data["score_plot_haplotypes"],
+        )
+        self.assertNotIn("Hap2", trait_data["score_plot_haplotypes"])
+        self.assertEqual(3, trait_data["score_plot_policy"]["min_samples"])
+        self.assertEqual(5, trait_data["score_plot_policy"]["max_haplotypes"])
+        self.assertEqual(sum(hap_counts.values()), len(trait_data["per_sample"]))
 
     def test_integrated_html_has_score_mode_toggle_wiring(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")

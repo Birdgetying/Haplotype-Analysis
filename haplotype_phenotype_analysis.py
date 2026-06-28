@@ -7520,6 +7520,8 @@ class HaplotypeScorer:
 
 class ReportGenerator:
     """结果整合与报告生成模块"""
+    SCORE_PLOT_MIN_HAPLOTYPE_SAMPLES = 3
+    SCORE_PLOT_MAX_HAPLOTYPES = 5
     
     def __init__(self, output_dir: str = None):
         self.output_dir = output_dir or DataConfig.OUTPUT_DIR
@@ -7532,6 +7534,80 @@ class ReportGenerator:
         self._cached_haplotype_score = None
         self._cached_all_haplotype_scores = {}
         self._cached_haplotype_score_json_path = None
+
+    @staticmethod
+    def _hap_sort_number(name):
+        import re
+        m = re.search(r'(\d+)$', str(name))
+        return int(m.group(1)) if m else 0
+
+    def _score_plot_display_haplotypes(self, score_data: dict) -> dict:
+        """Pick a compact, reliable haplotype subset for the score scatter plot."""
+        if not isinstance(score_data, dict):
+            return {}
+        per_sample = score_data.get('per_sample') or []
+        per_haplotype = score_data.get('per_haplotype') or {}
+        counts = {}
+        sample_scores = {}
+        for row in per_sample:
+            if not isinstance(row, dict):
+                continue
+            hap = str(row.get('haplotype', ''))
+            if not hap:
+                continue
+            counts[hap] = counts.get(hap, 0) + 1
+            try:
+                sample_scores.setdefault(hap, []).append(float(row.get('score')))
+            except (TypeError, ValueError):
+                pass
+
+        axis = score_data.get('score_axis') or 'total'
+        ranked = []
+        for hap, n in counts.items():
+            if n < self.SCORE_PLOT_MIN_HAPLOTYPE_SAMPLES:
+                continue
+            hap_score = None
+            hap_record = per_haplotype.get(hap) if isinstance(per_haplotype, dict) else None
+            if isinstance(hap_record, dict):
+                for key in (axis, 'total', 'directional_total', 'rank_score', 'score'):
+                    if key in hap_record:
+                        try:
+                            hap_score = float(hap_record.get(key))
+                            break
+                        except (TypeError, ValueError):
+                            pass
+            if hap_score is None:
+                values = sample_scores.get(hap, [])
+                hap_score = float(np.mean(values)) if values else 0.0
+            ranked.append((hap, n, hap_score))
+
+        ranked.sort(key=lambda item: (-item[2], -item[1], self._hap_sort_number(item[0]), str(item[0])))
+        selected = [hap for hap, _, _ in ranked[:self.SCORE_PLOT_MAX_HAPLOTYPES]]
+        selected_set = set(selected)
+        hidden = sorted(
+            [hap for hap in counts if hap not in selected_set],
+            key=lambda h: (counts.get(h, 0), self._hap_sort_number(h), str(h)),
+        )
+        return {
+            'score_plot_haplotypes': selected,
+            'score_plot_hidden_haplotypes': hidden,
+            'score_plot_policy': {
+                'min_samples': self.SCORE_PLOT_MIN_HAPLOTYPE_SAMPLES,
+                'max_haplotypes': self.SCORE_PLOT_MAX_HAPLOTYPES,
+            },
+        }
+
+    def _add_score_plot_display_metadata(self, mode_data: dict) -> dict:
+        """Annotate each phenotype score bundle with score-plot display metadata."""
+        if not isinstance(mode_data, dict):
+            return mode_data
+        for phenotype_scores in mode_data.values():
+            if not isinstance(phenotype_scores, dict):
+                continue
+            for score_data in phenotype_scores.values():
+                if isinstance(score_data, dict) and 'per_sample' in score_data:
+                    score_data.update(self._score_plot_display_haplotypes(score_data))
+        return mode_data
 
     def _collect_score_mode_data(self, all_score_data: dict = None) -> dict:
         """Collect current and sibling default/robust score JSON for HTML toggles."""
@@ -7568,6 +7644,7 @@ class ReportGenerator:
             except Exception as e:
                 print(f"[WARNING] Failed to load {mode} score mode data from {score_path}: {e}")
 
+        mode_data = self._add_score_plot_display_metadata(mode_data)
         return {
             'current_mode': current_mode,
             'available_modes': sorted(mode_data.keys()),
@@ -11394,10 +11471,27 @@ function drawHaplotypeScorePlot(scoreData) {
 
     container.selectAll('*').remove();
 
+    var displayHaplotypes = Array.isArray(scoreData.score_plot_haplotypes)
+        ? scoreData.score_plot_haplotypes.map(String)
+        : null;
+    var displayHapSet = displayHaplotypes ? new Set(displayHaplotypes) : null;
     var samples = (scoreData.per_sample || []).filter(function(d) {
         return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
+    }).filter(function(d) {
+        return !displayHapSet || displayHapSet.has(String(d.haplotype));
     });
-    if (samples.length < 2) {{ return; }}
+    if (samples.length < 2) {
+        container.append('p')
+            .style('color', '#999')
+            .style('text-align', 'center')
+            .style('padding', '60px 10px')
+            .text('Not enough displayed haplotype-score points after sample-count filtering.');
+        updateScoreLegend(scoreData, {});
+        updateScoreStats(scoreData);
+        updateScoreTitle(scoreData);
+        updateScoreModeControls();
+        return;
+    }
     var margin = {{top: 18, right: 24, bottom: 38, left: 48}};
     var box = container.node().getBoundingClientRect();
     var width = box.width - margin.left - margin.right;
@@ -11408,7 +11502,10 @@ function drawHaplotypeScorePlot(scoreData) {
     // 单倍型颜色映射
     var haplotypeColors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd',
                            '#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
-    var haps = Array.from(new Set(samples.map(function(d) { return d.haplotype; })));
+    var sampleHapSet = new Set(samples.map(function(d) { return String(d.haplotype); }));
+    var haps = displayHaplotypes
+        ? displayHaplotypes.filter(function(h) { return sampleHapSet.has(String(h)); })
+        : Array.from(sampleHapSet);
     var hapColor = {};
     haps.forEach(function(h, i) {
         hapColor[h] = haplotypeColors[i % haplotypeColors.length];
@@ -11606,6 +11703,15 @@ function updateScoreStats(scoreData) {
         + ' | Components: ' + parts.join(' | ');
     if (scoreData.site_weighting_policy && scoreData.site_weighting_policy.phenotype_free) {
         statsText += ' | Site weights: phenotype-free';
+    }
+    if (Array.isArray(scoreData.score_plot_haplotypes)) {
+        var hiddenCount = Array.isArray(scoreData.score_plot_hidden_haplotypes) ? scoreData.score_plot_hidden_haplotypes.length : 0;
+        var policy = scoreData.score_plot_policy || {};
+        statsText += ' | Plot shows ' + scoreData.score_plot_haplotypes.length + ' haplotypes';
+        if (hiddenCount > 0) {
+            statsText += ', hides ' + hiddenCount + ' tiny/extra haplotypes';
+        }
+        statsText += ' (min n=' + (policy.min_samples || 3) + ', max=' + (policy.max_haplotypes || 5) + ')';
     }
 
     // PVE 置信度标注
@@ -14596,11 +14702,17 @@ if (headerInfo) {{
         + ' | R² = ' + formatMetric(scoreData.r_squared, 4)
         + ' | p = ' + formatMetric(scoreData.regression_pvalue, 4);
 }}
+var displayHaplotypes = Array.isArray(scoreData.score_plot_haplotypes)
+    ? scoreData.score_plot_haplotypes.map(String)
+    : null;
+var displayHapSet = displayHaplotypes ? new Set(displayHaplotypes) : null;
 var samples = (scoreData.per_sample || []).filter(function(d) {{
     return d.score != null && !isNaN(d.score) && d.phenotype != null && !isNaN(d.phenotype);
+}}).filter(function(d) {{
+    return !displayHapSet || displayHapSet.has(String(d.haplotype));
 }});
 if (samples.length < 2) {{
-    container.append('p').style('color','#999').style('text-align','center').style('padding','60px').text('Not enough data points');
+    container.append('p').style('color','#999').style('text-align','center').style('padding','60px').text('Not enough displayed haplotype-score points after sample-count filtering.');
 }} else {{
     var margin = {{top: 20, right: 30, bottom: 45, left: 55}};
     var box = container.node().getBoundingClientRect();
@@ -14609,7 +14721,10 @@ if (samples.length < 2) {{
     container.style('height', (height + margin.top + margin.bottom) + 'px');
 
     var haplotypeColors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
-    var haps = Array.from(new Set(samples.map(function(d) {{ return d.haplotype; }})));
+    var sampleHapSet = new Set(samples.map(function(d) {{ return String(d.haplotype); }}));
+    var haps = displayHaplotypes
+        ? displayHaplotypes.filter(function(h) {{ return sampleHapSet.has(String(h)); }})
+        : Array.from(sampleHapSet);
     var hapColor = {{}};
     haps.forEach(function(h, i) {{ hapColor[h] = haplotypeColors[i % haplotypeColors.length]; }});
 
@@ -14714,6 +14829,15 @@ if (samples.length < 2) {{
         + ' | ' + statsText;
     if (scoreData.site_weighting_policy && scoreData.site_weighting_policy.phenotype_free) {{
         statsText += ' | Site weights: phenotype-free';
+    }}
+    if (Array.isArray(scoreData.score_plot_haplotypes)) {{
+        var hiddenCount = Array.isArray(scoreData.score_plot_hidden_haplotypes) ? scoreData.score_plot_hidden_haplotypes.length : 0;
+        var policy = scoreData.score_plot_policy || {{}};
+        statsText += ' | Plot shows ' + scoreData.score_plot_haplotypes.length + ' haplotypes';
+        if (hiddenCount > 0) {{
+            statsText += ', hides ' + hiddenCount + ' tiny/extra haplotypes';
+        }}
+        statsText += ' (min n=' + (policy.min_samples || 3) + ', max=' + (policy.max_haplotypes || 5) + ')';
     }}
     if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
     document.getElementById('stats').textContent = statsText;

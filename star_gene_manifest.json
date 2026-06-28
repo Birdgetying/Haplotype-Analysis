@@ -940,6 +940,30 @@
           "notes": "Discovery-eligible structural-variant validation target from Frontiers 2022: Supplementary Table S12 encodes the available VRN-B1 structural marker panel (838 bp duplication, 6,851 bp first-intron deletion, and 37 bp deletion); Supplementary Table S1 supplies heading-date phenotypes. Prepared by prepare_wheat2024_vrn_b1_frontiers2022.py. This is not a Watkins VCF run, but it is an accession-level literature structural-variant table. Validation must use this full marker panel first, then audit whether discovered candidates include the literature Vrn-B1a deletion."
         },
         {
+          "target_id": "VRN-B1-fullSequence-IJMS2021",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "full_sequence_base_alignment",
+          "aliases": ["Vrn-B1f", "Vrn-B1a", "IJMS2021 VRN-B1 full sequence"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "In-Depth Sequence Analysis of Bread Wheat VRN1 Genes, IJMS 2021 ESM1/ESM2",
+          "coordinates": {
+            "chrom": "VRN-B1_IJMS2021_alignment",
+            "start": 1,
+            "end": 13195
+          },
+          "required_database_source": "ijms2021_vrn_b1_full_gene_alignment",
+          "expected_direction": "increases_trait",
+          "traits": [
+            {
+              "name": "spring growth habit",
+              "aliases": ["GrowthHabitSpringScore", "spring growth habit", "winter/spring habit"],
+              "local_columns": ["GrowthHabitSpringScore"],
+              "expected_direction": "increases_trait"
+            }
+          ],
+          "notes": "Discovery-style full-gene base/indel target from IJMS 2021: ESM1 VRNB1_gene.fasta is converted into all retained polymorphic A/C/G/T columns and indel blocks across the complete VRN-B1 gene-body alignment; ESM2 Table S1 supplies spring/winter growth habit. Literature alleles such as Vrn-B1a/Vrn-B1f are post hoc audit targets only and are not used to select discovery markers."
+        },
+        {
           "target_id": "VRN-B1a-Frontiers2022",
           "gene_or_locus": "VRN-B1",
           "target_type": "single_literature_site_sanity_check_not_discovery_proof",

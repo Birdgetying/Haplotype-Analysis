@@ -335,3 +335,52 @@ as evidence that the method can discover an unknown key site. The evidence
 matrix now treats the full-panel result as
 `literature_site_present_but_not_discovery_top` and the single-marker result as
 `sanity_check_not_counted`.
+
+## 2026-06-28 VRN-B1 Full-Sequence Base/Indel Test
+
+The validation standard was tightened again: discovery should start from the
+complete gene-level base/indel sequence, not from literature marker labels or a
+preselected causal site. I added a full-sequence VRN-B1 route from IJMS 2021
+ESM1/ESM2:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Data and output:
+
+- Source FASTA: `VRNB1_gene.fasta`, 106 aligned records.
+- Phenotype source: ESM2 Table S1 spring/winter habit, 105 matched samples.
+- Discovery markers: 250 full gene-body base/indel markers, including 226 SNPs
+  and 24 indel blocks.
+- Output HTML:
+  `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+- Post hoc audit:
+  `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/vrn_b1_full_sequence_posthoc_group_audit.csv`
+
+Result:
+
+| Rank | Hap | Table S5 group | Literature class | n | Spring mean | Score |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `Hap4` | `GROUP 18B` | `Vrn-B1c` | 6 | 1.0 | 1.2850 |
+| 2 | `Hap7` | `GROUP 17B` | `Vrn-B1a` | 3 | 1.0 | 1.1260 |
+| 6 | `Hap2` | `GROUP 16B` | `Vrn-B1a` | 12 | 1.0 | 0.9613 |
+| 7 | `Hap6` | `GROUP 20B` | `Vrn-B1f` | 3 | 1.0 | 0.7901 |
+
+Interpretation:
+
+This is the cleanest VRN-B1 discovery-style result so far. It does not preselect
+the literature variant. From the full gene-body base/indel alignment, the
+highest-scored haplotype maps post hoc to the published dominant `Vrn-B1c`
+functional group; `Vrn-B1a` and `Vrn-B1f` are also high-scoring spring groups.
+This supports method validity for gene/functional-haplotype discovery.
+
+Limitation:
+
+The phenotype-free `site_weights` still do not localize the exact causal
+structural intervals as the top single sites. The current algorithm is therefore
+stronger for finding functional haplotype groups than for identifying the exact
+causal base/indel within a new gene. The next algorithmic improvement should
+prioritize unsupervised indel-block scoring and LD-collapsed haplotype group
+summaries rather than relying on raw full-length haplotype strings.
