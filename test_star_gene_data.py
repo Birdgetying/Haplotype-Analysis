@@ -163,6 +163,38 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(["SampleID", "GrowthHabitSpringScore"], list(phenotype_df.columns))
         self.assertEqual(1.0, phenotype_df.set_index("SampleID").loc["Anza", "GrowthHabitSpringScore"])
 
+    def test_vrn_b1_full_sequence_can_merge_continuous_heading_phenotypes(self):
+        from prepare_wheat2024_vrn_b1_full_sequence import merge_continuous_phenotypes
+
+        ijms_samples = pd.DataFrame({
+            "SampleID": ["Apache", "Atlas 66", "Pannonia NS", "Unmatched"],
+            "GrowthHabitSpringScore": [0.0, 0.0, 1.0, 1.0],
+        })
+
+        with tempfile.TemporaryDirectory() as tmp:
+            phenotype_path = Path(tmp) / "kiss.tsv"
+            phenotype_path.write_text(
+                "SampleID\tDEV49_mean\tDEV59_mean\n"
+                "APACHE\t210.5\t219.0\n"
+                "ATLAS-66\t211.0\t220.5\n"
+                "PANNONIA-NS\t205.0\t214.0\n"
+                "OTHER\t200.0\t210.0\n",
+                encoding="utf-8",
+            )
+
+            merged = merge_continuous_phenotypes(
+                ijms_samples,
+                phenotype_table=phenotype_path,
+                sample_column="SampleID",
+                phenotype_columns=["DEV49_mean", "DEV59_mean"],
+            )
+
+        self.assertEqual(["SampleID", "DEV49_mean", "DEV59_mean"], list(merged.columns))
+        self.assertEqual(["Apache", "Atlas 66", "Pannonia NS"], merged["SampleID"].tolist())
+        by_sample = merged.set_index("SampleID")
+        self.assertEqual(211.0, by_sample.loc["Atlas 66", "DEV49_mean"])
+        self.assertEqual(214.0, by_sample.loc["Pannonia NS", "DEV59_mean"])
+
     def test_rice_figshare_is_large_and_skipped_by_default(self):
         from star_gene_data import build_download_commands, iter_data_files
 

@@ -1437,3 +1437,66 @@ Display-only change:
 - The original per-sample score data remain embedded for audit; discovery
   scoring, top haplotype (`Hap4`/`Vrn-B1c`), regression, and validation
   interpretation are unchanged.
+
+### 2026-06-28 VRN-B1 full sequence with matched continuous heading-date phenotype
+
+Question:
+Replace the binary IJMS 2021 spring/winter phenotype with a continuous
+heading-date-like phenotype, while keeping the complete IJMS 2021 VRN-B1
+base/indel discovery marker matrix unchanged.
+
+Phenotype source search:
+
+- IJMS 2021 `ESM2.xlsx` does not contain continuous heading date / flowering
+  time / vernalization response values for the 105 VRN-B1 full-sequence
+  cultivars; it provides growth habit only.
+- Frontiers 2022 VRN-B1 heading-date table overlaps only 7 IJMS cultivars by
+  normalized cultivar name.
+- Watkins/JIC heading-date workbook overlaps only 1 IJMS cultivar by normalized
+  accession name.
+- Kiss2014 `DEV49_mean`/`DEV59_mean` heading-date phenotypes overlap 10 IJMS
+  cultivars, so this was used for the continuous-phenotype visualization.
+
+Code/data added:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py --phenotype-source kiss2014_heading
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021-Kiss2014Heading --score-mode robust_discovery
+```
+
+Generated database/report:
+
+- `star_gene_database/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021-Kiss2014Heading`
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021-Kiss2014Heading__robust_discovery/VRN-B1-fullSequence-IJMS2021-Kiss2014Heading.html`
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021-Kiss2014Heading__robust_discovery/haplotype_score.html`
+
+Input policy:
+Discovery markers are still the full IJMS 2021 `VRNB1_gene.fasta` alignment
+converted into 250 retained polymorphic base/indel markers. Kiss2014 phenotype
+values are used only as the validation phenotype after matching cultivar names;
+they are not used to choose marker columns or score sites/haplotypes.
+
+Result:
+
+- Matched continuous-phenotype samples: 10.
+- Retained discovery markers: 250.
+- Haplotypes in matched set: 4.
+- Haplotype counts: `Hap1` n=5, `Hap2` n=3, `Hap3` n=1, `Hap4` n=1.
+- Robust top-scored haplotype: `Hap4`, score `1.0221`, but n=1.
+- `DEV49_mean`: score regression `R^2=0.1361`, `P=0.294188`,
+  PVE `0.430405`; direction consistency is inconsistent under the expected
+  earlier-heading direction.
+- `DEV59_mean`: score regression `R^2=0.0051`, `P=0.845036`,
+  PVE `0.154128`; direction consistency is consistent but weak.
+- Because the score plot hides haplotypes with fewer than 3 samples, the
+  displayed score plot should show the stable haplotypes `Hap1` and `Hap2`
+  rather than the raw top singleton `Hap4`.
+
+Current verdict:
+This rerun fixes the visualization problem that the phenotype axis was binary,
+but it does not strengthen VRN-B1 as continuous-trait proof. The limiting factor
+is sample overlap: only 10 IJMS full-sequence cultivars have matched continuous
+Kiss2014 heading-date values, and the raw top-scored haplotype is a singleton.
+Use this HTML as a continuous-trait visualization/sensitivity check, not as one
+of the strongest "at least three proofs" unless a larger matched continuous
+phenotype source for the IJMS full-sequence cultivars is found.

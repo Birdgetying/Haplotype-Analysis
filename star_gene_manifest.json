@@ -964,6 +964,36 @@
           "notes": "Discovery-style full-gene base/indel target from IJMS 2021: ESM1 VRNB1_gene.fasta is converted into all retained polymorphic A/C/G/T columns and indel blocks across the complete VRN-B1 gene-body alignment; ESM2 Table S1 supplies spring/winter growth habit. Literature alleles such as Vrn-B1a/Vrn-B1f are post hoc audit targets only and are not used to select discovery markers."
         },
         {
+          "target_id": "VRN-B1-fullSequence-IJMS2021-Kiss2014Heading",
+          "gene_or_locus": "VRN-B1",
+          "target_type": "full_sequence_base_alignment_with_matched_external_heading_date",
+          "aliases": ["IJMS2021 VRN-B1 full sequence", "Kiss2014 heading date", "DEV49", "DEV59"],
+          "requires_coordinate_resolution": false,
+          "coordinate_source": "IJMS 2021 ESM1/ESM2 full VRN-B1 sequence; Kiss et al. 2014 DEV49/DEV59 heading-date phenotypes matched by cultivar name",
+          "coordinates": {
+            "chrom": "VRN-B1_IJMS2021_alignment",
+            "start": 1,
+            "end": 13195
+          },
+          "required_database_source": "ijms2021_vrn_b1_full_gene_alignment_plus_kiss2014_heading",
+          "expected_direction": "decreases_trait",
+          "traits": [
+            {
+              "name": "heading date DEV49 mean",
+              "aliases": ["DEV49", "DEV49_mean", "days to heading DEV49"],
+              "local_columns": ["DEV49_mean"],
+              "expected_direction": "decreases_trait"
+            },
+            {
+              "name": "heading date DEV59 mean",
+              "aliases": ["DEV59", "DEV59_mean", "days to heading DEV59"],
+              "local_columns": ["DEV59_mean"],
+              "expected_direction": "decreases_trait"
+            }
+          ],
+          "notes": "Discovery markers remain the complete IJMS 2021 VRNB1_gene.fasta base/indel alignment. The continuous heading-date phenotypes are not in IJMS ESM2; they are post hoc matched from Kiss2014 by cultivar name. This target is useful for continuous-trait visualization but has small overlap with IJMS full-sequence samples, so sample-count limitations must be reported."
+        },
+        {
           "target_id": "VRN-B1a-Frontiers2022",
           "gene_or_locus": "VRN-B1",
           "target_type": "single_literature_site_sanity_check_not_discovery_proof",

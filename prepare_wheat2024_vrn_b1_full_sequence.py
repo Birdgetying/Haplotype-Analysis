@@ -34,7 +34,11 @@ DEFAULT_ESM2_WORKBOOK = Path(
 )
 DEFAULT_OUTPUT_ROOT = Path("star_gene_database/wheat_nature_2024")
 DEFAULT_INTERMEDIATE_ROOT = Path("external_data/wheat_nature_2024/vrn_b1_full_sequence_ijms2021")
+DEFAULT_KISS2014_PHENOTYPE_TABLE = Path(
+    "external_data/wheat_nature_2024/vrn_kiss2014/VRN-Kiss2014/phenotype.tsv"
+)
 TARGET_ID = "VRN-B1-fullSequence-IJMS2021"
+KISS2014_HEADING_TARGET_ID = "VRN-B1-fullSequence-IJMS2021-Kiss2014Heading"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -50,6 +54,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--intermediate-root", default=str(DEFAULT_INTERMEDIATE_ROOT))
     parser.add_argument("--target-id", default=TARGET_ID)
+    parser.add_argument(
+        "--phenotype-source",
+        choices=["growth_habit", "kiss2014_heading"],
+        default="growth_habit",
+        help="phenotype table to merge with the IJMS 2021 full-sequence marker matrix",
+    )
+    parser.add_argument(
+        "--continuous-phenotype-table",
+        default=str(DEFAULT_KISS2014_PHENOTYPE_TABLE),
+        help="continuous phenotype TSV/CSV used when --phenotype-source kiss2014_heading",
+    )
+    parser.add_argument("--continuous-sample-column", default="SampleID")
+    parser.add_argument(
+        "--continuous-phenotype-columns",
+        default="DEV49_mean,DEV59_mean",
+        help="comma-separated continuous phenotype columns",
+    )
     parser.add_argument("--max-missing-rate", type=float, default=0.0)
     parser.add_argument("--min-minor-count", type=int, default=1)
     parser.add_argument("--min-haplotype-count", type=int, default=1)
@@ -73,6 +94,13 @@ def _normal_code(value: object) -> str:
     if numeric.is_integer():
         return str(int(numeric))
     return text.upper().replace(" ", "")
+
+
+def _normal_sample_key(value: object) -> str:
+    text = _clean_text(value).casefold()
+    text = text.replace("'", "").replace("’", "")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
 
 
 def build_sample_maps_from_esm2(workbook: Path) -> tuple[Dict[str, str], pd.DataFrame]:
@@ -113,6 +141,52 @@ def build_sample_maps_from_esm2(workbook: Path) -> tuple[Dict[str, str], pd.Data
     if phenotype_df.empty:
         raise ValueError("No spring/winter phenotype rows found in Table S1")
     return code_to_sample, phenotype_df
+
+
+def _read_delimited_table(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        raise FileNotFoundError(f"continuous phenotype table is missing: {path}")
+    sep = "\t" if path.suffix.lower() in {".tsv", ".tab"} else ","
+    return pd.read_csv(path, sep=sep)
+
+
+def merge_continuous_phenotypes(
+    ijms_phenotype_df: pd.DataFrame,
+    phenotype_table: Path,
+    sample_column: str,
+    phenotype_columns: Sequence[str],
+) -> pd.DataFrame:
+    """Merge an external continuous phenotype table to IJMS cultivar names."""
+    if "SampleID" not in ijms_phenotype_df.columns:
+        raise ValueError("IJMS phenotype table missing SampleID")
+    if not phenotype_columns:
+        raise ValueError("at least one continuous phenotype column is required")
+
+    source_df = _read_delimited_table(Path(phenotype_table))
+    required = {sample_column, *phenotype_columns}
+    missing = sorted(required - set(source_df.columns))
+    if missing:
+        raise ValueError("continuous phenotype table missing columns: " + ", ".join(missing))
+
+    ijms_samples = ijms_phenotype_df[["SampleID"]].dropna().drop_duplicates().copy()
+    ijms_samples["_sample_key"] = ijms_samples["SampleID"].map(_normal_sample_key)
+
+    continuous = source_df[[sample_column, *phenotype_columns]].dropna(subset=[sample_column]).copy()
+    continuous["_sample_key"] = continuous[sample_column].map(_normal_sample_key)
+    continuous = continuous[continuous["_sample_key"] != ""].drop_duplicates(subset=["_sample_key"])
+    for col in phenotype_columns:
+        continuous[col] = pd.to_numeric(continuous[col], errors="coerce")
+    continuous = continuous.dropna(subset=list(phenotype_columns))
+
+    merged = ijms_samples.merge(
+        continuous[["_sample_key", *phenotype_columns]],
+        on="_sample_key",
+        how="inner",
+    )
+    merged = merged.drop(columns=["_sample_key"])
+    if merged.empty:
+        raise ValueError("continuous phenotype table has no cultivar overlap with IJMS Table S1")
+    return merged.sort_values("SampleID").reset_index(drop=True)
 
 
 def make_vrn_b1_fasta_sample_id_fn(code_to_sample: Dict[str, str]) -> Callable[[str], str]:
@@ -168,6 +242,8 @@ def update_database_metadata(
     target_id: str,
     gene_fasta: Path,
     esm2_workbook: Path,
+    phenotype_source: str,
+    phenotype_source_note: str,
     marker_metadata: Sequence[Dict[str, object]],
     marker_df: pd.DataFrame,
     phenotype_df: pd.DataFrame,
@@ -177,6 +253,11 @@ def update_database_metadata(
     gene_info_path = db_dir / "gene_info.json"
     with gene_info_path.open("r", encoding="utf-8") as f:
         gene_info = json.load(f)
+    source_id = (
+        "ijms2021_vrn_b1_full_gene_alignment_plus_kiss2014_heading"
+        if phenotype_source == "kiss2014_heading"
+        else "ijms2021_vrn_b1_full_gene_alignment"
+    )
     gene_info.update({
         "gene_id": target_id,
         "gene_symbol": "VRN-B1",
@@ -185,12 +266,14 @@ def update_database_metadata(
         "end": int(max(row["alignment_end"] for row in marker_metadata)) if marker_metadata else 1,
         "gene_start": 1,
         "gene_end": int(max(row["alignment_end"] for row in marker_metadata)) if marker_metadata else 1,
-        "source": "ijms2021_vrn_b1_full_gene_alignment",
+        "source": source_id,
         "source_fasta": str(gene_fasta),
         "source_workbook": str(esm2_workbook),
+        "phenotype_source": phenotype_source,
         "source_note": (
             "In-Depth Sequence Analysis of Bread Wheat VRN1 Genes, IJMS 2021 "
-            "ESM1 VRNB1_gene.fasta plus ESM2 Table S1 growth habit. "
+            "ESM1 VRNB1_gene.fasta. "
+            f"{phenotype_source_note} "
             "Discovery markers are all polymorphic A/C/G/T columns and indel blocks "
             "retained from the full gene-body alignment."
         ),
@@ -225,11 +308,36 @@ def build_database(
     output_root: Path,
     intermediate_root: Path,
     target_id: str,
+    phenotype_source: str,
+    continuous_phenotype_table: Path,
+    continuous_sample_column: str,
+    continuous_phenotype_columns: Sequence[str],
     max_missing_rate: float,
     min_minor_count: int,
     min_haplotype_count: int,
 ) -> Path:
-    code_to_sample, phenotype_df = build_sample_maps_from_esm2(esm2_workbook)
+    code_to_sample, growth_habit_df = build_sample_maps_from_esm2(esm2_workbook)
+    if phenotype_source == "growth_habit":
+        phenotype_df = growth_habit_df
+        phenotype_columns = ["GrowthHabitSpringScore"]
+        expected_direction = "increases_trait"
+        phenotype_source_note = "ESM2 Table S1 supplies spring/winter growth habit."
+    elif phenotype_source == "kiss2014_heading":
+        phenotype_columns = list(continuous_phenotype_columns)
+        phenotype_df = merge_continuous_phenotypes(
+            growth_habit_df,
+            phenotype_table=continuous_phenotype_table,
+            sample_column=continuous_sample_column,
+            phenotype_columns=phenotype_columns,
+        )
+        expected_direction = "decreases_trait"
+        phenotype_source_note = (
+            "Continuous heading-date phenotypes are merged by cultivar name from "
+            f"{continuous_phenotype_table}; IJMS Table S1 is used only for cultivar-code mapping."
+        )
+    else:
+        raise ValueError(f"unsupported phenotype source: {phenotype_source}")
+
     sample_id_fn = make_vrn_b1_fasta_sample_id_fn(code_to_sample)
     marker_df, marker_metadata = build_marker_matrix_from_aligned_fasta(
         gene_fasta,
@@ -244,6 +352,9 @@ def build_database(
     source_summary = {
         "gene_fasta": str(gene_fasta),
         "esm2_workbook": str(esm2_workbook),
+        "phenotype_source": phenotype_source,
+        "continuous_phenotype_table": str(continuous_phenotype_table) if phenotype_source != "growth_habit" else "",
+        "phenotype_columns": phenotype_columns,
         "alignment_records": int(len(marker_df)),
         "phenotype_samples": int(len(phenotype_df)),
         "retained_markers": int(len(marker_metadata)),
@@ -274,32 +385,54 @@ def build_database(
         chrom="VRN-B1_IJMS2021_alignment",
         start=1,
         end=max(marker_positions.values()),
-        phenotype_columns=["GrowthHabitSpringScore"],
+        phenotype_columns=phenotype_columns,
         marker_columns=marker_columns,
         marker_positions=marker_positions,
-        expected_direction="increases_trait",
+        expected_direction=expected_direction,
         min_haplotype_count=min_haplotype_count,
     )
-    update_database_metadata(db_dir, target_id, gene_fasta, esm2_workbook, marker_metadata, marker_df, phenotype_df)
+    update_database_metadata(
+        db_dir,
+        target_id,
+        gene_fasta,
+        esm2_workbook,
+        phenotype_source,
+        phenotype_source_note,
+        marker_metadata,
+        marker_df,
+        phenotype_df,
+    )
     return db_dir
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    phenotype_columns = [
+        col.strip()
+        for col in str(args.continuous_phenotype_columns).split(",")
+        if col.strip()
+    ]
+    target_id = args.target_id
+    if args.phenotype_source == "kiss2014_heading" and target_id == TARGET_ID:
+        target_id = KISS2014_HEADING_TARGET_ID
     db_dir = build_database(
         gene_fasta=Path(args.gene_fasta),
         esm2_workbook=Path(args.esm2_workbook),
         output_root=Path(args.output_root),
         intermediate_root=Path(args.intermediate_root),
-        target_id=args.target_id,
+        target_id=target_id,
+        phenotype_source=args.phenotype_source,
+        continuous_phenotype_table=Path(args.continuous_phenotype_table),
+        continuous_sample_column=args.continuous_sample_column,
+        continuous_phenotype_columns=phenotype_columns,
         max_missing_rate=args.max_missing_rate,
         min_minor_count=args.min_minor_count,
         min_haplotype_count=args.min_haplotype_count,
     )
     print(f"[INFO] Built IJMS 2021 VRN-B1 full-sequence database: {db_dir}")
     print("[NEXT] python run_star_gene_validation.py --run-analysis --paper wheat2024 "
-          f"--target {args.target_id} --score-mode robust_discovery")
+          f"--target {target_id} --score-mode robust_discovery")
     return 0
 
 
