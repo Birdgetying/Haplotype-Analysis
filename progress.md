@@ -260,3 +260,29 @@
   late-heading and directionally inconsistent. This fixes sample size for
   continuous phenotype visualization but should not be counted as a clean
   raw-top proof of early-heading VRN-B1 causal discovery.
+- 2026-06-28 complete-data recheck after the user objected to SNP-only data:
+  re-ran `python download_wheat2024_indel_microvcfs.py --target VRN-B1`.
+  The public WheatOmics `GBS_INDEL`, `WEC_INDEL`, and
+  `WildEmmer10WGS_INDEL` tracks still have 0 VRN-B1 records and 0 Watkins
+  overlaps.
+- Checked WheatOmics JBrowse with `curl -k` because the server certificate is
+  expired for ordinary clients. The VCF directory exposes the merged 1051 SNP
+  file, three small/non-Watkins INDEL tracks, WGS tracks, `all.site.txt`, and
+  no merged 1051/1047 INDEL VCF. Guessed merged INDEL object names returned
+  404. The `tracks/SV/` directory exists but is empty.
+- Downloaded small WheatOmics metadata probes:
+  `external_data/wheat_nature_2024/wheatomics_trackList.json`,
+  `external_data/wheat_nature_2024/wheatomics_sample.id.txt`, and
+  `external_data/wheat_nature_2024/wheatomics_vmap_sample_names.txt`.
+  `sample.id.txt` confirms 827 `WATDE` samples and 821 overlaps with the
+  Watkins/JIC phenotype workbook for the SNP track.
+- Probed `414WGS.vcf.eff.vcf.gz` with `curl -k --range`; the header probe
+  shows no `WATDE` sample IDs, so 414WGS is not a matched substitute for the
+  Watkins heading-date run.
+- Tested WWWG2B with an already known small fileId through
+  `download_wwwg2b_file.py`; the API still returns HTTP 526. This means the
+  missing `INDEL_matrix_1047` file cannot be obtained by refreshing fileIds
+  from this machine right now.
+- Updated `task_plan.md`, `findings.md`, and `star_gene_validation_record.md`
+  to explicitly classify `VRN-B1-remoteSNP-HeadingDate` as SNP-only and not
+  complete-data proof.

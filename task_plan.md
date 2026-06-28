@@ -519,3 +519,53 @@ This supports discovery at the gene/functional-haplotype level using complete
 base/indel sequence. It does not yet prove precise causal-site localization,
 because phenotype-free `site_weights` do not rank the structural intervals as
 top single sites.
+
+### Phase 24: VRN-B1 complete-variant follow-up for large continuous phenotype
+
+Status: in_progress
+
+Goal:
+
+Respond to the concern that the large Watkins heading-date rerun was SNP-only.
+The standard for a "complete" VRN-B1 discovery test is now:
+
+- use sample-level genotype calls that include non-SNP variation
+  (INDEL/SV/CNV or full aligned sequence);
+- do not preselect only the literature causal marker for discovery;
+- use literature VRN-B1 variants only for post hoc validation.
+
+Current data-source evidence:
+
+- `VRN-B1-remoteSNP-HeadingDate` is explicitly SNP-only. It solves continuous
+  phenotype sample size but cannot validate causal VRN-B1 deletion/CNV/SV
+  recovery.
+- Public WheatOmics INDEL VCF tracks were rechecked with
+  `python download_wheat2024_indel_microvcfs.py --target VRN-B1`; all three
+  sources (`GBS_INDEL`, `WEC_INDEL`, `WildEmmer10WGS_INDEL`) have 0 records in
+  `chr5B:573800883-573818070` and 0 Watkins overlaps.
+- WheatOmics `trackList.json` and the Apache directory list show only the same
+  public INDEL VCF tracks plus an empty `tracks/SV/` directory. No 1051/1047
+  Watkins INDEL/SV/CNV genotype VCF is exposed there.
+- `sample.id.txt` from WheatOmics confirms the merged 1051 SNP track contains
+  827 `WATDE` samples and overlaps 821 Watkins phenotype StoreCodes, so the
+  SNP route is sample-matched; the missing part is the matching non-SNP track.
+- WWWG2B remains the likely source for `INDEL_matrix_1047`, but its API returns
+  HTTP 526 even for a known small fileId, so the INDEL fileId/download URL
+  cannot currently be refreshed from this machine.
+- WheatOmics `414WGS.vcf.eff.vcf.gz` is accessible by `curl -k --range`, but
+  its sample header has 391 partial samples and no `WATDE` IDs; it is not a
+  direct replacement for the Watkins continuous phenotype run.
+
+Current verdict:
+
+No sample-matched complete Watkins VRN-B1 INDEL/SV/CNV dataset has been obtained
+yet. The complete non-SNP evidence remains:
+
+- `VRN-B1-fullSequence-IJMS2021`: full gene-body base/indel alignment, 250
+  markers, but binary growth habit and 105 samples.
+- `VRN-B1-Frontiers2022`: accession-level structural marker panel with heading
+  date, but only three structural markers and not a full gene sequence.
+
+Do not describe `VRN-B1-remoteSNP-HeadingDate` as complete data. It is a
+large-sample SNP-only stress test until the WWWG2B `INDEL_matrix_1047` or an
+equivalent sample-level non-SNP Watkins file is obtained.

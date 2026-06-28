@@ -1565,3 +1565,57 @@ raw discovery score recovers a known early-heading VRN-B1 allele. It is best
 classified as a large-sample SNP-only continuous-trait stress test. The result
 is statistically real, but directionally mixed; known VRN-B1 causal SV/CNV
 events are still absent from this SNP-only data source.
+
+### 2026-06-28 VRN-B1 complete-variant data recheck after SNP-only objection
+
+User concern:
+The large `VRN-B1-remoteSNP-HeadingDate` run uses only SNPs. This is not enough
+for VRN-B1 because the known functional alleles include deletions,
+duplications, and other structural states.
+
+Commands/data-source checks:
+
+```bash
+python download_wheat2024_indel_microvcfs.py --target VRN-B1
+curl.exe -k -L https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/trackList.json
+curl.exe -k -L https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/tracks/vcf/
+curl.exe -k -L https://wheatomics.sdau.edu.cn/jbrowse-1.12.3-release/Chinese_Spring1.0/tracks/SV/
+python download_wwwg2b_file.py --file-id 01SSKBI2HKPZS7HSLDMJG37QBQDV7JR6AJ --output external_data\wheat_nature_2024\wwwg2b\q7b_ph\_probe.xlsx --retries 1 --retry-delay 1
+```
+
+Findings:
+
+- Public WheatOmics INDEL tracks:
+  `GBS_INDEL`, `WEC_INDEL`, and `WildEmmer10WGS_INDEL` all have
+  `record_count=0` and `watkins_overlap_count=0` in the VRN-B1 interval
+  `chr5B:573800883-573818070`.
+- WheatOmics JBrowse `trackList.json` exposes no merged 1051/1047 Watkins
+  INDEL/SV/CNV genotype VCF. The visible `tracks/SV/` directory is empty.
+- Guessed merged INDEL object names under the WheatOmics VCF directory returned
+  HTTP 404, so there is no confirmed direct JBrowse URL for the matching
+  1051/1047 INDEL matrix.
+- WheatOmics `sample.id.txt` confirms the merged SNP VCF has 827 `WATDE`
+  samples and 821 overlaps with the Watkins/JIC phenotype workbook. Therefore
+  the SNP run is sample-matched, but the non-SNP matching file is missing.
+- WWWG2B likely remains the correct source for `INDEL_matrix_1047`, but its API
+  currently returns HTTP 526 even for a previously known small fileId. No
+  refreshed OneDrive URL or fileId for `chr5B` INDEL could be obtained in this
+  environment.
+- A range probe of WheatOmics `414WGS.vcf.eff.vcf.gz` was readable with
+  `curl -k`, but its sample header has no `WATDE` IDs and cannot be directly
+  merged with Watkins heading-date phenotypes.
+
+Updated classification:
+
+- `VRN-B1-remoteSNP-HeadingDate`: large-sample, continuous phenotype,
+  SNP-only stress test. Do not count as complete-data proof.
+- `VRN-B1-fullSequence-IJMS2021`: complete gene-body base/indel discovery
+  evidence, but phenotype is binary growth habit and sample size is 105.
+- `VRN-B1-Frontiers2022`: non-SNP structural marker panel with continuous
+  heading date, but only three structural markers rather than full sequence.
+
+Blocked next step:
+Obtain the WWWG2B `INDEL_matrix_1047` `chr5B` VCF/fileId or another
+Watkins-matched sample-level INDEL/SV/CNV genotype matrix. Until then, a
+large-sample continuous VRN-B1 complete-variant HTML cannot be generated
+honestly.

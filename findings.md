@@ -422,3 +422,40 @@ Follow-up result:
   and score regression is significant (`R^2=0.034`, P `1.02e-05`), but raw top
   `Hap8` is late-heading and directionally inconsistent. This is therefore a
   large-sample SNP-only stress test, not a strong raw-top validation proof.
+
+## 2026-06-28 VRN-B1 Complete-Variant Data Recheck
+
+The user's objection is correct: the large Watkins heading-date run uses only
+SNP calls and must not be called complete VRN-B1 variation.
+
+Live data-source checks:
+
+- Re-ran `python download_wheat2024_indel_microvcfs.py --target VRN-B1`.
+  `GBS_INDEL`, `WEC_INDEL`, and `WildEmmer10WGS_INDEL` all reported
+  `records=0` and `watkins_overlap=0` for `chr5B:573800883-573818070`.
+- `curl -k` against WheatOmics JBrowse `trackList.json` found only those same
+  INDEL tracks, `Indel_marker_from_zhai`, and WGS tracks; the directory also
+  lists `tracks/SV/`, but that directory is empty and has no trackList.
+- Guessed 1051/1047 merged INDEL VCF object names under WheatOmics JBrowse
+  returned HTTP 404. The only visible 1051/Watkins genotype VCF there remains
+  the merged SNP VCF.
+- `sample.id.txt` confirms the merged WheatOmics 1051 SNP track has 827
+  `WATDE` samples and 821 overlaps with the Watkins/JIC phenotype workbook,
+  so the sample matching is real for SNPs.
+- WWWG2B likely has the correct `INDEL_matrix_1047` folder, but
+  `download_wwwg2b_file.py` failed even on a known small fileId with HTTP 526,
+  so the current blocker is obtaining the fileId or a refreshed OneDrive URL
+  while the WWWG2B API is reachable.
+- A 200 KB `curl -k --range` probe of `414WGS.vcf.eff.vcf.gz` could read the
+  VCF header, but the partial 414WGS sample set has no `WATDE` sample IDs. It
+  is not a sample-matched substitute for the Watkins continuous phenotype run.
+
+Interpretation:
+
+For VRN-B1 there are two valid non-SNP evidence tracks already analyzed:
+`VRN-B1-fullSequence-IJMS2021` (250 full gene-body SNP/indel markers, 105
+samples, growth habit) and `VRN-B1-Frontiers2022` (three structural markers,
+192 samples, heading date). The large `VRN-B1-remoteSNP-HeadingDate` HTML is
+useful only as a large-sample SNP-only stress test until the WWWG2B
+`INDEL_matrix_1047` or equivalent Watkins-matched non-SNP genotype matrix is
+downloaded.
