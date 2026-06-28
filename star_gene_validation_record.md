@@ -1671,3 +1671,58 @@ promoter window. This rerun should not be counted as a new proof of discovery
 accuracy by itself because the phenotype is still binary growth habit and the
 raw top-scored haplotype has only two samples. Literature functional alleles
 remain post hoc validation only and were not used as discovery scoring input.
+
+### 2026-06-28 VRN-B1 full-sequence IJMS2021 LD token-index fix and continuous phenotype rerun
+
+Targets:
+`VRN-B1-fullSequence-IJMS2021` and
+`VRN-B1-fullSequence-IJMS2021-Kiss2014Heading`
+
+Issue:
+The growth-habit HTML used a binary `GrowthHabitSpringScore` phenotype, so the
+phenotype axis only showed 0/1. The LD inverted triangle also appeared gray
+because display-LD code indexed `Haplotype_Seq` after removing `|`; multi-base
+indel/full-sequence alleles shifted later marker indices and collapsed pairwise
+LD values.
+
+Fix:
+`Haplotype_Seq` alleles are now read as `|`-delimited marker tokens when
+building display LD matrices. Literature functional variants were not used as
+discovery-scoring input.
+
+Commands:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py --phenotype-source kiss2014_heading
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021-Kiss2014Heading --score-mode robust_discovery
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Outputs:
+
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+- `star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021-Kiss2014Heading__robust_discovery/VRN-B1-fullSequence-IJMS2021-Kiss2014Heading.html`
+
+Results:
+
+- Growth-habit target: 102 samples, 24 haplotypes, 251 markers. The phenotype
+  remains binary by design. LD matrix in the integrated HTML is now 234 x 234;
+  non-diagonal entries > 0 are present, max r² = 1.0.
+- Growth-habit top-scored haplotype: `Hap11`, total score `1.0391`, n=2.
+  Direction-aware top: `Hap2`, directional total `0.7686`, n=12.
+- Kiss2014 heading-date target: 9 matched samples, 5 haplotypes, continuous
+  phenotypes `DEV49_mean` and `DEV59_mean`. LD matrix is 5 x 5 and non-gray
+  after token-index fix.
+- Kiss2014 `DEV49_mean` top-scored haplotype: `Hap4`, total score `1.0083`,
+  n=1. Direction-aware top: `Hap1`, directional total `0.65`, n=3.
+- Kiss2014 `DEV59_mean` top-scored haplotype: `Hap4`, total score `1.0115`,
+  n=1. Direction-aware top: `Hap4`, directional total `0.688`, n=1.
+
+Validation interpretation:
+The LD visualization bug is fixed for full-sequence/indel-rich haplotypes. The
+0/1 phenotype in the original report is not a plotting bug; it comes from the
+binary growth-habit phenotype source. The continuous heading-date rerun provides
+a non-binary HTML view, but the overlap has only 9 samples and top haplotypes
+include single-sample groups, so this rerun should be treated as a visualization
+and data-compatibility check rather than strong proof that VRN-B1 discovery
+scoring is valid.

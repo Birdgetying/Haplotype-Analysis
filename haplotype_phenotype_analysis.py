@@ -3160,6 +3160,26 @@ def _allele_codes_at_index(merged_df: pd.DataFrame, idx: int) -> np.ndarray:
     return out
 
 
+_MISSING_ALLELE_CODES = {'N', '', '.', 'NA', 'NAN', '?'}
+
+
+def _haplotype_allele_at(haplotype_seq, idx) -> str:
+    """Return the tokenized allele at a Haplotype_Seq marker index."""
+    if idx is None:
+        return 'N'
+    try:
+        idx = int(idx)
+    except (TypeError, ValueError):
+        return 'N'
+    if idx < 0 or pd.isna(haplotype_seq):
+        return 'N'
+    alleles = str(haplotype_seq).split('|')
+    if idx >= len(alleles):
+        return 'N'
+    allele = alleles[idx].strip().upper()
+    return 'N' if allele in _MISSING_ALLELE_CODES else allele
+
+
 def _numeric_allele_vector(codes: np.ndarray) -> np.ndarray:
     """等位基因类别 -> 数值向量，用于 Pearson 相关。"""
     valid = [v for v in codes if v is not None]
@@ -7766,8 +7786,7 @@ class ReportGenerator:
                 for orig_idx in display_orig_indices:
                     bases_list = []
                     for _, sample_row in hap_sample_df.iterrows():
-                        seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
-                        bases_list.append(seq[orig_idx].upper() if orig_idx < len(seq) else 'N')
+                        bases_list.append(_haplotype_allele_at(sample_row.get('Haplotype_Seq', ''), orig_idx))
                     all_bases_at_positions.append(bases_list)
 
                 geno_matrix = []
@@ -8586,12 +8605,7 @@ class ReportGenerator:
                 for pos_i, orig_idx in enumerate(display_orig_indices):
                     bases_list = []
                     for _, sample_row in hap_sample_df.iterrows():
-                        seq = str(sample_row.get('Haplotype_Seq', '')).replace('|', '')
-                        if orig_idx < len(seq):
-                            base = seq[orig_idx].upper()
-                            bases_list.append(base)
-                        else:
-                            bases_list.append('N')  # 超出序列长度视为缺失
+                        bases_list.append(_haplotype_allele_at(sample_row.get('Haplotype_Seq', ''), orig_idx))
                     all_bases_at_positions.append(bases_list)
                 
                 # 第二步：对每个位置，找主要碱基（出现最多的）编码为0，其他编码为1，N=NaN

@@ -1557,6 +1557,40 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn(260, functional.get("functional_positions", []))
         self.assertIn("A|G|C", functional.get("groups", {}))
 
+    def test_compute_haplotype_scores_ld_uses_tokenized_indel_alleles(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "Hap1", "Haplotype_Seq": "LONGREF|A|T", "Trait": 10.0},
+            {"SampleID": "S2", "Hap_Name": "Hap1", "Haplotype_Seq": "LONGREF|A|T", "Trait": 11.0},
+            {"SampleID": "S3", "Hap_Name": "Hap2", "Haplotype_Seq": "DEL_7|G|C", "Trait": 20.0},
+            {"SampleID": "S4", "Hap_Name": "Hap2", "Haplotype_Seq": "DEL_7|G|C", "Trait": 21.0},
+        ])
+        variant_info = {
+            100: {"ref": "LONGREF", "alt": "DEL_7", "annotation": "promoter", "maf": 0.5, "missing_rate": 0.0},
+            200: {"ref": "A", "alt": "G", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+            300: {"ref": "T", "alt": "C", "annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+        }
+        reporter = ReportGenerator(output_dir=tempfile.mkdtemp())
+
+        result = reporter.compute_haplotype_scores(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 300],
+            region_start=100,
+            region_end=300,
+            phenotype_col="Trait",
+            gene_start=150,
+            gene_end=300,
+            variant_info=variant_info,
+            score_mode="robust_discovery",
+        )
+
+        self.assertEqual(result["display_positions"], [100, 200, 300])
+        ld_matrix = result["ld_r2_matrix"]
+        self.assertEqual(len(ld_matrix), 3)
+        self.assertGreater(ld_matrix[1][2], 0.9)
+
     def test_key_site_contrast_is_site_specific(self):
         from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
         import pandas as pd
