@@ -1950,3 +1950,67 @@ The large HTML now visibly contains the exact literature 837 bp marker at
 method still does not rank the exact `Vrn-B1f` insertion haplotype as the top
 discovery haplotype in this small IJMS2021 validation set; this remains a
 marker-recovery/visual-validation case rather than a clean top-haplotype proof.
+
+### 2026-06-29 VRN-B1 full-sequence scoring-order and anchor rerun
+
+Target:
+`VRN-B1-fullSequence-IJMS2021`
+
+Issue:
+After the exact `837 bp` marker was made visible, the top-scored haplotype
+still appeared not to match `Vrn-B1f`. A direct JSON/database audit showed a
+deeper scoring-order bug: `HaplotypeScorer` built `pos_to_seq_idx` from the
+scoring/display position order plus sorted `variant_info` extras. This can
+misread `Haplotype_Seq` tokens when curated markers are appended after the
+base marker matrix. For this database, `13077` is row/token index `251` in
+`variant_info.csv`, while sorted-position indexing points elsewhere.
+
+Code fix:
+
+- `HaplotypeScorer.__init__` now builds `pos_to_seq_idx` from
+  `_variant_info_positions_in_sequence_order()` first, preserving
+  `variant_info.csv` row order.
+- `robust_discovery` now emits phenotype-free
+  `anchor_haplotype_candidates`.
+- Anchor ranking uses the maximum high-weight selected site as the primary
+  score, with only 10% of extra background burden added. This prevents many
+  lower-weight correlated background indels from outranking one high-weight
+  functional/structural site.
+- Added regression tests for late appended markers and background-burden
+  anchor ranking.
+
+Discovery input policy:
+The literature `Vrn-B1f` label and phenotype effects are still not used as
+discovery-scoring inputs. The scoring uses full local haplotype sequence
+tokens, local site weights, annotation/structure/MAF/missingness, and
+non-common allele status. The known `837 bp` marker remains post hoc
+validation evidence.
+
+Re-run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+
+Post-fix evidence:
+
+- Raw robust total top haplotype: `Hap6`, total score `1.2016`, n=3.
+- Anchor top haplotype: `Hap6`, anchor score `0.555036`,
+  anchor max site score `0.538236`, anchor positions `[7605, 13077]`.
+- Site `13077`: annotation `diagnostic_marker`, structural site `True`,
+  total site weight `0.538236`, MAF `0.029412`.
+- Database allele audit at token index `251`: `DEL_837` in 99 samples;
+  the only non-DEL allele is an 837 bp insertion in `Hap6`
+  (`Anza`, `Barta`, `Marquis (01C0201025)`).
+- Static HTML contains the visible `13,077` header, `data-pos="13077"`,
+  the `Hap6` row, and a `+837bp` cell at `13077`.
+
+Validation interpretation:
+This rerun changes the VRN-B1 conclusion. With the corrected sequence-token
+mapping, the highest-scored haplotype in the full-gene robust-discovery score
+is now `Hap6`, and `Hap6` contains the literature `Vrn-B1f` 837 bp insertion.
+This is a positive validation case for the scoring method on VRN-B1, with the
+important reliability caveat that the matched haplotype has only 3 samples.

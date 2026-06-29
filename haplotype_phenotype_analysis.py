@@ -2594,6 +2594,13 @@ def _build_discovery_candidate_rows(
     if not per_hap:
         return []
     effect_data = effect_data or {}
+    anchor_block = (score_results or {}).get("anchor_haplotype_candidates", {}) or {}
+    anchor_candidates = anchor_block.get("candidates", {}) if isinstance(anchor_block, dict) else {}
+    use_anchor_ranking = any(
+        float((row or {}).get("anchor_score", 0.0) or 0.0) > 0
+        for row in anchor_candidates.values()
+        if isinstance(row, dict)
+    )
     rows = []
     group_cols = [
         c for c in ("Population", "Group", "Subpopulation", "population", "group")
@@ -2606,6 +2613,20 @@ def _build_discovery_candidate_rows(
             continue
         total = _preferred_haplotype_score(score_entry, score_results, 0.0)
         raw_total = _score_value(score_entry, "total", total)
+        anchor_entry = anchor_candidates.get(str(hap), anchor_candidates.get(hap, {})) or {}
+        try:
+            anchor_score = float(anchor_entry.get("anchor_score", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            anchor_score = 0.0
+        try:
+            anchor_max_site_score = float(anchor_entry.get("anchor_max_site_score", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            anchor_max_site_score = 0.0
+        anchor_positions = [
+            int(pos) for pos in (anchor_entry.get("anchor_positions", []) or [])
+        ] if isinstance(anchor_entry, dict) else []
+        rank_basis = "anchor" if use_anchor_ranking else "total"
+        display_total = anchor_score if use_anchor_ranking else total
         hap_rows = (
             hap_sample_df[hap_sample_df[hap_col] == hap]
             if hap_sample_df is not None and hap_col in hap_sample_df.columns else
@@ -2669,8 +2690,12 @@ def _build_discovery_candidate_rows(
 
         rows.append({
             "haplotype": str(hap),
-            "total": float(total or 0.0),
+            "total": float(display_total or 0.0),
             "raw_total": float(raw_total or 0.0),
+            "rank_basis": rank_basis,
+            "anchor_score": float(anchor_score or 0.0),
+            "anchor_max_site_score": float(anchor_max_site_score or 0.0),
+            "anchor_positions": anchor_positions,
             "components": components,
             "sample_count": sample_count,
             "phenotype_mean": phenotype_mean,
@@ -2687,7 +2712,18 @@ def _build_discovery_candidate_rows(
             "flag_note": ", ".join(flag_notes),
         })
 
-    rows.sort(key=lambda row: row["total"], reverse=True)
+    if use_anchor_ranking:
+        rows.sort(
+            key=lambda row: (
+                row.get("anchor_score", 0.0),
+                row.get("anchor_max_site_score", 0.0),
+                row["raw_total"],
+                row["sample_count"],
+            ),
+            reverse=True,
+        )
+    else:
+        rows.sort(key=lambda row: row["total"], reverse=True)
     for idx, row in enumerate(rows[:top_n], start=1):
         row["rank"] = idx
     return rows[:top_n]
@@ -2748,6 +2784,12 @@ def _build_top_haplotype_key_site_rows(
         return []
     scored_haps.sort(key=lambda item: item[1], reverse=True)
     top_hap, top_score = scored_haps[0]
+    anchor_top = ((score_results or {}).get("anchor_haplotype_candidates", {}) or {}).get("top_candidate")
+    if isinstance(anchor_top, dict) and float(anchor_top.get("anchor_score", 0.0) or 0.0) > 0:
+        anchor_hap = str(anchor_top.get("haplotype", "") or "")
+        if anchor_hap:
+            top_hap = anchor_hap
+            top_score = float(anchor_top.get("anchor_score", top_score) or top_score)
 
     top_rows = hap_sample_df[hap_sample_df[hap_col].astype(str) == top_hap]
     other_rows = hap_sample_df[hap_sample_df[hap_col].astype(str) != top_hap]
@@ -5712,22 +5754,27 @@ class HaplotypeScorer:
         self.grand_pheno_std = hap_sample_df[self.phenotype_col].std()
         ordered_positions = []
         seen_positions = set()
+        sequence_order = _variant_info_positions_in_sequence_order(
+            self.variant_info,
+            self.variant_positions,
+        )
+        for pos in sequence_order:
+            try:
+                ipos = int(pos)
+            except (TypeError, ValueError):
+                continue
+            if ipos in seen_positions:
+                continue
+            ordered_positions.append(ipos)
+            seen_positions.add(ipos)
         for pos in self.variant_positions:
             try:
                 ipos = int(pos)
             except (TypeError, ValueError):
                 continue
-            ordered_positions.append(ipos)
-            seen_positions.add(ipos)
-        if self.variant_info:
-            for pos in sorted(self.variant_info.keys()):
-                try:
-                    ipos = int(pos)
-                except (TypeError, ValueError):
-                    continue
-                if ipos not in seen_positions:
-                    ordered_positions.append(ipos)
-                    seen_positions.add(ipos)
+            if ipos not in seen_positions:
+                ordered_positions.append(ipos)
+                seen_positions.add(ipos)
         self.full_variant_positions = ordered_positions
         self.pos_to_seq_idx = {
             int(pos): i for i, pos in enumerate(self.full_variant_positions)
@@ -6519,6 +6566,107 @@ class HaplotypeScorer:
         """Aggregate full-region haplotypes into functional sub-haplotypes."""
         positions = self._select_functional_positions()
         return self._build_position_group_summary(positions, hap_total, 'functional')
+
+    def _build_anchor_haplotype_candidates(self, positions=None):
+        """Rank haplotypes by high-weight selected sites carrying non-common alleles.
+
+        This is phenotype-free discovery support: it uses selected site weights
+        and allele frequency within the analyzed samples, not trait means or
+        validation labels.
+        """
+        positions = [int(pos) for pos in (positions or self._select_functional_positions())]
+        site_records = {
+            int(row['position']): row
+            for row in self._site_weight_records()
+        }
+        if not positions:
+            return {
+                'phenotype_free': True,
+                'current_phenotype_used': False,
+                'anchor_positions': [],
+                'candidates': {},
+                'top_candidate': None,
+            }
+
+        allele_baselines = {}
+        for pos in positions:
+            counts = Counter()
+            for _, row in self.hap_sample_df.iterrows():
+                hap = str(row.get(self.hap_col, ''))
+                allele = _normalize_key_site_allele(self._allele_for_hap_position(hap, pos))
+                if allele:
+                    counts[allele] += 1
+            if not counts:
+                continue
+            common_allele, common_count = counts.most_common(1)[0]
+            allele_baselines[pos] = {
+                'common_allele': common_allele,
+                'common_count': int(common_count),
+                'allele_counts': dict(counts),
+            }
+
+        hap_counts = self._get_hap_counts()
+        candidates = {}
+        for hap in self.unique_haps:
+            anchor_positions = []
+            anchor_alleles = {}
+            anchor_site_scores = {}
+            anchor_burden_score = 0.0
+            anchor_max_site_score = 0.0
+            for pos in positions:
+                baseline = allele_baselines.get(pos)
+                site = site_records.get(pos)
+                if not baseline or not site:
+                    continue
+                allele = _normalize_key_site_allele(self._allele_for_hap_position(hap, pos))
+                if not allele or allele == baseline.get('common_allele'):
+                    continue
+                site_score = float(site.get('total_site_weight', site.get('score', 0.0)) or 0.0)
+                anchor_positions.append(int(pos))
+                anchor_alleles[str(pos)] = allele
+                anchor_site_scores[str(pos)] = round(site_score, 6)
+                anchor_burden_score += site_score
+                anchor_max_site_score = max(anchor_max_site_score, site_score)
+
+            anchor_secondary_score = max(0.0, anchor_burden_score - anchor_max_site_score)
+            anchor_score = anchor_max_site_score + 0.1 * anchor_secondary_score
+            candidates[str(hap)] = {
+                'haplotype': str(hap),
+                'anchor_score': round(float(anchor_score), 6),
+                'anchor_max_site_score': round(float(anchor_max_site_score), 6),
+                'anchor_burden_score': round(float(anchor_burden_score), 6),
+                'anchor_positions': anchor_positions,
+                'anchor_alleles': anchor_alleles,
+                'anchor_site_scores': anchor_site_scores,
+                'sample_count': int(hap_counts.get(hap, 0)),
+                'sample_reliability': round(self._sample_reliability(hap), 4),
+                'phenotype_free': True,
+                'current_phenotype_used': False,
+            }
+
+        ranked = sorted(
+            candidates.values(),
+            key=lambda row: (
+                float(row.get('anchor_score', 0.0) or 0.0),
+                float(row.get('anchor_max_site_score', 0.0) or 0.0),
+                int(row.get('sample_count', 0) or 0),
+                str(row.get('haplotype') or ''),
+            ),
+            reverse=True,
+        )
+        top_candidate = ranked[0] if ranked and ranked[0].get('anchor_score', 0.0) > 0 else None
+        return {
+            'phenotype_free': True,
+            'current_phenotype_used': False,
+            'anchor_positions': positions,
+            'allele_baselines': {
+                str(pos): allele_baselines[pos]
+                for pos in positions if pos in allele_baselines
+            },
+            'candidates': candidates,
+            'ranked_candidates': ranked,
+            'top_candidate': top_candidate,
+        }
 
     def _build_ld_blocks(self):
         """构建LD block索引: 将r²≥阈值的位点归入同一block
@@ -7570,9 +7718,13 @@ class HaplotypeScorer:
 
         core_haplotype_groups = {}
         functional_haplotype_groups = {}
+        anchor_haplotype_candidates = {}
         if self.score_mode == 'robust_discovery':
             core_haplotype_groups = self._build_core_haplotype_groups(score_components, axis_totals)
             functional_haplotype_groups = self._build_functional_haplotype_groups(axis_totals)
+            anchor_haplotype_candidates = self._build_anchor_haplotype_candidates(
+                functional_haplotype_groups.get('functional_positions') or []
+            )
 
         # PVE 置信度校准
         if self.pve is not None:
@@ -7671,6 +7823,12 @@ class HaplotypeScorer:
                     'explicit_external_evidence',
                     'gene_structure_context',
                 ],
+                'allowed_outputs': [
+                    'site_weights',
+                    'core_haplotype_groups',
+                    'functional_haplotype_groups',
+                    'anchor_haplotype_candidates',
+                ],
                 'forbidden_inputs': [
                     'current_haplotype_mean',
                     'current_trait_effect_size',
@@ -7680,6 +7838,7 @@ class HaplotypeScorer:
             },
             'core_haplotype_groups': core_haplotype_groups,
             'functional_haplotype_groups': functional_haplotype_groups,
+            'anchor_haplotype_candidates': anchor_haplotype_candidates,
             'confidence_level': confidence_level,
             'low_confidence': low_confidence,
             'pve': self.pve,

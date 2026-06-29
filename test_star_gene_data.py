@@ -777,6 +777,135 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(scorer.pos_annotation[10], "diagnostic_marker")
         self.assertGreater(scorer.pos_func_weight[10], scorer.FUNCTIONAL_WEIGHTS["other"])
 
+    def test_robust_discovery_anchor_candidates_rank_high_weight_non_common_alleles(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(20):
+            rows.append({
+                "SampleID": f"BG{i}",
+                "Hap_Name": "BackgroundHighTotal",
+                "Haplotype_Seq": "C|A|G",
+                "Trait": 100.0 + i,
+            })
+        for i in range(3):
+            rows.append({
+                "SampleID": f"KEY{i}",
+                "Hap_Name": "CarriesFunctionalIndel",
+                "Haplotype_Seq": "C|INS_837|G",
+                "Trait": 1.0 + i,
+            })
+        for i in range(6):
+            rows.append({
+                "SampleID": f"NOISE{i}",
+                "Hap_Name": "BackgroundNoise",
+                "Haplotype_Seq": "T|A|A",
+                "Trait": 50.0 + i,
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        variant_info = {
+            100: {"ref": "C", "alt": "T", "annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+            200: {"ref": "A", "alt": "INS_837", "annotation": "INS", "maf": 3 / 29, "missing_rate": 0.0},
+            300: {"ref": "G", "alt": "A", "annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+        }
+
+        result = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 300],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        ).score_all()
+
+        anchors = result["anchor_haplotype_candidates"]
+        self.assertTrue(anchors["phenotype_free"])
+        self.assertEqual("CarriesFunctionalIndel", anchors["top_candidate"]["haplotype"])
+        self.assertEqual([200], anchors["top_candidate"]["anchor_positions"])
+        self.assertGreater(
+            anchors["top_candidate"]["anchor_score"],
+            anchors["candidates"]["BackgroundNoise"]["anchor_score"],
+        )
+        self.assertIn("anchor_haplotype_candidates", result["site_weighting_policy"]["allowed_outputs"])
+
+    def test_anchor_candidates_use_variant_info_sequence_order_for_late_marker(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "B1", "Hap_Name": "Background", "Haplotype_Seq": "A|G|DEL_837", "Trait": 0.0},
+            {"SampleID": "B2", "Hap_Name": "Background", "Haplotype_Seq": "A|G|DEL_837", "Trait": 0.0},
+            {"SampleID": "K1", "Hap_Name": "InsertionCarrier", "Haplotype_Seq": "A|G|INS_837", "Trait": 1.0},
+        ])
+        variant_info = {
+            100: {"ref": "A", "alt": "T", "annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+            300: {"ref": "G", "alt": "C", "annotation": "intron", "maf": 0.2, "missing_rate": 0.0},
+            200: {"ref": "DEL_837", "alt": "INS_837", "annotation": "diagnostic_marker", "maf": 1 / 3, "missing_rate": 0.0},
+        }
+
+        result = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 300],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        ).score_all()
+
+        anchors = result["anchor_haplotype_candidates"]
+        self.assertEqual("InsertionCarrier", anchors["top_candidate"]["haplotype"])
+        self.assertIn(200, anchors["top_candidate"]["anchor_positions"])
+        self.assertEqual("INS_837", anchors["top_candidate"]["anchor_alleles"]["200"])
+
+    def test_anchor_candidates_prioritize_single_high_weight_site_over_background_burden(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(6):
+            rows.append({
+                "SampleID": f"R{i}",
+                "Hap_Name": "Reference",
+                "Haplotype_Seq": "A|A|A|DEL_837",
+                "Trait": 0.0,
+            })
+        for i in range(2):
+            rows.append({
+                "SampleID": f"B{i}",
+                "Hap_Name": "BackgroundBurden",
+                "Haplotype_Seq": "DEL_20|DEL_20|DEL_20|DEL_837",
+                "Trait": 0.0,
+            })
+        for i in range(2):
+            rows.append({
+                "SampleID": f"K{i}",
+                "Hap_Name": "HighImpactCarrier",
+                "Haplotype_Seq": "A|A|A|INS_837",
+                "Trait": 1.0,
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        variant_info = {
+            100: {"ref": "A", "alt": "DEL_20", "annotation": "base_indel", "maf": 0.5, "missing_rate": 0.0},
+            200: {"ref": "A", "alt": "DEL_20", "annotation": "base_indel", "maf": 0.5, "missing_rate": 0.0},
+            300: {"ref": "A", "alt": "DEL_20", "annotation": "base_indel", "maf": 0.5, "missing_rate": 0.0},
+            400: {"ref": "DEL_837", "alt": "INS_837", "annotation": "diagnostic_marker", "maf": 0.5, "missing_rate": 0.0},
+        }
+
+        result = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100, 200, 300, 400],
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        ).score_all()
+
+        anchors = result["anchor_haplotype_candidates"]
+        self.assertEqual("HighImpactCarrier", anchors["top_candidate"]["haplotype"])
+        self.assertEqual([400], anchors["top_candidate"]["anchor_positions"])
+        self.assertGreater(
+            anchors["top_candidate"]["anchor_max_site_score"],
+            anchors["candidates"]["BackgroundBurden"]["anchor_max_site_score"],
+        )
+
     def test_robust_discovery_score_is_unchanged_when_phenotype_is_inverted(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
         import pandas as pd
@@ -1653,6 +1782,52 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
         self.assertIn("Score mode: <strong>Robust</strong>", robust_panel["meta_html"])
 
+    def test_discovery_candidate_rows_prefer_anchor_candidates_when_available(self):
+        from haplotype_phenotype_analysis import _build_discovery_candidate_rows
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "HighTotalBackground", "Haplotype_Seq": "C|A", "Trait": 1.0},
+            {"SampleID": "S2", "Hap_Name": "HighTotalBackground", "Haplotype_Seq": "C|A", "Trait": 2.0},
+            {"SampleID": "S3", "Hap_Name": "FunctionalAnchor", "Haplotype_Seq": "C|INS_837", "Trait": 3.0},
+            {"SampleID": "S4", "Hap_Name": "FunctionalAnchor", "Haplotype_Seq": "C|INS_837", "Trait": 4.0},
+        ])
+        score_results = {
+            "per_haplotype": {
+                "HighTotalBackground": {"total": 5.0, "site_weighted": 0.1},
+                "FunctionalAnchor": {"total": 0.5, "site_weighted": 0.2},
+            },
+            "anchor_haplotype_candidates": {
+                "phenotype_free": True,
+                "candidates": {
+                    "HighTotalBackground": {
+                        "haplotype": "HighTotalBackground",
+                        "anchor_score": 0.0,
+                        "anchor_positions": [],
+                    },
+                    "FunctionalAnchor": {
+                        "haplotype": "FunctionalAnchor",
+                        "anchor_score": 0.9,
+                        "anchor_max_site_score": 0.9,
+                        "anchor_positions": [200],
+                    },
+                },
+            },
+        }
+
+        rows = _build_discovery_candidate_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results=score_results,
+        )
+
+        self.assertEqual("FunctionalAnchor", rows[0]["haplotype"])
+        self.assertEqual("anchor", rows[0]["rank_basis"])
+        self.assertEqual([200], rows[0]["anchor_positions"])
+        self.assertAlmostEqual(0.9, rows[0]["total"])
+        self.assertAlmostEqual(0.5, rows[0]["raw_total"])
+
     def test_compute_haplotype_scores_uses_full_positions_not_display_subset(self):
         from haplotype_phenotype_analysis import ReportGenerator
         import pandas as pd
@@ -1816,6 +1991,45 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertAlmostEqual(by_pos[300]["other_mean"], 16.0)
         self.assertAlmostEqual(by_pos[300]["phenotype_contrast"], -5.0)
         self.assertEqual([row["position"] for row in rows], [200, 100, 300])
+
+    def test_key_site_rows_use_anchor_top_haplotype_when_available(self):
+        from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "B1", "Hap_Name": "HighTotalBackground", "Haplotype_Seq": "C|A", "Trait": 1.0},
+            {"SampleID": "B2", "Hap_Name": "HighTotalBackground", "Haplotype_Seq": "C|A", "Trait": 2.0},
+            {"SampleID": "K1", "Hap_Name": "FunctionalAnchor", "Haplotype_Seq": "C|INS_837", "Trait": 3.0},
+            {"SampleID": "K2", "Hap_Name": "FunctionalAnchor", "Haplotype_Seq": "C|INS_837", "Trait": 4.0},
+        ])
+        score_results = {
+            "per_haplotype": {
+                "HighTotalBackground": {"total": 5.0},
+                "FunctionalAnchor": {"total": 0.5},
+            },
+            "anchor_haplotype_candidates": {
+                "top_candidate": {
+                    "haplotype": "FunctionalAnchor",
+                    "anchor_score": 0.9,
+                    "anchor_positions": [200],
+                }
+            },
+        }
+
+        rows = _build_top_haplotype_key_site_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results=score_results,
+            display_positions=[100, 200],
+            display_orig_indices=[0, 1],
+            variant_info={200: {"annotation": "INS", "maf": 0.1, "missing_rate": 0.0}},
+            top_n=3,
+        )
+
+        self.assertEqual("FunctionalAnchor", rows[0]["top_haplotype"])
+        self.assertEqual(200, rows[0]["position"])
+        self.assertEqual("INS_837", rows[0]["top_allele"])
 
     def test_discovery_panel_uses_phenotype_specific_variant_pvalues(self):
         from haplotype_phenotype_analysis import _build_discovery_candidate_panel_data
