@@ -5934,6 +5934,7 @@ class HaplotypeScorer:
             0.15 * boundary_component +
             0.15 * maf_stability
         ) * missing_factor
+        structural_priority = self._site_structural_priority(pos)
         return {
             'position': int(pos),
             'score': float(score),
@@ -5947,6 +5948,8 @@ class HaplotypeScorer:
             'maf_stability': float(maf_stability),
             'maf': maf,
             'annotation': annotation,
+            'structural_priority': float(structural_priority),
+            'structural_site': bool(structural_priority >= 0.6),
             'missing_rate': missing,
             'current_phenotype_used': False,
         }
@@ -6206,6 +6209,67 @@ class HaplotypeScorer:
                 position_scores.append(item)
         return position_scores
 
+    def _site_structural_priority(self, pos):
+        """Infer large indel/SV candidates from local metadata and allele tokens."""
+        info = self.variant_info.get(pos, {}) if self.variant_info else {}
+        priority = 0.0
+
+        if info.get('is_sv', False):
+            priority = max(priority, 1.0)
+
+        annotation = str(info.get('annotation', self.pos_annotation.get(pos, '')) or '').lower()
+        marker_text = ' '.join(
+            str(info.get(key, '') or '').lower()
+            for key in ('marker_id', 'id', 'name', 'variant_id')
+        )
+        combined_text = f"{annotation} {marker_text}"
+        if any(token in combined_text for token in ('sv', 'structural')):
+            priority = max(priority, 1.0)
+        if any(token in combined_text for token in (
+            'indel', 'insertion', 'deletion', 'duplication', 'copy_number',
+            'cnv', 'del_', 'ins_',
+        )):
+            priority = max(priority, 0.75)
+
+        ref = str(info.get('ref', '') or '')
+        alt = str(info.get('alt', '') or '')
+        if alt.startswith('<') and alt.endswith('>'):
+            priority = max(priority, 1.0)
+        if ref or alt:
+            len_diff = abs(len(ref) - len(alt))
+            if len_diff >= 50:
+                priority = max(priority, 1.0)
+            elif len_diff >= 10:
+                priority = max(priority, 0.6)
+
+        for key in ('len_diff', 'length_diff', 'svlen', 'SVLEN', 'alignment_length', 'block_length'):
+            try:
+                value = abs(float(info.get(key, 0.0) or 0.0))
+            except (TypeError, ValueError):
+                value = 0.0
+            if value >= 50:
+                priority = max(priority, 1.0)
+            elif value >= 10:
+                priority = max(priority, 0.6)
+
+        allele_lengths = []
+        for hap in self.unique_haps:
+            token = str(self._allele_for_hap_position(hap, pos) or '').strip()
+            if not token or token.upper() in {'N', '.', 'NA', 'NAN', '?'}:
+                continue
+            token_upper = token.upper()
+            if token_upper.startswith(('DEL_', 'INS_', 'INV_', 'DUP_')):
+                priority = max(priority, 0.75)
+            allele_lengths.append(len(token))
+        if allele_lengths:
+            token_len_diff = max(allele_lengths) - min(allele_lengths)
+            if token_len_diff >= 50:
+                priority = max(priority, 1.0)
+            elif token_len_diff >= 10:
+                priority = max(priority, 0.6)
+
+        return priority
+
     def _is_boundary_gene_body_position(self, pos, window=500):
         if self.gene_start is None or self.gene_end is None:
             return False
@@ -6214,6 +6278,31 @@ class HaplotypeScorer:
         if self.strand == '-':
             return abs(self.gene_end - pos) <= window
         return abs(pos - self.gene_start) <= window
+
+    def _selection_window_key(self, pos, window_bp=500):
+        try:
+            return int(pos) // int(window_bp)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return int(pos)
+
+    def _is_window_prune_exempt(self, item):
+        if item.get('structural_priority', 0.0) >= 0.75:
+            return True
+        return item.get('annotation') in {
+            'frameshift', 'stop_gain', 'splice_region', 'SV', 'INS', 'DEL',
+            'functional_marker', 'diagnostic_marker',
+            'missense_non_conservative',
+        }
+
+    def _position_selection_rank_key(self, item):
+        structural_priority = float(item.get('structural_priority', 0.0) or 0.0)
+        return (
+            float(item.get('score', 0.0) or 0.0) + 0.14 * structural_priority,
+            structural_priority,
+            float(item.get('external_weight', 0.0) or 0.0),
+            float(item.get('maf_stability', 0.0) or 0.0),
+            -int(item.get('position', 0) or 0),
+        )
 
     def _select_functional_positions(self, max_positions=12):
         """Select function-weighted positions for sub-haplotype discovery.
@@ -6236,13 +6325,15 @@ class HaplotypeScorer:
         functional = [
             item for item in scored
             if item['annotation'] in functional_annotations
+            or item.get('structural_priority', 0.0) >= 0.6
         ]
 
         selected = []
         selected_set = set()
+        window_counts = Counter()
 
-        def add_ranked(items, limit, prune_ld=True):
-            for item in sorted(items, key=lambda d: d['score'], reverse=True):
+        def add_ranked(items, limit, prune_ld=True, prune_window=True):
+            for item in sorted(items, key=self._position_selection_rank_key, reverse=True):
                 if item['score'] <= 0:
                     continue
                 pos = item['position']
@@ -6256,8 +6347,13 @@ class HaplotypeScorer:
                             break
                 if redundant:
                     continue
+                if prune_window and not self._is_window_prune_exempt(item):
+                    window_key = self._selection_window_key(pos)
+                    if window_counts[window_key] >= 3:
+                        continue
                 selected.append(pos)
                 selected_set.add(pos)
+                window_counts[self._selection_window_key(pos)] += 1
                 if len(selected) >= limit:
                     break
 

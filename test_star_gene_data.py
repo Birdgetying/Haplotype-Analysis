@@ -1080,6 +1080,75 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("A|G|C", functional.get("groups", {}))
         self.assertEqual(functional["groups"]["A|G|C"]["sample_count"], 40)
 
+    def test_functional_position_selection_keeps_large_indel_representative_after_boundary_cluster(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        positions = [100] + list(range(200, 211)) + [2000]
+
+        def seq(promoter, boundary, structural):
+            return "|".join([promoter] + [boundary] * 11 + [structural])
+
+        rows = []
+        for i in range(18):
+            rows.append({
+                "SampleID": f"Ref_{i}",
+                "Hap_Name": "ReferenceBackground",
+                "Haplotype_Seq": seq("C", "G", "REFBLOCK"),
+                "Trait": float(i % 5),
+            })
+        for i in range(16):
+            rows.append({
+                "SampleID": f"Boundary_{i}",
+                "Hap_Name": "BoundaryClusterOnly",
+                "Haplotype_Seq": seq("A", "A", "REFBLOCK"),
+                "Trait": float(i % 5),
+            })
+        for i in range(14):
+            rows.append({
+                "SampleID": f"Structural_{i}",
+                "Hap_Name": "LargeIndelCarrier",
+                "Haplotype_Seq": seq("A", "A", "INS_" + "T" * 80),
+                "Trait": float(i % 5),
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        variant_info = {
+            100: {"ref": "C", "alt": "A", "annotation": "promoter", "maf": 0.45, "missing_rate": 0.0},
+            2000: {
+                "ref": "N",
+                "alt": "N",
+                "annotation": "base_indel",
+                "marker_id": "VRNB1gene_indel_2000_3400",
+                "maf": 0.30,
+                "missing_rate": 0.0,
+            },
+        }
+        for pos in range(200, 211):
+            variant_info[pos] = {
+                "ref": "G",
+                "alt": "A",
+                "annotation": "intron",
+                "maf": 0.45,
+                "missing_rate": 0.0,
+            }
+
+        scorer = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=positions,
+            variant_info=variant_info,
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+            gene_start=200,
+            gene_end=3000,
+            strand="+",
+        )
+        functional = scorer.score_all().get("functional_haplotype_groups") or {}
+
+        self.assertIn(100, functional.get("functional_positions", []))
+        self.assertIn(2000, functional.get("functional_positions", []))
+        boundary_count = sum(1 for pos in functional.get("functional_positions", []) if 200 <= pos <= 210)
+        self.assertLess(boundary_count, 11)
+
     def test_score_tooltips_use_viewport_coordinates(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 

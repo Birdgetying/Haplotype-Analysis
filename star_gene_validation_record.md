@@ -1726,3 +1726,63 @@ a non-binary HTML view, but the overlap has only 9 samples and top haplotypes
 include single-sample groups, so this rerun should be treated as a visualization
 and data-compatibility check rather than strong proof that VRN-B1 discovery
 scoring is valid.
+
+### 2026-06-29 VRN-B1 full-sequence structural representative selection rerun
+
+Target:
+`VRN-B1-fullSequence-IJMS2021`
+
+Issue:
+The robust-discovery `functional_positions` were filled by one promoter marker
+and many adjacent gene-start boundary markers. Large gene-body indel/block
+markers near the IJMS2021 `Vrn-B1f` 837 bp insertion evidence region were scored
+but not retained as functional representatives, so the HTML could not honestly
+show whether the discovered functional-haplotype view contained the literature
+region.
+
+Fix:
+Functional-position selection now infers large structural representatives from
+local variant metadata and `Haplotype_Seq` token length differences, then applies
+physical-window pruning so one local cluster of ordinary markers cannot consume
+all selected positions. This is phenotype-free and does not use `Vrn-B1f`,
+sample names, literature labels, or validation p-values as discovery inputs.
+
+Command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+
+Result:
+
+- Score mode: `robust_discovery`.
+- Samples/haplotypes/markers: 102 samples, 24 haplotypes, 251 database markers.
+- Selected functional positions after rerun:
+  `1, 4966, 4990, 5024, 5099, 5127, 5458, 7605, 12530, 12693, 17567, 17839`.
+- Large structural representatives retained post hoc:
+  `5458` (`structural_priority=1.0`), `7605` (`structural_priority=1.0`),
+  `12530` (`structural_priority=1.0`), and nearby structural marker `4966`
+  (`structural_priority=0.75`).
+- Literature `Vrn-B1f` samples in the local database:
+  `Anza=Hap6`, `Barta=Hap6`, `Marquis (01C0201025)=Hap6`,
+  and `Marquis=Hap2`.
+- Raw top-scored haplotype remains `Hap11`, total score `1.0391`, n=2.
+- Top functional group by rank score is represented by `Hap4`, n=6,
+  mean phenotype `0.0`, rank score `0.2371`.
+- The stable spring group represented by `Hap2`/`Hap7` has n=15,
+  mean phenotype `1.0`, rank score `0.1506`; `Hap6` remains a small
+  literature-sample group with n=3.
+
+Validation interpretation:
+This rerun fixes the concrete algorithmic failure that hid large indel/block
+representatives from the functional-haplotype view. It supports the weaker claim
+that the phenotype-free discovery view can recover the known VRN-B1 functional
+region as candidate structural positions. It does not support the stronger claim
+that the highest raw-scored haplotype is the literature `Vrn-B1f` functional
+allele: the 7605 long block is shared by several non-spring/background
+haplotypes, and full-sequence background variation still splits Anza/Barta/
+Marquis across Hap6/Hap2. Therefore this target is a candidate-site recovery
+case, not a clean top-haplotype proof.
