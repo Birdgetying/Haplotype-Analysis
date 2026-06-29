@@ -1861,3 +1861,47 @@ using IJMS2021 diagnostic primers and TDC-vs-carrier labels. It fixes the
 previous coordinate/mapping mistake, but it does not make VRN-B1 a clean
 top-haplotype proof: the raw top is still a winter/background haplotype, while
 the exact `Vrn-B1f` Hap6 group is small.
+
+Follow-up correction, same date:
+Browser/screenshot inspection showed that the first exact-marker rerun was not
+actually sufficient: although `variant_info.csv` and `haplotype_scores.json`
+contained `13077`, the rendered haplotype sequence table still stopped at
+`13,076`. Root cause was a position-to-sequence-index mismatch. The exact
+`13077` marker was appended at the end of `variant_info.csv`/`Haplotype_Seq`,
+but the report code rebuilt indexes with `sorted(variant_info.keys())`, mapping
+`13077` to the wrong allele token.
+
+Fix:
+`haplotype_phenotype_analysis.py` now preserves `variant_info.csv` row order
+when mapping variant positions to `Haplotype_Seq` tokens and when loading
+precomputed database positions. This is required because curated markers may
+be appended after the base marker matrix and therefore are not necessarily in
+genomic sort order.
+
+Re-run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Post-fix rendered/static evidence:
+
+- Regenerated HTML contains the visible table header `13,077`.
+- Regenerated HTML contains `data-pos="13077"`.
+- Displayed top-haplotype alleles at `13077`:
+  `Hap1/Hap2/Hap3/Hap4/Hap5/Hap7/Hap8=DEL_837`;
+  `Hap6=837 bp insertion`.
+- `variant_info.csv` row order maps `13077` to `Haplotype_Seq` token index
+  `251`, not the sorted-position index `237`.
+- `functional_positions` and `core_positions` still include `13077`.
+- Site weight for `13077` remains `0.538236`, annotation
+  `diagnostic_marker`, structural priority `1.0`.
+- Updated scores after correct mapping: raw top `Hap4`, total `1.0912`,
+  n=6; direction-aware top `Hap2`, directional total `0.8078`, n=12;
+  exact literature `Vrn-B1f` group `Hap6`, total `0.0937`, n=3.
+
+Interpretation:
+After the mapping fix, the large HTML figure now truly supports visual
+comparison at the exact `837 bp` literature marker. The biological conclusion
+is unchanged: VRN-B1 is a correct marker-recovery/visual-validation case, not a
+clean proof that the highest-scored haplotype is the known `Vrn-B1f` allele.

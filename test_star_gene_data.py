@@ -1675,6 +1675,43 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn(260, functional.get("functional_positions", []))
         self.assertIn("A|G|C", functional.get("groups", {}))
 
+    def test_display_position_mapping_preserves_variant_info_sequence_order(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "S1", "Hap_Name": "Hap1", "Haplotype_Seq": "A|C|DEL_837", "Trait": 0.0},
+            {"SampleID": "S2", "Hap_Name": "Hap1", "Haplotype_Seq": "A|C|DEL_837", "Trait": 0.0},
+            {"SampleID": "S3", "Hap_Name": "Hap2", "Haplotype_Seq": "A|C|INS_837", "Trait": 1.0},
+            {"SampleID": "S4", "Hap_Name": "Hap2", "Haplotype_Seq": "A|C|INS_837", "Trait": 1.0},
+        ])
+        variant_info = {
+            100: {"ref": "A", "alt": "G", "annotation": "base_snp", "maf": 0.5, "missing_rate": 0.0},
+            300: {"ref": "C", "alt": "T", "annotation": "base_snp", "maf": 0.5, "missing_rate": 0.0},
+            200: {
+                "ref": "DEL_837",
+                "alt": "INS_837",
+                "annotation": "diagnostic_marker",
+                "maf": 0.5,
+                "missing_rate": 0.0,
+            },
+        }
+        reporter = ReportGenerator(output_dir=tempfile.mkdtemp())
+
+        result = reporter.compute_haplotype_scores(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[200],
+            region_start=100,
+            region_end=300,
+            phenotype_col="Trait",
+            gene_start=100,
+            gene_end=300,
+            variant_info=variant_info,
+            score_mode="robust_discovery",
+        )
+
+        self.assertEqual([200], result["display_positions"])
+
     def test_compute_haplotype_scores_ld_uses_tokenized_indel_alleles(self):
         from haplotype_phenotype_analysis import ReportGenerator
         import pandas as pd
@@ -3908,6 +3945,73 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertTrue((tmp_path / "out" / "SingleMarker.html").exists())
             scores = json.loads((tmp_path / "out" / "haplotype_scores.json").read_text(encoding="utf-8"))
             self.assertIn("Trait", scores)
+
+    def test_precomputed_database_preserves_variant_info_row_order_for_positions(self):
+        from haplotype_phenotype_analysis import HaplotypePhenotypeAnalyzer
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_dir = tmp_path / "db" / "OrderGene"
+            db_dir.mkdir(parents=True)
+            (db_dir / "variant_info.csv").write_text(
+                "position,ref,alt,maf,missing_rate,len_diff,is_sv,annotation,marker_id\n"
+                "100,A,G,0.5,0,0,False,base_snp,M100\n"
+                "300,C,T,0.5,0,0,False,base_snp,M300\n"
+                "200,DEL_837,INS_837,0.5,0,837,True,diagnostic_marker,M200\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_data.csv").write_text(
+                "Haplotype_Seq,Count,Hap_Name,Alleles\n"
+                "A|C|DEL_837,2,Hap1,A|C|DEL_837\n"
+                "A|C|INS_837,2,Hap2,A|C|INS_837\n",
+                encoding="utf-8",
+            )
+            (db_dir / "haplotype_samples.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name\n"
+                "S1,A|C|DEL_837,Hap1\n"
+                "S2,A|C|DEL_837,Hap1\n"
+                "S3,A|C|INS_837,Hap2\n"
+                "S4,A|C|INS_837,Hap2\n",
+                encoding="utf-8",
+            )
+            (db_dir / "phenotype_data.csv").write_text(
+                "SampleID,Haplotype_Seq,Hap_Name,Trait\n"
+                "S1,A|C|DEL_837,Hap1,0\n"
+                "S2,A|C|DEL_837,Hap1,0\n"
+                "S3,A|C|INS_837,Hap2,1\n"
+                "S4,A|C|INS_837,Hap2,1\n",
+                encoding="utf-8",
+            )
+            (db_dir / "gene_info.json").write_text(
+                json.dumps({
+                    "gene_id": "OrderGene",
+                    "chrom": "chrT",
+                    "start": 100,
+                    "end": 300,
+                    "gene_start": 100,
+                    "gene_end": 300,
+                    "promoter_start": 1,
+                    "promoter_end": 99,
+                    "promoter_actual_length": 99,
+                }),
+                encoding="utf-8",
+            )
+
+            analyzer = HaplotypePhenotypeAnalyzer(
+                vcf_file=str(tmp_path / "missing.vcf"),
+                phenotype_file=str(db_dir / "phenotype_data.csv"),
+                output_dir=str(tmp_path / "out"),
+            )
+            analyzer.analyze_gene(
+                chrom="chrT",
+                start=100,
+                end=300,
+                gene_id="OrderGene",
+                phenotype_cols=["Trait"],
+                database_dir=str(tmp_path / "db"),
+            )
+
+            self.assertEqual([100, 300, 200], analyzer.positions)
 
     def test_wheat_tagw2_b1_prepare_builds_remote_snp_database(self):
         import pandas as pd

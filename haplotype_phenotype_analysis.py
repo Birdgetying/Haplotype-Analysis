@@ -2084,6 +2084,37 @@ def _infer_local_variant_type(pos: int, variant_info: dict = None, snp_effects: 
     return "SNP"
 
 
+def _variant_info_positions_in_sequence_order(variant_info: dict = None, fallback_positions: list = None) -> list:
+    """Return positions in the same order as Haplotype_Seq allele tokens.
+
+    Precomputed databases write Haplotype_Seq tokens in variant_info.csv row
+    order. Sorting positions breaks this mapping when a curated marker is added
+    after the base marker matrix, for example the exact VRN-B1f 837 bp marker.
+    """
+    if variant_info:
+        positions = []
+        for pos in variant_info.keys():
+            try:
+                positions.append(int(pos))
+            except (TypeError, ValueError):
+                positions.append(pos)
+        return positions
+    return list(fallback_positions or [])
+
+
+def _variant_position_to_sequence_index(variant_info: dict = None, fallback_positions: list = None) -> dict:
+    pos_to_idx = {}
+    for idx, pos in enumerate(_variant_info_positions_in_sequence_order(variant_info, fallback_positions)):
+        pos_to_idx[pos] = idx
+        try:
+            ipos = int(pos)
+            pos_to_idx[ipos] = idx
+            pos_to_idx[str(ipos)] = idx
+        except (TypeError, ValueError):
+            pos_to_idx[str(pos)] = idx
+    return pos_to_idx
+
+
 def _summarize_post_gwas_evidence(
     variant_positions: list,
     variant_pvalues: dict = None,
@@ -7815,12 +7846,11 @@ class ReportGenerator:
             if seq_len == 0 or len(all_positions) == seq_len or not variant_info:
                 all_orig_indices = list(range(len(all_positions)))
             else:
-                full_positions = sorted(variant_info.keys())
-                pos_to_idx = {pos: i for i, pos in enumerate(full_positions)}
+                pos_to_idx = _variant_position_to_sequence_index(variant_info)
                 mapped_indices = []
                 kept_positions = []
                 for pos in all_positions:
-                    orig_idx = pos_to_idx.get(pos)
+                    orig_idx = pos_to_idx.get(pos, pos_to_idx.get(str(pos)))
                     if orig_idx is not None and orig_idx < seq_len:
                         kept_positions.append(pos)
                         mapped_indices.append(orig_idx)
@@ -7975,9 +8005,8 @@ class ReportGenerator:
         score_ld_r2_matrix = []
         if len(score_positions) >= 2 and 'Haplotype_Seq' in hap_sample_df.columns:
             try:
-                full_positions = sorted(variant_info.keys()) if variant_info else list(score_positions)
-                pos_to_idx = {int(pos): i for i, pos in enumerate(full_positions)}
-                score_orig_indices = [pos_to_idx.get(int(pos)) for pos in score_positions]
+                pos_to_idx = _variant_position_to_sequence_index(variant_info, score_positions)
+                score_orig_indices = [pos_to_idx.get(int(pos), pos_to_idx.get(str(pos))) for pos in score_positions]
                 all_bases_at_positions = []
                 for orig_idx in score_orig_indices:
                     bases_list = []
@@ -8622,12 +8651,11 @@ class ReportGenerator:
             if seq_len == 0 or len(all_positions) == seq_len or not variant_info:
                 all_orig_indices = list(range(len(all_positions)))
             else:
-                full_positions = sorted(variant_info.keys())
-                pos_to_idx = {pos: i for i, pos in enumerate(full_positions)}
+                pos_to_idx = _variant_position_to_sequence_index(variant_info)
                 mapped_indices = []
                 kept_positions = []
                 for pos in all_positions:
-                    orig_idx = pos_to_idx.get(pos)
+                    orig_idx = pos_to_idx.get(pos, pos_to_idx.get(str(pos)))
                     if orig_idx is not None and orig_idx < seq_len:
                         kept_positions.append(pos)
                         mapped_indices.append(orig_idx)
@@ -16079,7 +16107,7 @@ class HaplotypePhenotypeAnalyzer:
                         if 'hap_df' in preloaded_data and 'hap_sample_df' in preloaded_data:
                             self.hap_df = preloaded_data['hap_df']
                             self.hap_sample_df = preloaded_data['hap_sample_df']
-                            self.positions = sorted(csv_positions)
+                            self.positions = _variant_info_positions_in_sequence_order(preloaded_data.get('variant_info'))
                             # 恢复CSV的variant_info
                             logger.info(f"[数据库] 已回退到CSV: {len(self.hap_df)} 个单倍型, {len(self.positions)} 个位点")
                     
@@ -16105,7 +16133,7 @@ class HaplotypePhenotypeAnalyzer:
                         self.hap_df = preloaded_data['hap_df']
                         self.hap_sample_df = preloaded_data['hap_sample_df']
                         if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
-                            self.positions = sorted(preloaded_data['variant_info'].keys())
+                            self.positions = _variant_info_positions_in_sequence_order(preloaded_data['variant_info'])
                         else:
                             self.positions = []
                     else:
@@ -16118,7 +16146,7 @@ class HaplotypePhenotypeAnalyzer:
                 self.hap_df = preloaded_data['hap_df']
                 self.hap_sample_df = preloaded_data['hap_sample_df']
                 if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
-                    self.positions = sorted(preloaded_data['variant_info'].keys())
+                    self.positions = _variant_info_positions_in_sequence_order(preloaded_data['variant_info'])
                     logger.info(f"[数据库] 加载 {len(self.positions)} 个变异位点")
                 else:
                     self.positions = []
@@ -16128,7 +16156,7 @@ class HaplotypePhenotypeAnalyzer:
             self.hap_sample_df = preloaded_data['hap_sample_df']
             # 从variant_info获取真实位置，而不是从Alleles获取索引
             if 'variant_info' in preloaded_data and preloaded_data['variant_info']:
-                self.positions = sorted(preloaded_data['variant_info'].keys())
+                self.positions = _variant_info_positions_in_sequence_order(preloaded_data['variant_info'])
                 logger.info(f"[数据库] 使用预加载的单倍型数据: {len(self.hap_df)} 个单倍型, {len(self.positions)} 个位点（从variant_info获取）")
             elif 'Alleles' in self.hap_df.columns and len(self.hap_df) > 0:
                 # 回退：从Alleles获取数量，但使用range作为位置（不完美但可用）
