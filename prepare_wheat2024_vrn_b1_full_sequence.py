@@ -21,6 +21,8 @@ if sys.platform == "win32":
 import pandas as pd
 
 from star_gene_data import (
+    _marker_is_polymorphic,
+    _read_aligned_fasta,
     build_database_from_marker_matrix,
     build_marker_matrix_from_aligned_fasta,
 )
@@ -42,6 +44,9 @@ DEFAULT_KISS2014_PHENOTYPE_TABLE = Path(
 )
 TARGET_ID = "VRN-B1-fullSequence-IJMS2021"
 KISS2014_HEADING_TARGET_ID = "VRN-B1-fullSequence-IJMS2021-Kiss2014Heading"
+VRNB1F_837_FORWARD = "ACCATCTCCTTGCTTGCG"
+VRNB1F_837_REVERSE = "GACGATACGAACACGACAACC"
+VRNB1F_EXPECTED_INSERTION_LENGTH = 837
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -238,6 +243,183 @@ def _aligned_fasta_length(fasta_path: Path) -> int:
     return len("".join(seq_parts))
 
 
+def _reverse_complement(seq: str) -> str:
+    table = str.maketrans("ACGTacgt", "TGCAtgca")
+    return str(seq).translate(table)[::-1].upper()
+
+
+def _ungapped_sequence_and_alignment_map(aligned_seq: str) -> tuple[str, list[int]]:
+    ungapped = []
+    ungapped_to_alignment = []
+    for i, base in enumerate(str(aligned_seq).upper()):
+        if base != "-":
+            ungapped.append(base)
+            ungapped_to_alignment.append(i)
+    return "".join(ungapped), ungapped_to_alignment
+
+
+def _find_primer_alignment_hit(aligned_seq: str, primer: str) -> Optional[tuple[int, int, str]]:
+    ungapped, ungapped_to_alignment = _ungapped_sequence_and_alignment_map(aligned_seq)
+    candidates = [
+        (str(primer).upper(), "forward"),
+        (_reverse_complement(primer), "reverse_complement"),
+    ]
+    for query, orientation in candidates:
+        idx = ungapped.find(query)
+        if idx >= 0:
+            end_idx = idx + len(query) - 1
+            return ungapped_to_alignment[idx], ungapped_to_alignment[end_idx], orientation
+    return None
+
+
+def _normal_vrn_b1f_sample_label(value: object) -> str:
+    return _normal_sample_key(value).replace(" ", "")
+
+
+def _find_vrn_b1f_reference_and_carriers(
+    records: Sequence[tuple[str, str]],
+) -> tuple[tuple[str, str], list[tuple[str, str]]]:
+    reference = None
+    carriers: list[tuple[str, str]] = []
+    for sample, seq in records:
+        label = _normal_vrn_b1f_sample_label(sample)
+        if label == "tdc" or label.endswith("tdc"):
+            reference = (sample, seq)
+        if (
+            label.startswith("anza")
+            or label.startswith("barta")
+            or label.startswith("marquis01c0201025")
+        ):
+            carriers.append((sample, seq))
+    if reference is None:
+        raise ValueError("cannot locate TDC reference sequence in VRN-B1 gene alignment")
+    if not carriers:
+        raise ValueError("cannot locate Anza/Barta/Marquis carrier sequences in VRN-B1 gene alignment")
+    return reference, carriers
+
+
+def _find_vrn_b1f_837in_alignment_interval(
+    records: Sequence[tuple[str, str]],
+) -> tuple[int, int, Dict[str, object]]:
+    """Locate the Vrn-B1f 837 bp insertion from diagnostic primers and TDC gaps.
+
+    Returns zero-based inclusive alignment coordinates in VRNB1_gene.fasta.
+    Literature labels are used only to create an exact validation marker.
+    """
+    reference, carriers = _find_vrn_b1f_reference_and_carriers(records)
+    ref_sample, ref_seq = reference
+    forward_hit = _find_primer_alignment_hit(ref_seq, VRNB1F_837_FORWARD)
+    reverse_hit = _find_primer_alignment_hit(ref_seq, VRNB1F_837_REVERSE)
+    if forward_hit is None or reverse_hit is None:
+        raise ValueError("cannot locate VRNB1_837inF/R primer sites in TDC VRN-B1 alignment")
+
+    primer_lo = min(forward_hit[0], reverse_hit[0])
+    primer_hi = max(forward_hit[1], reverse_hit[1])
+    carrier_seqs = [seq for _, seq in carriers]
+    candidate_cols = []
+    for i in range(primer_lo, primer_hi + 1):
+        ref_base = ref_seq[i]
+        if ref_base != "-":
+            continue
+        if all(seq[i] != "-" for seq in carrier_seqs):
+            candidate_cols.append(i)
+
+    runs = []
+    if candidate_cols:
+        start = prev = candidate_cols[0]
+        for i in candidate_cols[1:]:
+            if i == prev + 1:
+                prev = i
+            else:
+                runs.append((start, prev))
+                start = prev = i
+        runs.append((start, prev))
+
+    expected = VRNB1F_EXPECTED_INSERTION_LENGTH
+    exact = [run for run in runs if run[1] - run[0] + 1 == expected]
+    if exact:
+        insertion_start, insertion_end = exact[0]
+    elif runs:
+        insertion_start, insertion_end = max(runs, key=lambda run: run[1] - run[0] + 1)
+    else:
+        raise ValueError("no TDC-gap/carrier-base interval found for Vrn-B1f")
+
+    metadata = {
+        "reference_sample": ref_sample,
+        "carrier_samples": ";".join(sample for sample, _ in carriers),
+        "primer_forward": "VRNB1_837inF",
+        "primer_reverse": "VRNB1_837inR",
+        "primer_forward_sequence": VRNB1F_837_FORWARD,
+        "primer_reverse_sequence": VRNB1F_837_REVERSE,
+        "diagnostic_amplicon_reference_bases": sum(
+            1 for base in ref_seq[primer_lo:primer_hi + 1] if base != "-"
+        ),
+        "diagnostic_amplicon_carrier_bases": sum(
+            1 for base in carrier_seqs[0][primer_lo:primer_hi + 1] if base != "-"
+        ),
+    }
+    return insertion_start, insertion_end, metadata
+
+
+def _vrn_b1f_validation_allele(block: str) -> str:
+    if not block:
+        return "N"
+    allowed = set("ACGTRYSWKMBDHVN-")
+    text = str(block).upper()
+    if any(base not in allowed for base in text):
+        return "N"
+    ungapped = text.replace("-", "")
+    if not ungapped:
+        return f"DEL_{len(text)}"
+    return ungapped
+
+
+def _add_vrn_b1f_837in_validation_marker(
+    marker_df: pd.DataFrame,
+    marker_metadata: list[Dict[str, object]],
+    gene_fasta: Path,
+    sample_id_fn: Callable[[str], str],
+    promoter_length: int,
+    min_minor_count: int,
+) -> tuple[pd.DataFrame, list[Dict[str, object]]]:
+    records = _read_aligned_fasta(gene_fasta, sample_id_fn=sample_id_fn)
+    try:
+        insertion_start, insertion_end, diagnostic_meta = _find_vrn_b1f_837in_alignment_interval(records)
+    except ValueError:
+        return marker_df, marker_metadata
+    length = insertion_end - insertion_start + 1
+    combined_start = int(promoter_length) + insertion_start + 1
+    combined_end = int(promoter_length) + insertion_end + 1
+    marker_id = f"VRNB1gene_insertion_{VRNB1F_EXPECTED_INSERTION_LENGTH}_VrnB1f_{combined_start}_{combined_end}"
+
+    allele_by_sample = {
+        sample: _vrn_b1f_validation_allele(seq[insertion_start:insertion_end + 1])
+        for sample, seq in records
+    }
+    alleles = [allele_by_sample.get(sample, "N") for sample in marker_df["SampleID"]]
+    if not _marker_is_polymorphic(alleles, min_minor_count=min_minor_count):
+        return marker_df, marker_metadata
+
+    marker_df = marker_df.copy()
+    marker_df[marker_id] = alleles
+    marker_metadata = [*marker_metadata, {
+        "marker_id": marker_id,
+        "kind": "indel",
+        "alignment_start": combined_start,
+        "alignment_end": combined_end,
+        "length": length,
+        "missing_rate": round(sum(allele == "N" for allele in alleles) / max(len(alleles), 1), 6),
+        "segment": "gene",
+        "source_marker_id": marker_id,
+        "annotation": "diagnostic_marker",
+        "validation_marker": True,
+        "literature_variant": "Vrn-B1f_837bp_insertion",
+        "source": "ijms2021_table_s3_diagnostic_primers_and_tdc_vs_carrier_alignment",
+        **diagnostic_meta,
+    }]
+    return marker_df, marker_metadata
+
+
 def _shift_marker_metadata(
     marker_metadata: Sequence[Dict[str, object]],
     prefix: str,
@@ -322,6 +504,14 @@ def build_full_sequence_marker_matrix(
     marker_df = promoter_df.merge(gene_df, on="SampleID", how="inner")
     if marker_df.empty:
         raise ValueError("no samples overlap between VRN-B1 promoter and gene alignments")
+    marker_df, marker_metadata = _add_vrn_b1f_837in_validation_marker(
+        marker_df,
+        [*promoter_metadata, *gene_metadata],
+        gene_fasta=gene_fasta,
+        sample_id_fn=sample_id_fn,
+        promoter_length=promoter_length,
+        min_minor_count=min_minor_count,
+    )
 
     layout = {
         "promoter_start": 1,
@@ -331,7 +521,7 @@ def build_full_sequence_marker_matrix(
         "promoter_length": promoter_length,
         "gene_length": gene_length,
     }
-    return marker_df, [*promoter_metadata, *gene_metadata], layout
+    return marker_df, marker_metadata, layout
 
 
 def write_intermediate_tables(
@@ -423,7 +613,9 @@ def update_database_metadata(
         meta = metadata_by_id.get(marker_id, {})
         kind = meta.get("kind", "")
         segment = str(meta.get("segment", ""))
-        if segment == "promoter":
+        if meta.get("annotation"):
+            annotation = str(meta.get("annotation"))
+        elif segment == "promoter":
             annotation = "promoter"
         else:
             annotation = "base_indel" if kind == "indel" else "base_snp"
@@ -432,11 +624,27 @@ def update_database_metadata(
         variant_df.at[idx, "alignment_end"] = meta.get("alignment_end", "")
         variant_df.at[idx, "alignment_length"] = meta.get("length", "")
         variant_df.at[idx, "alignment_segment"] = segment
-        variant_df.at[idx, "source"] = (
-            "ijms2021_vrnb1_promoter_alignment"
-            if segment == "promoter"
-            else "ijms2021_vrnb1_full_gene_alignment"
-        )
+        if meta.get("source"):
+            source = str(meta.get("source"))
+        elif segment == "promoter":
+            source = "ijms2021_vrnb1_promoter_alignment"
+        else:
+            source = "ijms2021_vrnb1_full_gene_alignment"
+        variant_df.at[idx, "source"] = source
+        for key in (
+            "validation_marker",
+            "literature_variant",
+            "reference_sample",
+            "carrier_samples",
+            "primer_forward",
+            "primer_reverse",
+            "primer_forward_sequence",
+            "primer_reverse_sequence",
+            "diagnostic_amplicon_reference_bases",
+            "diagnostic_amplicon_carrier_bases",
+        ):
+            if key in meta:
+                variant_df.at[idx, key] = meta.get(key)
     variant_df.to_csv(variant_path, index=False)
 
 

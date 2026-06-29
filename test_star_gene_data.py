@@ -210,6 +210,55 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual("gene", metadata_by_id["VRNB1gene_snp_7"]["segment"])
         self.assertEqual(7, metadata_by_id["VRNB1gene_snp_7"]["alignment_start"])
 
+    def test_vrn_b1_full_sequence_adds_exact_vrnb1f_837_marker_from_diagnostic_interval(self):
+        from prepare_wheat2024_vrn_b1_full_sequence import build_full_sequence_marker_matrix
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            promoter_fasta = tmp_path / "prom.fasta"
+            gene_fasta = tmp_path / "gene.fasta"
+            promoter_fasta.write_text(
+                ">TDC\n"
+                "AAAA\n"
+                ">Anza\n"
+                "AAAA\n"
+                ">Barta\n"
+                "AAAA\n",
+                encoding="utf-8",
+            )
+            gene_fasta.write_text(
+                ">TDC\n"
+                "ACCATCTCCTTGCTTGCGAA-----CCGGTTGTCGTGTTCGTATCGTC\n"
+                ">Anza\n"
+                "ACCATCTCCTTGCTTGCGAAACGTTCCGGTTGTCGTGTTCGTATCGTC\n"
+                ">Barta\n"
+                "ACCATCTCCTTGCTTGCGAAACGTTCCGGTTGTCGTGTTCGTATCGTC\n",
+                encoding="utf-8",
+            )
+
+            marker_df, marker_metadata, layout = build_full_sequence_marker_matrix(
+                promoter_fasta,
+                gene_fasta,
+                sample_id_fn=lambda header: header,
+                max_missing_rate=0.5,
+                min_minor_count=1,
+            )
+
+        exact_markers = [
+            row for row in marker_metadata
+            if row.get("literature_variant") == "Vrn-B1f_837bp_insertion"
+        ]
+        self.assertEqual(1, len(exact_markers))
+        exact = exact_markers[0]
+        marker_id = exact["marker_id"]
+        self.assertIn("insertion_837", marker_id)
+        self.assertEqual("diagnostic_marker", exact["annotation"])
+        self.assertEqual(True, exact["validation_marker"])
+        self.assertEqual(layout["promoter_length"] + 21, exact["alignment_start"])
+        self.assertEqual(layout["promoter_length"] + 25, exact["alignment_end"])
+        self.assertEqual("DEL_5", marker_df.set_index("SampleID").loc["TDC", marker_id])
+        self.assertEqual("ACGTT", marker_df.set_index("SampleID").loc["Anza", marker_id])
+
     def test_promoter_report_can_use_preloaded_full_promoter_coordinates(self):
         from haplotype_phenotype_analysis import PromoterAnnotator
 

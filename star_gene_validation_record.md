@@ -1786,3 +1786,78 @@ allele: the 7605 long block is shared by several non-spring/background
 haplotypes, and full-sequence background variation still splits Anza/Barta/
 Marquis across Hap6/Hap2. Therefore this target is a candidate-site recovery
 case, not a clean top-haplotype proof.
+
+### 2026-06-29 VRN-B1 full-sequence exact Vrn-B1f 837 bp marker rerun
+
+Target:
+`VRN-B1-fullSequence-IJMS2021`
+
+Issue:
+The previous rerun treated the retained `7605` marker as evidence for the
+literature `Vrn-B1f` insertion region, but `7605` is actually the coarse
+`VRNB1gene_indel_7605_12377` alignment block (4,773 bp). It is not the exact
+837 bp insertion described in IJMS2021.
+
+Literature/data basis:
+
+- IJMS2021 text: `Vrn-B1f` was detected in Anza, Barta, and Marquis
+  `(01C0201025)`; Oxford Nanopore resequencing showed an 837 bp insertion
+  relative to TDC.
+- ESM2 Table S3 diagnostic primers: `VRNB1_837inF`
+  (`ACCATCTCCTTGCTTGCG`) and `VRNB1_837inR`
+  (`GACGATACGAACACGACAACC`), with diagnostic amplicons 2,389 bp versus
+  1,552 bp.
+- ESM2 Table S5: `Vrn-B1f` row and Anza/Barta/Marquis `(01C0201025)` rows
+  mark `INS 837bp`.
+- Local FASTA source:
+  `external_data/literature/vrn1_full_sequence/esm1_alignments/ESM1/VRNB1_gene.fasta`.
+
+Implementation:
+`prepare_wheat2024_vrn_b1_full_sequence.py` now locates the exact interval by
+the diagnostic primer sites and TDC-vs-carrier alignment difference. The
+identified gene-alignment interval is `8405-9241`, where TDC is gap and
+Anza/Barta/Marquis `(01C0201025)` carry a 837 bp insertion. With the 4,672 bp
+promoter offset, the HTML/database coordinate is `13077-13913`.
+
+Commands:
+
+```bash
+python prepare_wheat2024_vrn_b1_full_sequence.py
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+
+Result:
+
+- Database markers increased from 251 to 252.
+- Added exact marker:
+  `VRNB1gene_insertion_837_VrnB1f_13077_13913`.
+- `variant_info.csv` annotation: `diagnostic_marker`;
+  `validation_marker=True`;
+  `literature_variant=Vrn-B1f_837bp_insertion`.
+- Exact marker alleles:
+  `TDC=DEL_837`, `Marquis=DEL_837`,
+  `Anza/Barta/Marquis (01C0201025)=837 bp insertion`.
+- The exact marker is now selected in robust output:
+  `functional_positions` includes `13077`, and `core_positions` includes
+  `13077`.
+- Site weight for `13077`: annotation `diagnostic_marker`, score `0.538236`,
+  structural priority `1.0`, MAF `0.029412`.
+- Raw top-scored haplotype remains `Hap4`, total score `1.0885`, n=6,
+  mean phenotype `0.0`.
+- Literature `Vrn-B1f` group `Hap6` remains n=3, total score `0.0846`,
+  mean phenotype `1.0`.
+- Direction-aware stable spring group remains `Hap2`, directional total
+  `0.8094`, n=12; this is not the exact `Vrn-B1f` insertion group.
+
+Validation interpretation:
+The HTML now contains the exact literature 837 bp insertion marker at coordinate
+`13077`, so the teacher's requested comparison can be made directly in the
+large figure. This rerun is an exact literature-marker validation view, not a
+strict no-prior discovery run, because the marker was deliberately carved out
+using IJMS2021 diagnostic primers and TDC-vs-carrier labels. It fixes the
+previous coordinate/mapping mistake, but it does not make VRN-B1 a clean
+top-haplotype proof: the raw top is still a winter/background haplotype, while
+the exact `Vrn-B1f` Hap6 group is small.
