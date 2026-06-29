@@ -1329,6 +1329,21 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("switchScoreMode('robust_discovery')", integrated_block)
         self.assertIn("mode-toggle-btn", integrated_block)
 
+    def test_integrated_html_keeps_validation_markers_visible_by_default(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("function isPriorityValidationSite", integrated_block)
+        self.assertIn("diagnostic_marker", integrated_block)
+        self.assertIn("functional_marker", integrated_block)
+        self.assertIn(
+            "return priorityPass || (mafPass && missPass && annPass && typePass && synPass);",
+            integrated_block,
+        )
+
     def test_integrated_html_has_local_candidate_evidence_panel(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
@@ -1711,6 +1726,14 @@ class StarGeneDataTests(unittest.TestCase):
         )
 
         self.assertEqual([200], result["display_positions"])
+
+    def test_haplotype_allele_display_formats_structural_tokens(self):
+        from haplotype_phenotype_analysis import _format_haplotype_allele_for_display
+
+        self.assertEqual(("-837bp", "-"), _format_haplotype_allele_for_display("DEL_837"))
+        self.assertEqual(("+837bp", "+"), _format_haplotype_allele_for_display("INS_837"))
+        self.assertEqual(("+837bp", "+"), _format_haplotype_allele_for_display("A" * 837))
+        self.assertEqual(("A", "A"), _format_haplotype_allele_for_display("A"))
 
     def test_compute_haplotype_scores_ld_uses_tokenized_indel_alleles(self):
         from haplotype_phenotype_analysis import ReportGenerator

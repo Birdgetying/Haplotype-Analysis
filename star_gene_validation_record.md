@@ -1905,3 +1905,48 @@ After the mapping fix, the large HTML figure now truly supports visual
 comparison at the exact `837 bp` literature marker. The biological conclusion
 is unchanged: VRN-B1 is a correct marker-recovery/visual-validation case, not a
 clean proof that the highest-scored haplotype is the known `Vrn-B1f` allele.
+
+Second follow-up correction, same date:
+The user's rendered browser screenshot still did not show `13,077`. Direct DOM
+inspection showed the user was right: the header and cells existed in the HTML
+but were styled as `display: none` after the default MAF/missing-rate filter was
+applied. The exact 837 bp marker has MAF `0.029412`, so the default MAF cutoff
+`0.05` hid it from the haplotype sequence table even though it was a
+`diagnostic_marker`.
+
+Fix:
+The integrated report filter now treats `diagnostic_marker` and
+`functional_marker` as priority validation sites for display. They stay visible
+under the default filter, while manual user filtering can still hide them. This
+display rule does not add literature labels to discovery scoring; it only keeps
+post hoc validation markers visible in the figure.
+
+Additional display correction:
+Structural allele tokens are now rendered by token semantics rather than string
+length. `DEL_837` displays as `-837bp`, `INS_837` displays as `+837bp`. Before
+this correction, `DEL_837` could incorrectly display as `+7bp`.
+
+Re-run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Post-fix browser evidence:
+
+- Browser DOM on `http://127.0.0.1:8766/VRN-B1-fullSequence-IJMS2021.html`
+  confirmed `th.seq-col-th[data-pos="13077"]` is `display: table-cell`.
+- The `13,077` header is visible, with visible neighboring headers including
+  `13,076`, `13,077`, and `15,804`.
+- Eight displayed haplotype cells at `13077` are visible table cells:
+  seven `-837bp` rows and one `+837bp` row.
+- Static HTML also contains `function isPriorityValidationSite`,
+  `data-pos="13077"`, and the displayed allele values
+  `-837bp`/`+837bp`.
+
+Interpretation update:
+The large HTML now visibly contains the exact literature 837 bp marker at
+`13,077`, so the figure can be used for the requested visual validation. The
+method still does not rank the exact `Vrn-B1f` insertion haplotype as the top
+discovery haplotype in this small IJMS2021 validation set; this remains a
+marker-recovery/visual-validation case rather than a clean top-haplotype proof.

@@ -2115,6 +2115,29 @@ def _variant_position_to_sequence_index(variant_info: dict = None, fallback_posi
     return pos_to_idx
 
 
+def _format_haplotype_allele_for_display(allele: object) -> tuple[str, str]:
+    """Return compact display text and color key for a haplotype allele token."""
+    token = _safe_str(allele).strip().upper()
+    if not token:
+        return "Del", "-"
+    if token in {"N", ".", "NA", "NAN", "?"}:
+        return "N", "N"
+    if token in {"DEL", "-"}:
+        return "Del", "-"
+
+    sv_match = re.match(r"^(DEL|INS|DUP|INV)_(\d+)$", token)
+    if sv_match:
+        kind, size = sv_match.groups()
+        sign = "-" if kind == "DEL" else "+"
+        return f"{sign}{size}bp", sign
+
+    if len(token) == 1:
+        return token, token
+
+    n_bp = len(token)
+    return (token if n_bp <= 3 else f"+{n_bp}bp"), "+"
+
+
 def _summarize_post_gwas_evidence(
     variant_positions: list,
     variant_pvalues: dict = None,
@@ -10059,17 +10082,7 @@ class ReportGenerator:
                     allele = alleles[orig_idx].strip().upper() if orig_idx < len(alleles) else ''
 
                     # 确定显示文本和类型（用于颜色）
-                    if not allele or allele == 'DEL':
-                        display_base = 'Del'
-                        actual_type = '-'
-                    elif len(allele) == 1:
-                        display_base = allele
-                        actual_type = allele
-                    else:
-                        # 多字符等位基因 = 插入，显示长度
-                        n_bp = len(allele)
-                        display_base = allele if n_bp <= 3 else f"+{n_bp}bp"
-                        actual_type = '+'
+                    display_base, actual_type = _format_haplotype_allele_for_display(allele)
 
                     color = base_colors.get(actual_type, '#666')
 
@@ -10570,6 +10583,13 @@ function annAllowed(d) {
     if (cb) return cb.checked;
     var o = document.querySelector('.ann-cb[value="other"]');
     return o ? o.checked : true;
+}
+
+function isPriorityValidationSite(d) {
+    var a = String((d && d.annotation) || '').toLowerCase();
+    var fa = String((d && d.functional_ann) || '').toLowerCase();
+    return a === 'diagnostic_marker' || a === 'functional_marker'
+        || fa === 'diagnostic_marker' || fa === 'functional_marker';
 }
 
 // CDS突变过滤：检查syn-cb复选框（synonymous/missense）
@@ -11085,13 +11105,14 @@ function applyFilters() {
     
     // 过滤数据（基于MAF、Missing Rate和Annotation）
     var filtered = gwasData.filter(function(d) {
+        var priorityPass = isPriorityValidationSite(d);
         var mafPass = d.maf >= currentFilter.maf;
         var missPass = d.missing_rate <= currentFilter.missingRate;
         var annPass = annAllowed(d);
         var typePass = typeAllowed(d);
         var synPass = synAllowed(d);
         var normAnn = annNorm(d);
-        return mafPass && missPass && annPass && typePass && synPass;
+        return priorityPass || (mafPass && missPass && annPass && typePass && synPass);
     });
     
     drawGWASPlot(filtered);
