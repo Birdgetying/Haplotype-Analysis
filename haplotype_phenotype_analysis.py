@@ -2865,6 +2865,7 @@ def _build_top_haplotype_key_site_rows(
     variant_info = variant_info or {}
     variant_pvalues = variant_pvalues or {}
     snp_effects = snp_effects or {}
+    robust_discovery_mode = str((score_results or {}).get("score_mode", "")).strip().lower() == "robust_discovery"
     site_weight_by_pos = {}
     for row in ((score_results or {}).get("site_weights", []) or []):
         if not isinstance(row, dict) or row.get("position") is None:
@@ -3028,10 +3029,12 @@ def _build_top_haplotype_key_site_rows(
         if not reliability_notes:
             reliability_notes.append("stable")
 
+        contrast_priority = 0.0 if robust_discovery_mode else contrast_score
+        gwas_priority = 0.0 if robust_discovery_mode else gwas_score
         raw_priority_score = (
             specificity * 3.0 +
-            contrast_score * 2.0 +
-            gwas_score * 1.5 +
+            contrast_priority * 2.0 +
+            gwas_priority * 1.5 +
             attention_prior_weight * 1.5 +
             annotation_score +
             min(top_count / 50.0, 1.0) * 0.5
@@ -3074,8 +3077,8 @@ def _build_top_haplotype_key_site_rows(
         key=lambda row: (
             row["priority_score"],
             row["specificity"],
-            abs(row["phenotype_contrast"] or 0.0),
-            row["minus_log10_p"] or 0.0,
+            row["attention_prior_weight"] if robust_discovery_mode else abs(row["phenotype_contrast"] or 0.0),
+            0.0 if robust_discovery_mode else (row["minus_log10_p"] or 0.0),
         ),
         reverse=True,
     )
@@ -3144,7 +3147,7 @@ def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
     return (
         '<section class="discovery-candidate-section top-hap-key-site">'
         '<h3>Candidate Key Sites</h3>'
-        '<div class="discovery-note">Sites where the current top-scored haplotype differs from other local haplotypes; ranked without external validation labels. Attention is an optional external sequence prior.</div>'
+        '<div class="discovery-note">Post-hoc audit sites where the current top-scored haplotype differs from other local haplotypes. Robust mode ranks by discovery-safe site evidence; Contrast and P are displayed for audit only.</div>'
         '<div class="evidence-table-wrap"><table class="evidence-table top-hap-key-site-table">'
         '<thead><tr><th>Rank</th><th>Pos</th><th>Top Hap</th><th>Alleles</th><th>n</th><th>Contrast</th><th>P</th><th>Attention</th><th>Cluster</th><th>Type</th><th>Ann</th><th>Flag</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
@@ -6025,9 +6028,7 @@ class HaplotypeScorer:
         """Return True only for explicitly external GWAS/eQTL/PostGWAS evidence."""
         if not isinstance(record, dict):
             return False
-        flag = record.get('external')
-        if isinstance(flag, str):
-            flag = flag.strip().lower() in {'1', 'true', 'yes', 'y', 'external'}
+        flag = _coerce_variant_info_bool(record.get('external'), default=False)
         if flag is True:
             return True
         source_type = str(
@@ -6046,18 +6047,15 @@ class HaplotypeScorer:
         source_type = str(
             record.get('source_type') or record.get('evidence_type') or ''
         ).strip().lower()
-        if source_type in {
-            'external_attention_prior', 'attention_prior',
-            'genomic_language_model_attention', 'glm_attention_prior',
-            'atlas_attention_prior',
-        }:
+        if source_type in {'external_attention_prior', 'external_glm_attention_prior'}:
             return True
-        flag = record.get('attention_prior_external', record.get('external_attention_prior'))
-        if isinstance(flag, str):
-            flag = flag.strip().lower() in {'1', 'true', 'yes', 'y', 'external'}
+        flag = _coerce_variant_info_bool(
+            record.get('attention_prior_external', record.get('external_attention_prior')),
+            default=False,
+        )
         if flag is True:
             return True
-        if record.get('external') is True:
+        if _coerce_variant_info_bool(record.get('external'), default=False):
             return any(
                 key in record
                 for key in (

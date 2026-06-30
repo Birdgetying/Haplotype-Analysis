@@ -1138,6 +1138,37 @@ class StarGeneDataTests(unittest.TestCase):
                 places=9,
             )
 
+    def test_robust_discovery_ignores_attention_prior_without_explicit_external_marker(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "R1", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 1.0},
+            {"SampleID": "R2", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 2.0},
+            {"SampleID": "A1", "Hap_Name": "AttentionLike", "Haplotype_Seq": "A", "Trait": 9.0},
+            {"SampleID": "A2", "Hap_Name": "AttentionLike", "Haplotype_Seq": "A", "Trait": 10.0},
+        ])
+
+        result = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100],
+            variant_info={
+                100: {
+                    "ref": "G",
+                    "alt": "A",
+                    "annotation": "intron",
+                    "maf": 0.5,
+                    "missing_rate": 0.0,
+                    "source_type": "attention_prior",
+                    "attention_prior_score": 0.99,
+                }
+            },
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        ).score_all()
+
+        self.assertEqual(result["site_weights"][0]["attention_prior_weight"], 0.0)
+
     def test_variant_info_csv_row_preserves_external_attention_prior_columns(self):
         from haplotype_phenotype_analysis import _variant_info_csv_row_to_record
         import pandas as pd
@@ -1163,6 +1194,37 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertAlmostEqual(record["attention_prior_score"], 0.93)
         self.assertEqual(record["attention_cluster_id"], "cluster_B")
         self.assertEqual(record["source"], "ATLAS-like prior export")
+
+    def test_numeric_csv_external_attention_flag_drives_scoring(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer, _variant_info_csv_row_to_record
+        import pandas as pd
+
+        record = _variant_info_csv_row_to_record(pd.Series({
+            "position": 100,
+            "ref": "G",
+            "alt": "A",
+            "annotation": "intron",
+            "maf": 0.5,
+            "missing_rate": 0.0,
+            "external_attention_prior": 1,
+            "attention_prior_score": 0.91,
+        }))
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "R1", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 1.0},
+            {"SampleID": "R2", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 2.0},
+            {"SampleID": "A1", "Hap_Name": "AttentionCarrier", "Haplotype_Seq": "A", "Trait": 9.0},
+            {"SampleID": "A2", "Hap_Name": "AttentionCarrier", "Haplotype_Seq": "A", "Trait": 10.0},
+        ])
+
+        result = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100],
+            variant_info={100: record},
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        ).score_all()
+
+        self.assertGreater(result["site_weights"][0]["attention_prior_weight"], 0.9)
 
     def test_site_weight_keeps_rare_high_impact_functional_sites(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
@@ -2093,6 +2155,50 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertAlmostEqual(by_pos[300]["other_mean"], 16.0)
         self.assertAlmostEqual(by_pos[300]["phenotype_contrast"], -5.0)
         self.assertEqual([row["position"] for row in rows], [200, 100, 300])
+
+    def test_robust_key_site_priority_uses_attention_not_local_phenotype_signal(self):
+        from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "T1", "Hap_Name": "Top", "Haplotype_Seq": "A|G", "Trait": 10.0},
+            {"SampleID": "T2", "Hap_Name": "Top", "Haplotype_Seq": "A|G", "Trait": 10.0},
+            {"SampleID": "P1", "Hap_Name": "LocalPOnly", "Haplotype_Seq": "T|G", "Trait": 0.0},
+            {"SampleID": "P2", "Hap_Name": "LocalPOnly", "Haplotype_Seq": "T|G", "Trait": 0.0},
+            {"SampleID": "A1", "Hap_Name": "AttentionSite", "Haplotype_Seq": "A|C", "Trait": 9.0},
+            {"SampleID": "A2", "Hap_Name": "AttentionSite", "Haplotype_Seq": "A|C", "Trait": 9.0},
+        ])
+        score_results = {
+            "score_mode": "robust_discovery",
+            "per_haplotype": {
+                "Top": {"total": 5.0},
+                "LocalPOnly": {"total": 1.0},
+                "AttentionSite": {"total": 1.0},
+            },
+            "site_weights": [
+                {"position": 100, "attention_prior_weight": 0.0, "attention_cluster_id": ""},
+                {"position": 200, "attention_prior_weight": 0.9, "attention_cluster_id": "cluster_1"},
+            ],
+        }
+
+        rows = _build_top_haplotype_key_site_rows(
+            hap_sample_df=hap_sample_df,
+            hap_col="Hap_Name",
+            phenotype_col="Trait",
+            score_results=score_results,
+            display_positions=[100, 200],
+            display_orig_indices=[0, 1],
+            variant_info={
+                100: {"annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+                200: {"annotation": "intron", "maf": 0.5, "missing_rate": 0.0},
+            },
+            variant_pvalues={100: 1e-12, 200: 0.5},
+            top_n=2,
+        )
+
+        self.assertEqual([row["position"] for row in rows], [200, 100])
+        self.assertEqual(rows[0]["attention_cluster_id"], "cluster_1")
+        self.assertLess(abs(rows[0]["phenotype_contrast"]), abs(rows[1]["phenotype_contrast"]))
 
     def test_key_site_rows_use_anchor_top_haplotype_when_available(self):
         from haplotype_phenotype_analysis import _build_top_haplotype_key_site_rows
