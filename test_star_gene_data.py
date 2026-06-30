@@ -1062,6 +1062,108 @@ class StarGeneDataTests(unittest.TestCase):
                 places=9,
             )
 
+    def test_robust_discovery_uses_external_attention_prior_without_phenotype_leakage(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        for i in range(8):
+            rows.append({
+                "SampleID": f"R{i}",
+                "Hap_Name": "Reference",
+                "Haplotype_Seq": "G|C",
+                "Trait": float(i),
+            })
+            rows.append({
+                "SampleID": f"P{i}",
+                "Hap_Name": "AttentionCarrier",
+                "Haplotype_Seq": "A|C",
+                "Trait": 100.0 + i,
+            })
+            rows.append({
+                "SampleID": f"B{i}",
+                "Hap_Name": "BackgroundAlt",
+                "Haplotype_Seq": "G|T",
+                "Trait": 50.0 + i,
+            })
+        hap_sample_df = pd.DataFrame(rows)
+        inverted_df = hap_sample_df.copy()
+        inverted_df["Trait"] = -inverted_df["Trait"]
+        variant_info = {
+            100: {
+                "ref": "G",
+                "alt": "A",
+                "annotation": "intron",
+                "maf": 1 / 3,
+                "missing_rate": 0.0,
+                "source_type": "external_attention_prior",
+                "attention_prior_score": 0.98,
+                "attention_percentile": 0.99,
+                "attention_cluster_id": "atlas_like_cluster_1",
+                "source": "ATLAS-like phenotype-free attention prior",
+            },
+            200: {"ref": "C", "alt": "T", "annotation": "intron", "maf": 1 / 3, "missing_rate": 0.0},
+        }
+
+        def score(df):
+            return HaplotypeScorer(
+                hap_sample_df=df,
+                variant_positions=[100, 200],
+                variant_info=variant_info,
+                phenotype_col="Trait",
+                score_mode="robust_discovery",
+            ).score_all()
+
+        original = score(hap_sample_df)
+        inverted = score(inverted_df)
+        by_pos = {row["position"]: row for row in original["site_weights"]}
+
+        self.assertIn("external_attention_prior", original["site_weighting_policy"]["allowed_inputs"])
+        self.assertGreater(by_pos[100]["attention_prior_weight"], 0.9)
+        self.assertEqual(by_pos[100]["attention_cluster_id"], "atlas_like_cluster_1")
+        self.assertGreater(by_pos[100]["total_site_weight"], by_pos[200]["total_site_weight"])
+        self.assertEqual(
+            "AttentionCarrier",
+            original["anchor_haplotype_candidates"]["top_candidate"]["haplotype"],
+        )
+        self.assertEqual(original["site_weights"], inverted["site_weights"])
+        self.assertEqual(
+            original["anchor_haplotype_candidates"]["top_candidate"]["haplotype"],
+            inverted["anchor_haplotype_candidates"]["top_candidate"]["haplotype"],
+        )
+        for hap in ("Reference", "AttentionCarrier", "BackgroundAlt"):
+            self.assertAlmostEqual(
+                original["per_haplotype"][hap]["total"],
+                inverted["per_haplotype"][hap]["total"],
+                places=9,
+            )
+
+    def test_variant_info_csv_row_preserves_external_attention_prior_columns(self):
+        from haplotype_phenotype_analysis import _variant_info_csv_row_to_record
+        import pandas as pd
+
+        record = _variant_info_csv_row_to_record(pd.Series({
+            "position": 100,
+            "ref": "G",
+            "alt": "A",
+            "len_diff": 0,
+            "is_sv": "False",
+            "maf": 0.25,
+            "missing_rate": 0.01,
+            "annotation": "intron",
+            "source_type": "external_attention_prior",
+            "attention_prior_score": 0.93,
+            "attention_cluster_id": "cluster_B",
+            "source": "ATLAS-like prior export",
+        }))
+
+        self.assertEqual(record["ref"], "G")
+        self.assertFalse(record["is_sv"])
+        self.assertEqual(record["source_type"], "external_attention_prior")
+        self.assertAlmostEqual(record["attention_prior_score"], 0.93)
+        self.assertEqual(record["attention_cluster_id"], "cluster_B")
+        self.assertEqual(record["source"], "ATLAS-like prior export")
+
     def test_site_weight_keeps_rare_high_impact_functional_sites(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
         import pandas as pd
@@ -2106,6 +2208,8 @@ class StarGeneDataTests(unittest.TestCase):
             "other_count": 4,
             "phenotype_contrast": 3.0,
             "pvalue": 0.01,
+            "attention_prior_weight": 0.91,
+            "attention_cluster_id": "cluster_A",
             "variant_type": "SV",
             "annotation": "sv",
             "reliability_flag": 'pass" onclick="alert(1)',
@@ -2113,6 +2217,9 @@ class StarGeneDataTests(unittest.TestCase):
         }])
 
         self.assertIn('data-pos="SV_marker_1"', html)
+        self.assertIn("<th>Attention</th>", html)
+        self.assertIn("0.91", html)
+        self.assertIn("cluster_A", html)
         self.assertIn('class="key-site-flag muted"', html)
         self.assertNotIn("onclick", html)
 

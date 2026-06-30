@@ -2084,6 +2084,63 @@ def _infer_local_variant_type(pos: int, variant_info: dict = None, snp_effects: 
     return "SNP"
 
 
+def _coerce_variant_info_bool(value, default=False):
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except Exception:
+        pass
+    if isinstance(value, str):
+        return value.strip().lower() in {'1', 'true', 'yes', 'y', 'sv'}
+    return bool(value)
+
+
+def _coerce_variant_info_scalar(value):
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    return value
+
+
+def _variant_info_csv_row_to_record(row) -> dict:
+    """Convert one variant_info.csv row to scorer metadata without dropping external prior columns."""
+    record = {}
+    for key, value in dict(row).items():
+        if key == 'position':
+            continue
+        coerced = _coerce_variant_info_scalar(value)
+        if coerced is not None:
+            record[key] = coerced
+
+    record['ref'] = _safe_str(record.get('ref', ''))
+    record['alt'] = _safe_str(record.get('alt', ''))
+    try:
+        record['len_diff'] = int(float(record.get('len_diff', 0) or 0))
+    except (TypeError, ValueError):
+        record['len_diff'] = 0
+    record['is_sv'] = _coerce_variant_info_bool(record.get('is_sv', False))
+    try:
+        record['maf'] = float(record.get('maf', 0.5) if record.get('maf') is not None else 0.5)
+    except (TypeError, ValueError):
+        record['maf'] = 0.5
+    try:
+        record['missing_rate'] = float(
+            record.get('missing_rate', 0.0) if record.get('missing_rate') is not None else 0.0
+        )
+    except (TypeError, ValueError):
+        record['missing_rate'] = 0.0
+    record['annotation'] = _safe_str(record.get('annotation', ''), 'other')
+    return record
+
+
 def _variant_info_positions_in_sequence_order(variant_info: dict = None, fallback_positions: list = None) -> list:
     """Return positions in the same order as Haplotype_Seq allele tokens.
 
@@ -2808,6 +2865,17 @@ def _build_top_haplotype_key_site_rows(
     variant_info = variant_info or {}
     variant_pvalues = variant_pvalues or {}
     snp_effects = snp_effects or {}
+    site_weight_by_pos = {}
+    for row in ((score_results or {}).get("site_weights", []) or []):
+        if not isinstance(row, dict) or row.get("position") is None:
+            continue
+        raw_pos = row.get("position")
+        site_weight_by_pos[raw_pos] = row
+        site_weight_by_pos[str(raw_pos)] = row
+        try:
+            site_weight_by_pos[int(raw_pos)] = row
+        except (TypeError, ValueError):
+            pass
     annotation_priority = {
         "missense": 1.00,
         "nonsense": 1.00,
@@ -2906,6 +2974,19 @@ def _build_top_haplotype_key_site_rows(
             pvalue = None
         minus_log10_p = float(-np.log10(max(pvalue, 1e-300))) if pvalue is not None else None
         gwas_score = min((minus_log10_p or 0.0) / 8.0, 1.0)
+        site_weight = {}
+        if pos is not None:
+            try:
+                site_weight = site_weight_by_pos.get(int(pos), {})
+            except (TypeError, ValueError):
+                site_weight = (
+                    site_weight_by_pos.get(pos, {}) or
+                    site_weight_by_pos.get(str(pos), {})
+                )
+        try:
+            attention_prior_weight = float(site_weight.get("attention_prior_weight", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            attention_prior_weight = 0.0
 
         try:
             maf = float(info.get("maf")) if info.get("maf") is not None else None
@@ -2951,6 +3032,7 @@ def _build_top_haplotype_key_site_rows(
             specificity * 3.0 +
             contrast_score * 2.0 +
             gwas_score * 1.5 +
+            attention_prior_weight * 1.5 +
             annotation_score +
             min(top_count / 50.0, 1.0) * 0.5
         )
@@ -2976,6 +3058,9 @@ def _build_top_haplotype_key_site_rows(
             "annotation": str(annotation or "NA"),
             "pvalue": pvalue,
             "minus_log10_p": minus_log10_p,
+            "attention_prior_weight": attention_prior_weight,
+            "attention_cluster_id": site_weight.get("attention_cluster_id", ""),
+            "attention_source": site_weight.get("attention_source", ""),
             "maf": maf,
             "missing_rate": missing_rate,
             "reliability_flag": reliability_flag,
@@ -3049,6 +3134,8 @@ def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
             f"<td>{int(row.get('top_count', 0))}/{int(row.get('other_count', 0))}</td>"
             f"<td>{_html_escape(_format_report_float(row.get('phenotype_contrast'), 3))}</td>"
             f"<td>{_html_escape(_format_report_pvalue(row.get('pvalue')))}</td>"
+            f"<td>{_html_escape(_format_report_float(row.get('attention_prior_weight'), 3))}</td>"
+            f"<td>{_html_escape(row.get('attention_cluster_id', ''))}</td>"
             f"<td>{_html_escape(row.get('variant_type', 'NA'))}</td>"
             f"<td>{_html_escape(row.get('annotation', 'NA'))}</td>"
             f"<td>{_render_report_flag_chips(row.get('flag_note', 'NA'), flag, 'key-site-flag')}</td>"
@@ -3057,9 +3144,9 @@ def _render_top_haplotype_key_sites(key_site_rows: list) -> str:
     return (
         '<section class="discovery-candidate-section top-hap-key-site">'
         '<h3>Candidate Key Sites</h3>'
-        '<div class="discovery-note">Sites where the current top-scored haplotype differs from other local haplotypes; ranked without external validation labels.</div>'
+        '<div class="discovery-note">Sites where the current top-scored haplotype differs from other local haplotypes; ranked without external validation labels. Attention is an optional external sequence prior.</div>'
         '<div class="evidence-table-wrap"><table class="evidence-table top-hap-key-site-table">'
-        '<thead><tr><th>Rank</th><th>Pos</th><th>Top Hap</th><th>Alleles</th><th>n</th><th>Contrast</th><th>P</th><th>Type</th><th>Ann</th><th>Flag</th></tr></thead>'
+        '<thead><tr><th>Rank</th><th>Pos</th><th>Top Hap</th><th>Alleles</th><th>n</th><th>Contrast</th><th>P</th><th>Attention</th><th>Cluster</th><th>Type</th><th>Ann</th><th>Flag</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         '</section>'
     )
@@ -5951,6 +6038,36 @@ class HaplotypeScorer:
             'postgwas', 'eqtl', 'external_eqtl'
         }
 
+    @staticmethod
+    def _is_external_attention_prior_record(record):
+        """Return True only for explicitly external, phenotype-free attention priors."""
+        if not isinstance(record, dict):
+            return False
+        source_type = str(
+            record.get('source_type') or record.get('evidence_type') or ''
+        ).strip().lower()
+        if source_type in {
+            'external_attention_prior', 'attention_prior',
+            'genomic_language_model_attention', 'glm_attention_prior',
+            'atlas_attention_prior',
+        }:
+            return True
+        flag = record.get('attention_prior_external', record.get('external_attention_prior'))
+        if isinstance(flag, str):
+            flag = flag.strip().lower() in {'1', 'true', 'yes', 'y', 'external'}
+        if flag is True:
+            return True
+        if record.get('external') is True:
+            return any(
+                key in record
+                for key in (
+                    'attention_prior_score', 'attention_score',
+                    'attention_percentile', 'attention_rank_score',
+                    'cluster_score',
+                )
+            )
+        return False
+
     def _external_evidence_component(self, pos):
         """PostGWAS-like external site evidence normalized to [0, 1].
 
@@ -5995,6 +6112,56 @@ class HaplotypeScorer:
 
         return max(values) if values else 0.0
 
+    def _attention_prior_component(self, pos):
+        """External attention/saliency prior normalized to [0, 1].
+
+        The prior must be explicitly marked as external. This is intended for
+        phenotype-free genomic-language-model saliency or other external
+        sequence priors, not for current validation phenotype statistics.
+        """
+        info = self.variant_info.get(pos, {}) if self.variant_info else {}
+        if not self._is_external_attention_prior_record(info):
+            return 0.0
+        values = []
+        for key in (
+            'attention_prior_score',
+            'attention_score',
+            'atlas_attention_score',
+            'saliency_score',
+            'attention_rank_score',
+            'cluster_score',
+        ):
+            try:
+                value = float(info.get(key, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 0:
+                values.append(min(max(value, 0.0), 1.0))
+
+        for key in ('attention_percentile', 'saliency_percentile'):
+            try:
+                value = float(info.get(key, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 1.0:
+                value = value / 100.0
+            if value > 0:
+                values.append(min(max(value, 0.0), 1.0))
+
+        for key in ('attention_rank', 'saliency_rank'):
+            try:
+                rank = float(info.get(key, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                rank = 0.0
+            try:
+                total = float(info.get('attention_rank_total', info.get('saliency_rank_total', 0.0)) or 0.0)
+            except (TypeError, ValueError):
+                total = 0.0
+            if rank > 0 and total > 0:
+                values.append(min(max(1.0 - ((rank - 1.0) / max(total, 1.0)), 0.0), 1.0))
+
+        return max(values) if values else 0.0
+
     def _site_weight_record(self, pos):
         """Build a phenotype-free site score used for robust discovery grouping."""
         maf = float(self.pos_maf.get(pos, 0.5) or 0.0)
@@ -6002,6 +6169,7 @@ class HaplotypeScorer:
         func_w = float(self.pos_func_weight.get(pos, 0.1))
         func_component = min(func_w / 2.5, 1.0)
         external_component = self._external_evidence_component(pos)
+        attention_component = self._attention_prior_component(pos)
         boundary_component = 0.0
         annotation = self.pos_annotation.get(pos, 'other')
         high_impact_annotations = {
@@ -6009,7 +6177,11 @@ class HaplotypeScorer:
             'SV', 'INS', 'DEL', 'functional_marker', 'diagnostic_marker',
             'missense_non_conservative',
         }
-        keep_rare = annotation in high_impact_annotations or external_component > 0
+        keep_rare = (
+            annotation in high_impact_annotations
+            or external_component > 0
+            or attention_component > 0
+        )
         if maf <= 0 and not keep_rare:
             return None
         if maf_minor < 0.005 and not keep_rare:
@@ -6032,10 +6204,12 @@ class HaplotypeScorer:
         score = (
             0.45 * func_component +
             0.25 * external_component +
+            0.25 * attention_component +
             0.15 * boundary_component +
             0.15 * maf_stability
         ) * missing_factor
         structural_priority = self._site_structural_priority(pos)
+        info = self.variant_info.get(pos, {}) if self.variant_info else {}
         return {
             'position': int(pos),
             'score': float(score),
@@ -6045,6 +6219,13 @@ class HaplotypeScorer:
             'function_weight': func_w,
             'external_weight': float(external_component),
             'external_evidence': float(external_component),
+            'attention_prior_weight': float(attention_component),
+            'attention_cluster_id': str(
+                info.get('attention_cluster_id') or
+                info.get('cluster_id') or
+                ''
+            ),
+            'attention_source': str(info.get('source') or info.get('attention_source') or ''),
             'boundary_score': float(boundary_component),
             'maf_stability': float(maf_stability),
             'maf': maf,
@@ -6400,6 +6581,7 @@ class HaplotypeScorer:
         return (
             float(item.get('score', 0.0) or 0.0) + 0.14 * structural_priority,
             structural_priority,
+            float(item.get('attention_prior_weight', 0.0) or 0.0),
             float(item.get('external_weight', 0.0) or 0.0),
             float(item.get('maf_stability', 0.0) or 0.0),
             -int(item.get('position', 0) or 0),
@@ -7821,6 +8003,7 @@ class HaplotypeScorer:
                     'missing_rate',
                     'ld_pruning',
                     'explicit_external_evidence',
+                    'external_attention_prior',
                     'gene_structure_context',
                 ],
                 'allowed_outputs': [
@@ -16092,15 +16275,7 @@ class HaplotypePhenotypeAnalyzer:
                     try:
                         variant_info_df = pd.read_csv(variant_info_path)
                         preloaded_data['variant_info'] = {
-                            int(row['position']): {  # 强制转换为整数，确保与VCF的pos类型一致
-                                'ref': _safe_str(row.get('ref', '')),
-                                'alt': _safe_str(row.get('alt', '')),
-                                'len_diff': row.get('len_diff', 0) if pd.notna(row.get('len_diff')) else 0,
-                                'is_sv': bool(row.get('is_sv', False)) if pd.notna(row.get('is_sv')) else False,
-                                'maf': row.get('maf', 0.5) if pd.notna(row.get('maf')) else 0.5,
-                                'missing_rate': row.get('missing_rate', 0.0) if pd.notna(row.get('missing_rate')) else 0.0,
-                                'annotation': _safe_str(row.get('annotation', ''), 'other')
-                            }
+                            int(row['position']): _variant_info_csv_row_to_record(row)
                             for _, row in variant_info_df.iterrows()
                         }
                         logger.info(f"[数据库] 已加载 variant_info: {len(preloaded_data['variant_info'])} 个位点")

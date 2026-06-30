@@ -37,6 +37,11 @@ Current proof set for the teacher's "at least three" requirement:
    `matched_top_haplotype` and `matched_directional_top_haplotype`.
    This is no longer treated as a strict single-gene/base-variant Rht proof
    because it combines `Rht-B1` and `Rht-D1` marker states.
+4. `VRN-B1-fullSequence-IJMS2021__robust_discovery`: exact full-sequence
+   proof after the 2026-06-29 sequence-order fix and 2026-06-30 rerun.
+   The raw robust top and anchor top are both `Hap6`, and the rendered HTML
+   shows `Hap6` carries the literature `Vrn-B1f` 837 bp insertion at
+   `13077` (`+837bp`). Reliability caveat: n=3.
 
 | Target | Trait | Score mode | Status | Key result | Conclusion |
 |---|---|---|---|---|---|
@@ -2014,3 +2019,59 @@ mapping, the highest-scored haplotype in the full-gene robust-discovery score
 is now `Hap6`, and `Hap6` contains the literature `Vrn-B1f` 837 bp insertion.
 This is a positive validation case for the scoring method on VRN-B1, with the
 important reliability caveat that the matched haplotype has only 3 samples.
+
+### 2026-06-30 ATLAS-inspired external attention prior support and VRN-B1 rerun
+
+Target:
+`VRN-B1-fullSequence-IJMS2021`
+
+Algorithm change:
+Added an optional phenotype-free `external_attention_prior` input path for
+site weighting. The prior is read only from explicitly external fields in
+`variant_info`/`variant_info.csv`, such as `source_type=external_attention_prior`,
+`attention_prior_score`, `attention_percentile`, `attention_cluster_id`, and
+`source`. It is not computed from the current validation phenotype, local
+haplotype means, local p-values, or literature functional labels.
+
+Code/test evidence:
+
+- `HaplotypeScorer` now records `attention_prior_weight`,
+  `attention_cluster_id`, and `attention_source` in `site_weights`.
+- `site_weighting_policy.allowed_inputs` now includes
+  `external_attention_prior`.
+- `variant_info.csv` loading now preserves extra external-prior columns rather
+  than dropping everything except ref/alt/MAF/missing/annotation.
+- Regression tests verify that an external attention prior can change robust
+  discovery ranking, but inverting the local phenotype leaves site weights,
+  anchor top, and haplotype totals unchanged.
+- Candidate Key Sites in the HTML now include `Attention` and `Cluster`
+  columns for auditability.
+
+Re-run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+
+Post-change matching check:
+
+- Raw robust total top haplotype remains `Hap6`, total score `1.2016`, n=3.
+- Anchor top remains `Hap6`, anchor score `0.555036`, anchor max site score
+  `0.538236`, anchor positions `[7605, 13077]`.
+- Site `13077` remains annotation `diagnostic_marker`, structural site `True`,
+  total site weight `0.538236`, MAF `0.029412`.
+- The rerun did not add an attention prior to this VRN-B1 marker; the matching
+  remains driven by phenotype-free local annotation/structure/MAF and sequence
+  order. `attention_prior_weight` for `13077` is `0.0`.
+- Static HTML checks are all true: visible `13,077`, `data-pos="13077"`,
+  `Hap6` row, `+837bp` cell, `Attention` column, and
+  `external_attention_prior` in the embedded policy.
+
+Validation interpretation:
+The new external-prior support did not break the existing VRN-B1 positive
+control. The highest-scored haplotype still matches the literature `Vrn-B1f`
+837 bp insertion, with the same caveat that this exact insertion group has
+only 3 samples.
