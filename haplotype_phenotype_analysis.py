@@ -12399,9 +12399,35 @@ function updateScoreTitle(scoreData) {
     titleEl.innerHTML = 'Haplotype Score vs Phenotype <span style=\'font-size:10px;color:#666;\'>[' + modeLabel + ', axis=' + (scoreData.score_axis || 'total') + ']</span>' + badge;
 }
 
+function collectReportExportSVGElements() {
+    var roots = [];
+    var reportShell = document.querySelector('.report-shell');
+    if (reportShell) {
+        roots.push(reportShell);
+    } else {
+        var zoomContent = document.getElementById('zoomContent');
+        if (zoomContent) roots.push(zoomContent);
+    }
+    var seen = new Set();
+    var svgs = [];
+    roots.forEach(function(root) {
+        root.querySelectorAll('svg').forEach(function(svg) {
+            if (!seen.has(svg)) {
+                seen.add(svg);
+                svgs.push(svg);
+            }
+        });
+    });
+    return svgs.filter(function(svg) {
+        var rect = svg.getBoundingClientRect();
+        var attrW = parseFloat(svg.getAttribute('width')) || 0;
+        var attrH = parseFloat(svg.getAttribute('height')) || 0;
+        return (rect.width > 0 && rect.height > 0) || (attrW > 0 && attrH > 0);
+    });
+}
+
 function exportSVG() {{
-    var content = document.getElementById('zoomContent');
-    var svgElements = content.querySelectorAll('svg');
+    var svgElements = collectReportExportSVGElements();
     if (svgElements.length === 0) {{ alert('No SVG'); return; }}
     var svgNS = "http://www.w3.org/2000/svg";
     var combinedSVG = document.createElementNS(svgNS, "svg");
@@ -12488,6 +12514,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 自动水平居中到基因结构区域
     setTimeout(function() {
+        var wrapper = document.querySelector('.content-wrapper');
         var svg = document.getElementById('gene-structure-svg');
         if (!svg) return;
         var gs = parseFloat(svg.getAttribute('data-gene-start')) || 450;
@@ -12497,10 +12524,12 @@ document.addEventListener('DOMContentLoaded', function() {
         var svgLogicalW = svg.width.baseVal.value;
         if (!svgLogicalW || svgLogicalW <= 0) return;
         var scale = svgRect.width / svgLogicalW;
+        var wrapperRect = wrapper ? wrapper.getBoundingClientRect() : {left: 0, width: window.innerWidth};
         var geneCenterScreen = svgRect.left + geneCenterSvg * scale;
-        var scrollX = geneCenterScreen - window.innerWidth / 2;
+        var currentScrollLeft = wrapper ? wrapper.scrollLeft : window.scrollX;
+        var scrollX = currentScrollLeft + geneCenterScreen - wrapperRect.left - wrapperRect.width / 2;
         if (scrollX > 0) {
-            window.scrollTo({ left: scrollX, behavior: 'auto' });
+            if (wrapper) wrapper.scrollTo({ left: scrollX, behavior: 'auto' });
         }
     }, 150);
 });

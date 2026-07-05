@@ -1739,6 +1739,34 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("seq-col-th", integrated_block)
         self.assertIn("seq-site-cell", integrated_block)
 
+    def test_integrated_report_export_includes_sidebar_component_svgs(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        export_start = integrated_block.index("function collectReportExportSVGElements")
+        export_end = integrated_block.index("// ==================== 页面初始化", export_start)
+        export_block = integrated_block[export_start:export_end]
+
+        self.assertIn("document.querySelector('.report-shell')", export_block)
+        self.assertIn("root.querySelectorAll('svg')", export_block)
+        self.assertIn("var attrW = parseFloat(svg.getAttribute('width')) || 0;", export_block)
+        self.assertIn("var svgElements = collectReportExportSVGElements();", export_block)
+        self.assertNotIn("content.querySelectorAll('svg')", export_block)
+
+    def test_integrated_report_auto_center_scrolls_content_wrapper(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("var wrapper = document.querySelector('.content-wrapper');", integrated_block)
+        self.assertIn("wrapper.scrollTo({ left: scrollX, behavior: 'auto' });", integrated_block)
+        self.assertNotIn("window.scrollTo({ left: scrollX", integrated_block)
+
     def test_summarize_post_gwas_evidence_uses_local_variant_context(self):
         from haplotype_phenotype_analysis import _summarize_post_gwas_evidence
 
