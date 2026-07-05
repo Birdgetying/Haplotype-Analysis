@@ -9882,22 +9882,104 @@ class ReportGenerator:
         .pheno-selector label {{ font-size: 12px; font-weight: 600; color: #2c3e50; }}
         .pheno-selector select {{ padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background: white; cursor: pointer; }}
         .pheno-selector select:focus {{ outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52,152,219,0.2); }}
+        /* Workbench layout: keep gene structure and haplotype sequence as the main view.
+           Existing panels are moved into the right sidebar at runtime so their JS ids/functions remain intact. */
+        body {{ background: #071017; padding: 0; overflow: hidden; color: #e5edf5; }}
+        .report-shell {{ height: 100vh; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }}
+        .container {{ width: 100%; height: 100vh; margin: 0; border-radius: 0; box-shadow: none; background: #071017; }}
+        .header {{ min-height: 44px; padding: 0 16px; border-radius: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+                  background: rgba(7,16,23,0.94); border-bottom: 1px solid rgba(148,163,184,0.22); }}
+        .header h1 {{ margin: 0; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .header-info {{ display: none; }}
+        .sidebar-open-btn {{ width: 36px; height: 32px; border: 1px solid rgba(34,211,238,0.45); border-radius: 8px;
+                            background: #0f1c27; color: #dff8ff; cursor: pointer; font-size: 18px; line-height: 1; }}
+        .sidebar-open-btn:hover {{ border-color: #22d3ee; }}
+        .content-wrapper {{ overflow: auto; height: calc(100vh - 44px); max-height: none; background: #071017; }}
+        .content {{ padding: 12px; }}
+        .integrated-view {{ gap: 10px; }}
+        .main-data-section {{ border: 1px solid rgba(148,163,184,0.22); border-radius: 8px; background: #0d1720; overflow: auto; padding: 10px; }}
+        .top-section.workbench-staged {{ display: none; }}
+        .report-sidebar {{ position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 92vw); z-index: 9000;
+                           display: grid; grid-template-rows: 44px auto 1fr; background: #0b141e;
+                           border-left: 1px solid rgba(148,163,184,0.24); box-shadow: -24px 0 60px rgba(0,0,0,0.38);
+                           transform: translateX(100%); transition: transform 0.18s ease; }}
+        .report-sidebar.open {{ transform: translateX(0); }}
+        .report-sidebar-head {{ display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+                               border-bottom: 1px solid rgba(148,163,184,0.18); }}
+        .report-sidebar-head h2 {{ margin: 0; font-size: 14px; color: #e5edf5; }}
+        .sidebar-close-btn {{ width: 30px; height: 28px; border: 1px solid rgba(148,163,184,0.24); border-radius: 7px;
+                             background: #101b27; color: #dbeafe; cursor: pointer; }}
+        .report-sidebar-tabs {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; }}
+        .report-sidebar-tab {{ border: 1px solid rgba(148,163,184,0.24); background: #101b27; color: #dbeafe;
+                              border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; }}
+        .report-sidebar-tab.active {{ border-color: #22d3ee; box-shadow: 0 0 0 1px rgba(34,211,238,0.22); }}
+        .report-sidebar-tab b {{ display: block; font-size: 12px; }}
+        .report-sidebar-tab span {{ display: block; margin-top: 3px; color: #90a4b8; font-size: 10px; }}
+        .report-sidebar-body {{ min-height: 0; overflow: auto; padding: 0 12px 12px; }}
+        .report-component-panel {{ display: none; }}
+        .report-component-panel.active {{ display: block; }}
+        .report-component-slot {{ min-height: 80px; }}
+        .report-sidebar .pheno-selector,
+        .report-sidebar .filter-panel,
+        .report-sidebar .zoom-controls {{ display: flex; margin: 0 0 8px 0; padding: 10px; border: 1px solid rgba(148,163,184,0.18);
+                                        border-radius: 8px; background: #101b27; color: #dbeafe; }}
+        .report-sidebar .filter-panel {{ flex-direction: column; align-items: stretch; gap: 10px; }}
+        .report-sidebar .filter-group {{ flex-wrap: wrap; }}
+        .report-sidebar .filter-group label {{ color: #cbd5e1; }}
+        .report-sidebar .zoom-controls {{ flex-wrap: wrap; }}
+        .report-sidebar .zoom-controls label,
+        .report-sidebar .zoom-controls span {{ color: #cbd5e1; }}
+        .report-sidebar .score-panel,
+        .report-sidebar .network-panel,
+        .report-sidebar .gene-gwas-panel,
+        .report-sidebar .ld-right-panel,
+        .report-sidebar .post-gwas-evidence {{ width: 100% !important; min-width: 0 !important; flex: none !important; margin: 0 0 10px 0; }}
+        .report-sidebar .score-panel {{ background: #101b27; border-color: rgba(148,163,184,0.22); }}
+        .report-sidebar #score-scatter-viz {{ height: 320px !important; }}
+        .report-sidebar .network-panel {{ height: 340px; position: relative; }}
+        .report-sidebar .gene-gwas-panel {{ height: 260px; position: relative; }}
+        .report-sidebar .ld-right-panel {{ overflow: auto; }}
+        .report-sidebar .post-gwas-evidence {{ max-height: none; overflow: visible; }}
+        .report-sidebar .evidence-detail-layout,
+        .report-sidebar .discovery-candidate-strip {{ grid-template-columns: 1fr; }}
+        .score-section.workbench-staged {{ display: none; }}
+        .data-table th.key-site-highlight, .data-table td.key-site-highlight {{ background: #fff7d6 !important;
+            box-shadow: inset 0 0 0 1px #f0c95a; }}
     </style>
 </head>
 <body>
+<div class="report-shell">
 <div class="container">
     <div class="header">
-        <h1>Haplotype-Phenotype Association Analysis - {gene_id_label}</h1>
-        <div class="header-info">
-            <span>Region: {safe_chrom}:{region_start:,}-{region_end:,}</span>
-            <span>Length: {region_len_kb:.1f} kb</span>
-            <span>Variants: {len(display_positions)}</span>
-            <span>Haplotypes: {len(top_haps)}</span>
-            <span>Samples: {hap_counts.sum()}</span>
-            <span>Grand Mean: {grand_mean:.3f}</span>
+        <div>
+            <h1>Haplotype-Phenotype Association Analysis - {gene_id_label}</h1>
+            <div class="header-info">
+                <span>Region: {safe_chrom}:{region_start:,}-{region_end:,}</span>
+                <span>Length: {region_len_kb:.1f} kb</span>
+                <span>Variants: {len(display_positions)}</span>
+                <span>Haplotypes: {len(top_haps)}</span>
+                <span>Samples: {hap_counts.sum()}</span>
+                <span>Grand Mean: {grand_mean:.3f}</span>
+            </div>
         </div>
+        <button class="sidebar-open-btn" type="button" onclick="openReportSidebar()" title="Open report components">☰</button>
     </div>
 
+    <aside class="report-sidebar" id="reportSidebar">
+        <div class="report-sidebar-head">
+            <h2>Report Components</h2>
+            <button class="sidebar-close-btn" type="button" onclick="closeReportSidebar()">×</button>
+        </div>
+        <div class="report-sidebar-tabs">
+            <button class="report-sidebar-tab active" data-component="filters" onclick="chooseReportComponent('filters')"><b>Filters</b><span>zoom, MAF, type</span></button>
+            <button class="report-sidebar-tab" data-component="score" onclick="chooseReportComponent('score')"><b>Score</b><span>original / robust</span></button>
+            <button class="report-sidebar-tab" data-component="network" onclick="chooseReportComponent('network')"><b>Network</b><span>haplotype graph</span></button>
+            <button class="report-sidebar-tab" data-component="ld" onclick="chooseReportComponent('ld')"><b>LD</b><span>triangle heatmap</span></button>
+            <button class="report-sidebar-tab" data-component="gwas" onclick="chooseReportComponent('gwas')"><b>GWAS</b><span>P-value view</span></button>
+            <button class="report-sidebar-tab" data-component="audit" onclick="chooseReportComponent('audit')"><b>Audit</b><span>candidate evidence</span></button>
+        </div>
+        <div class="report-sidebar-body">
+            <section class="report-component-panel active" id="component-filters">
     <!-- 表型选择器 -->
     <div class="pheno-selector">
         <label>Phenotype:</label>
@@ -9966,6 +10048,14 @@ class ReportGenerator:
         <button onclick="exportSVG()">SVG</button>
         <button onclick="window.print()">Print</button>
     </div>
+            </section>
+            <section class="report-component-panel" id="component-score"><div id="score-side-slot" class="report-component-slot"></div></section>
+            <section class="report-component-panel" id="component-network"><div id="network-side-slot" class="report-component-slot"></div></section>
+            <section class="report-component-panel" id="component-ld"><div id="ld-side-slot" class="report-component-slot"></div></section>
+            <section class="report-component-panel" id="component-gwas"><div id="gwas-side-slot" class="report-component-slot"></div></section>
+            <section class="report-component-panel" id="component-audit"><div id="audit-side-slot" class="report-component-slot"></div></section>
+        </div>
+    </aside>
     
     <div class="content-wrapper">
     <div class="content" id="zoomContent">
@@ -10048,12 +10138,12 @@ class ReportGenerator:
 
             <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
             <div class="top-section">
-                <div class="network-panel">
+                <div class="network-panel" id="network-panel-workbench">
                     <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| Click node to copy samples</span></div>
                     <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">Copy Mode</button>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
-                <div class="gene-gwas-panel">
+                <div class="gene-gwas-panel" id="gene-gwas-panel-workbench">
                     <div class="gene-gwas-title">GWAS P-values</div>
                     <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
                 </div>
@@ -10504,7 +10594,7 @@ class ReportGenerator:
 	        <div class="score-stats" id="score-stats"></div>
 	        <div class="score-legend" id="score-legend"></div>
 	    </div>
-	    <div class="ld-right-panel">
+	    <div class="ld-right-panel" id="ld-right-panel-workbench">
 	        <div id="ld-triangle-wrapper" style="margin-top:0px;overflow:visible;width:auto;display:block;">
 	            <canvas id="ld-triangle-canvas" style="display:block;"></canvas>
 	            <div id="ld-colorbar" style="display:flex;align-items:center;margin-top:4px;padding-left:0px;">
@@ -10544,6 +10634,7 @@ class ReportGenerator:
         <div style="font-size:10px;color:#7f8c8d;">Effect: point = estimate, line = 95% CI</div>
     </div>
 </div>
+</div><!-- report-shell -->
 <!-- tooltip 平面容器 -->
 <div id="d3-tooltip" style="position:fixed;pointer-events:none;background:rgba(44,62,80,0.92);color:#fff;padding:7px 11px;border-radius:5px;font-size:11px;display:none;z-index:9999;"></div>
 
@@ -10568,6 +10659,67 @@ function fitToWindow() {
     if (zc && w) { cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100))); applyZoom(); }
 }
 applyZoom();
+
+// ==================== Right-side workbench layout ====================
+function openReportSidebar() {
+    var sidebar = document.getElementById('reportSidebar');
+    if (sidebar) sidebar.classList.add('open');
+}
+
+function closeReportSidebar() {
+    var sidebar = document.getElementById('reportSidebar');
+    if (sidebar) sidebar.classList.remove('open');
+}
+
+function moveElementToSlot(elementId, slotId) {
+    var el = document.getElementById(elementId);
+    var slot = document.getElementById(slotId);
+    if (el && slot && el.parentElement !== slot) {
+        slot.appendChild(el);
+    }
+}
+
+function moveFirstMatchToSlot(selector, slotId) {
+    var el = document.querySelector(selector);
+    var slot = document.getElementById(slotId);
+    if (el && slot && el.parentElement !== slot) {
+        slot.appendChild(el);
+    }
+}
+
+function stageReportComponents() {
+    moveElementToSlot('post-gwas-evidence', 'audit-side-slot');
+    moveElementToSlot('haplotype-score-panel', 'score-side-slot');
+    moveElementToSlot('network-panel-workbench', 'network-side-slot');
+    moveElementToSlot('gene-gwas-panel-workbench', 'gwas-side-slot');
+    moveElementToSlot('ld-right-panel-workbench', 'ld-side-slot');
+
+    moveFirstMatchToSlot('.network-panel', 'network-side-slot');
+    moveFirstMatchToSlot('.gene-gwas-panel', 'gwas-side-slot');
+    moveFirstMatchToSlot('.ld-right-panel', 'ld-side-slot');
+
+    var topSection = document.querySelector('.top-section');
+    if (topSection) topSection.classList.add('workbench-staged');
+    var scoreSection = document.querySelector('.score-section');
+    if (scoreSection) scoreSection.classList.add('workbench-staged');
+}
+
+function chooseReportComponent(name) {
+    openReportSidebar();
+    document.querySelectorAll('.report-sidebar-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-component') === name);
+    });
+    document.querySelectorAll('.report-component-panel').forEach(function(panel) {
+        panel.classList.toggle('active', panel.id === 'component-' + name);
+    });
+    setTimeout(function() {
+        if (name === 'score') drawHaplotypeScorePlot(haplotypeScoreData);
+        if (name === 'network') drawNetworkPlot();
+        if (name === 'gwas') drawGWASPlot(gwasData);
+        if (name === 'ld') drawLDTriangle();
+        updateConnectorLines();
+    }, 80);
+}
 
 // ==================== 排序功能 ====================
 var countOrder   = {hap_order_count};
@@ -12294,6 +12446,7 @@ function exportSVG() {{
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
+    stageReportComponents();
     drawNetworkPlot();
     drawGWASPlot(gwasData);
     drawHaplotypeScorePlot(haplotypeScoreData);

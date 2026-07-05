@@ -1690,6 +1690,55 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("html = html.replace('{gwas_mr}', str(gwas_mr))", integrated_block)
         self.assertIn("html = html.replace('{gwas_mb}', str(gwas_mb))", integrated_block)
 
+    def test_integrated_report_uses_right_sidebar_workbench_without_losing_controls(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("report-shell", integrated_block)
+        self.assertIn("report-sidebar", integrated_block)
+        self.assertIn("openReportSidebar", integrated_block)
+        self.assertIn("chooseReportComponent('score')", integrated_block)
+        self.assertIn("chooseReportComponent('network')", integrated_block)
+        self.assertIn("chooseReportComponent('filters')", integrated_block)
+        self.assertIn("chooseReportComponent('ld')", integrated_block)
+        self.assertIn("chooseReportComponent('audit')", integrated_block)
+
+        # Existing controls must remain addressable by their original JS ids.
+        for required_id in [
+            'id="mafSlider"',
+            'id="missingSlider"',
+            'id="zoomSlider"',
+            'id="zoomContent"',
+            'id="score-scatter-viz"',
+            'id="ld-triangle-canvas"',
+            'id="network-viz"',
+            'id="networkModeBtn"',
+            'id="mode-btn-default"',
+            'id="mode-btn-robust_discovery"',
+        ]:
+            self.assertIn(required_id, integrated_block)
+
+    def test_integrated_report_keeps_gene_structure_above_sequence_and_connected(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        gene_idx = integrated_block.index("gene-structure-svg")
+        sequence_idx = integrated_block.index('<table class="data-table"')
+        score_idx = integrated_block.index('id="haplotype-score-panel"')
+
+        self.assertLess(gene_idx, sequence_idx)
+        self.assertLess(sequence_idx, score_idx)
+        self.assertIn("js-connector", integrated_block)
+        self.assertIn("updateConnectorLines", integrated_block)
+        self.assertIn("seq-col-th", integrated_block)
+        self.assertIn("seq-site-cell", integrated_block)
+
     def test_summarize_post_gwas_evidence_uses_local_variant_context(self):
         from haplotype_phenotype_analysis import _summarize_post_gwas_evidence
 
