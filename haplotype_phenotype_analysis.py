@@ -9918,6 +9918,8 @@ class ReportGenerator:
         .report-sidebar-body {{ min-height: 0; overflow: auto; padding: 0 12px 12px; }}
         .report-component-panel {{ display: none; }}
         .report-component-panel.active {{ display: block; }}
+        .report-sidebar.export-measure .report-component-panel {{ display: block !important; position: absolute;
+            visibility: hidden; left: 12px; right: 12px; top: 56px; pointer-events: none; }}
         .report-component-slot {{ min-height: 80px; }}
         .report-sidebar .pheno-selector,
         .report-sidebar .filter-panel,
@@ -9945,6 +9947,29 @@ class ReportGenerator:
         .score-section.workbench-staged {{ display: none; }}
         .data-table th.key-site-highlight, .data-table td.key-site-highlight {{ background: #fff7d6 !important;
             box-shadow: inset 0 0 0 1px #f0c95a; }}
+        @media print {{
+            body {{ background: white; color: #111827; overflow: visible; padding: 0; }}
+            .report-shell {{ display: block; height: auto; overflow: visible; background: white; }}
+            .container {{ display: flex; flex-direction: column; height: auto; overflow: visible; background: white; }}
+            .header {{ order: 1; background: white; color: #111827; border-bottom: 1px solid #d1d5db; }}
+            .header h1 {{ color: #111827; }}
+            .sidebar-open-btn, .sidebar-close-btn, .report-sidebar-tabs {{ display: none !important; }}
+            .content-wrapper {{ height: auto; max-height: none; overflow: visible; order: 2; background: white; }}
+            .content {{ transform: none !important; padding: 8px; }}
+            .main-data-section {{ overflow: visible; background: white; border-color: #d1d5db; }}
+            .report-sidebar {{ order: 3; position: static; transform: none !important; width: auto; display: block;
+                box-shadow: none; border: 1px solid #d1d5db; background: white; color: #111827; page-break-before: always; }}
+            .report-sidebar-head {{ display: block; padding: 8px 12px; border-bottom: 1px solid #d1d5db; }}
+            .report-sidebar-head h2 {{ color: #111827; }}
+            .report-sidebar-body {{ overflow: visible; padding: 12px; }}
+            .report-sidebar .report-component-panel {{ display: block !important; position: static; visibility: visible; page-break-inside: avoid; }}
+            .report-sidebar .score-panel,
+            .report-sidebar .network-panel,
+            .report-sidebar .gene-gwas-panel,
+            .report-sidebar .ld-right-panel,
+            .report-sidebar .post-gwas-evidence {{ background: white; color: #111827; border-color: #d1d5db; }}
+            .footer {{ order: 4; background: white; color: #111827; }}
+        }}
     </style>
 </head>
 <body>
@@ -12419,23 +12444,48 @@ function collectReportExportSVGElements() {
         });
     });
     return svgs.filter(function(svg) {
-        var rect = svg.getBoundingClientRect();
-        var attrW = parseFloat(svg.getAttribute('width')) || 0;
-        var attrH = parseFloat(svg.getAttribute('height')) || 0;
-        return (rect.width > 0 && rect.height > 0) || (attrW > 0 && attrH > 0);
+        var size = getSvgExportSize(svg);
+        return size.width > 0 && size.height > 0;
     });
 }
 
+function getSvgExportSize(svg) {
+    var rect = svg.getBoundingClientRect();
+    var attrW = parseFloat(svg.getAttribute('width')) || 0;
+    var attrH = parseFloat(svg.getAttribute('height')) || 0;
+    var viewBox = svg.viewBox && svg.viewBox.baseVal;
+    var viewW = viewBox ? viewBox.width : 0;
+    var viewH = viewBox ? viewBox.height : 0;
+    return {
+        width: rect.width || attrW || viewW || 0,
+        height: rect.height || attrH || viewH || 0
+    };
+}
+
+function prepareReportExportVisuals() {
+    var sidebar = document.getElementById('reportSidebar');
+    if (sidebar) sidebar.classList.add('export-measure');
+    try {
+        drawHaplotypeScorePlot(haplotypeScoreData);
+        drawNetworkPlot();
+        drawGWASPlot(gwasData);
+        drawLDTriangle();
+    } finally {
+        if (sidebar) sidebar.classList.remove('export-measure');
+    }
+}
+
 function exportSVG() {{
+    prepareReportExportVisuals();
     var svgElements = collectReportExportSVGElements();
     if (svgElements.length === 0) {{ alert('No SVG'); return; }}
     var svgNS = "http://www.w3.org/2000/svg";
     var combinedSVG = document.createElementNS(svgNS, "svg");
     var totalWidth = 0, totalHeight = 0;
     for (var i = 0; i < svgElements.length; i++) {{
-        var rect = svgElements[i].getBoundingClientRect();
-        totalWidth = Math.max(totalWidth, rect.width);
-        totalHeight += rect.height + 20;
+        var size = getSvgExportSize(svgElements[i]);
+        totalWidth = Math.max(totalWidth, size.width);
+        totalHeight += size.height + 20;
     }}
     combinedSVG.setAttribute("width", totalWidth);
     combinedSVG.setAttribute("height", totalHeight);
@@ -12447,7 +12497,7 @@ function exportSVG() {{
     combinedSVG.appendChild(bg);
     var currentY = 0;
     for (var j = 0; j < svgElements.length; j++) {{
-        var rect = svgElements[j].getBoundingClientRect();
+        var size = getSvgExportSize(svgElements[j]);
         var clonedSVG = svgElements[j].cloneNode(true);
         var g = document.createElementNS(svgNS, "g");
         g.setAttribute("transform", "translate(0," + currentY + ")");
@@ -12455,7 +12505,7 @@ function exportSVG() {{
             g.appendChild(clonedSVG.firstChild);
         }}
         combinedSVG.appendChild(g);
-        currentY += rect.height + 20;
+        currentY += size.height + 20;
     }}
     var serializer = new XMLSerializer();
     var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
@@ -12469,6 +12519,8 @@ function exportSVG() {{
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 }}
+
+window.addEventListener('beforeprint', prepareReportExportVisuals);
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {

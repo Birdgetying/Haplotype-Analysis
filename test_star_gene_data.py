@@ -1756,6 +1756,39 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("var svgElements = collectReportExportSVGElements();", export_block)
         self.assertNotIn("content.querySelectorAll('svg')", export_block)
 
+    def test_integrated_report_export_uses_fallback_svg_dimensions_for_hidden_panels(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("function getSvgExportSize", integrated_block)
+        export_start = integrated_block.index("function getSvgExportSize")
+        export_end = integrated_block.index("// ==================== 页面初始化", export_start)
+        export_block = integrated_block[export_start:export_end]
+
+        self.assertIn("function prepareReportExportVisuals", export_block)
+        self.assertIn("reportSidebar", export_block)
+        self.assertIn("export-measure", export_block)
+        self.assertIn("var viewBox = svg.viewBox && svg.viewBox.baseVal;", export_block)
+        self.assertIn("var size = getSvgExportSize(svgElements[i]);", export_block)
+        self.assertIn("totalWidth = Math.max(totalWidth, size.width);", export_block)
+        self.assertIn("currentY += size.height + 20;", export_block)
+
+    def test_integrated_report_print_layout_uncrops_scroll_container_and_prints_sidebar_panels(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("@media print", integrated_block)
+        self.assertIn(".content-wrapper {{ height: auto; max-height: none; overflow: visible;", integrated_block)
+        self.assertIn(".report-sidebar {{ order: 3; position: static;", integrated_block)
+        self.assertIn(".report-sidebar .report-component-panel {{ display: block !important;", integrated_block)
+        self.assertIn("window.addEventListener('beforeprint', prepareReportExportVisuals);", integrated_block)
+
     def test_integrated_report_auto_center_scrolls_content_wrapper(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
