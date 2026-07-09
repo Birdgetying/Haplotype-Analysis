@@ -1819,7 +1819,14 @@ class StarGeneDataTests(unittest.TestCase):
         integrated_block = source[integrated_start:integrated_end]
 
         self.assertIn("html, body {{ width: 100%; max-width: 100%;", integrated_block)
-        self.assertIn("body {{ background: #071017; padding: 0; overflow: hidden;", integrated_block)
+        self.assertIn("body {{ background: #f5f7fa; padding: 0; overflow: hidden; color: #243044;", integrated_block)
+        self.assertIn(".content-wrapper {{ min-width: 0; overflow: auto; height: calc(100vh - 44px); max-height: none; background: #f5f7fa;", integrated_block)
+        self.assertIn(".main-data-section {{ max-width: 100%; overflow: auto; border: 1px solid #d8e0ea; border-radius: 8px; background: #ffffff;", integrated_block)
+        self.assertIn(".report-sidebar {{ position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 92vw); z-index: 9000;", integrated_block)
+        self.assertIn("background: #ffffff;", integrated_block)
+        self.assertNotIn("#071017", integrated_block)
+        self.assertNotIn("#0b141e", integrated_block)
+        self.assertNotIn("#101b27", integrated_block)
         self.assertIn(".report-shell {{ width: 100%; max-width: 100vw;", integrated_block)
         self.assertIn(".container {{ width: 100%; max-width: 100vw;", integrated_block)
         self.assertIn(".content-wrapper {{ min-width: 0; overflow: auto;", integrated_block)

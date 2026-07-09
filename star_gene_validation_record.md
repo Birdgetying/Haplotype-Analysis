@@ -2129,3 +2129,51 @@ This rerun is a report-layout rerun, not a new biological conclusion. The
 previous VRN-B1 positive-control interpretation remains unchanged: the robust
 top haplotype contains the literature `Vrn-B1f` 837 bp insertion, with the
 same small-sample reliability caveat.
+
+### 2026-07-09 robust-only report light-theme contrast fix
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. This UI-only rerun preserves the previous biological interpretation:
+`Hap6` carries the literature `Vrn-B1f` 837 bp insertion.
+
+Sample count / reliability:
+n=3 for the exact insertion haplotype; positive-control match remains useful
+but small-sample reliability caveat remains.
+
+Blocked reason:
+None for analysis. In-app browser automation could not reload the local
+`file://` report because of browser security policy, so verification used
+generated HTML source checks instead.
+
+Report/UI check:
+The integrated report workbench shell, content wrapper, main data pane, and
+right sidebar were changed back to a white/light-gray palette to match the
+original white report design. Static checks on the generated HTML confirmed:
+no dark shell colors `#071017`, `#0b141e`, or `#101b27`; body uses
+`#f5f7fa`; main data pane and sidebar use `#ffffff`; robust-only mode remains
+`["robust_discovery"]`.

@@ -9882,38 +9882,40 @@ class ReportGenerator:
         /* Workbench layout: keep gene structure and haplotype sequence as the main view.
            Existing panels are moved into the right sidebar at runtime so their JS ids/functions remain intact. */
         html, body {{ width: 100%; max-width: 100%; margin: 0; overflow: hidden; }}
-        body {{ background: #071017; padding: 0; overflow: hidden; color: #e5edf5; }}
+        body {{ background: #f5f7fa; padding: 0; overflow: hidden; color: #243044; }}
         .report-shell {{ width: 100%; max-width: 100vw; height: 100vh; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }}
-        .container {{ width: 100%; max-width: 100vw; height: 100vh; margin: 0; border-radius: 0; box-shadow: none; background: #071017; overflow: hidden; }}
+        .container {{ width: 100%; max-width: 100vw; height: 100vh; margin: 0; border-radius: 0; box-shadow: none; background: #f5f7fa; overflow: hidden; }}
         .header {{ min-height: 44px; padding: 0 16px; border-radius: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-                  background: rgba(7,16,23,0.94); border-bottom: 1px solid rgba(148,163,184,0.22); }}
+                  background: #ffffff; border-bottom: 1px solid #d8e0ea; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }}
         .header > div {{ min-width: 0; }}
-        .header h1 {{ margin: 0; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .header h1 {{ margin: 0; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #243044; }}
         .header-info {{ display: none; }}
-        .sidebar-open-btn {{ width: 36px; height: 32px; border: 1px solid rgba(34,211,238,0.45); border-radius: 8px;
-                            background: #0f1c27; color: #dff8ff; cursor: pointer; font-size: 18px; line-height: 1; }}
-        .sidebar-open-btn:hover {{ border-color: #22d3ee; }}
-        .content-wrapper {{ min-width: 0; overflow: auto; height: calc(100vh - 44px); max-height: none; background: #071017; }}
+        .sidebar-open-btn {{ width: 36px; height: 32px; border: 1px solid #b8c6d8; border-radius: 8px;
+                            background: #ffffff; color: #3e5873; cursor: pointer; font-size: 18px; line-height: 1; }}
+        .sidebar-open-btn:hover {{ border-color: #5aa9e6; background: #eef7ff; }}
+        .content-wrapper {{ min-width: 0; overflow: auto; height: calc(100vh - 44px); max-height: none; background: #f5f7fa; }}
         .content {{ padding: 12px; }}
         .integrated-view {{ gap: 10px; }}
-        .main-data-section {{ max-width: 100%; overflow: auto; border: 1px solid rgba(148,163,184,0.22); border-radius: 8px; background: #0d1720; padding: 10px; }}
+        .main-data-section {{ max-width: 100%; overflow: auto; border: 1px solid #d8e0ea; border-radius: 8px; background: #ffffff; padding: 10px; box-shadow: 0 1px 3px rgba(15,23,42,0.05); }}
         .top-section.workbench-staged {{ display: none; }}
         .report-sidebar {{ position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 92vw); z-index: 9000;
-                           display: grid; grid-template-rows: 44px auto 1fr; background: #0b141e;
-                           border-left: 1px solid rgba(148,163,184,0.24); box-shadow: -24px 0 60px rgba(0,0,0,0.38);
+                           display: grid; grid-template-rows: 44px auto 1fr; background: #ffffff;
+                           border-left: 1px solid #d8e0ea; box-shadow: -18px 0 36px rgba(15,23,42,0.16);
                            transform: translateX(100%); transition: transform 0.18s ease; }}
         .report-sidebar.open {{ transform: translateX(0); }}
         .report-sidebar-head {{ display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
-                               border-bottom: 1px solid rgba(148,163,184,0.18); }}
-        .report-sidebar-head h2 {{ margin: 0; font-size: 14px; color: #e5edf5; }}
-        .sidebar-close-btn {{ width: 30px; height: 28px; border: 1px solid rgba(148,163,184,0.24); border-radius: 7px;
-                             background: #101b27; color: #dbeafe; cursor: pointer; }}
+                               border-bottom: 1px solid #e4eaf2; background: #ffffff; }}
+        .report-sidebar-head h2 {{ margin: 0; font-size: 14px; color: #243044; }}
+        .sidebar-close-btn {{ width: 30px; height: 28px; border: 1px solid #cfd8e3; border-radius: 7px;
+                             background: #ffffff; color: #526174; cursor: pointer; }}
+        .sidebar-close-btn:hover {{ background: #f3f7fb; border-color: #aebdcb; }}
         .report-sidebar-tabs {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; }}
-        .report-sidebar-tab {{ border: 1px solid rgba(148,163,184,0.24); background: #101b27; color: #dbeafe;
+        .report-sidebar-tab {{ border: 1px solid #d8e0ea; background: #f8fafc; color: #334155;
                               border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; }}
-        .report-sidebar-tab.active {{ border-color: #22d3ee; box-shadow: 0 0 0 1px rgba(34,211,238,0.22); }}
+        .report-sidebar-tab:hover {{ background: #f1f6fb; border-color: #b8c6d8; }}
+        .report-sidebar-tab.active {{ background: #eaf4ff; border-color: #5aa9e6; box-shadow: 0 0 0 1px rgba(90,169,230,0.18); }}
         .report-sidebar-tab b {{ display: block; font-size: 12px; }}
-        .report-sidebar-tab span {{ display: block; margin-top: 3px; color: #90a4b8; font-size: 10px; }}
+        .report-sidebar-tab span {{ display: block; margin-top: 3px; color: #667085; font-size: 10px; }}
         .report-sidebar-body {{ min-height: 0; overflow: auto; padding: 0 12px 12px; }}
         .report-component-panel {{ display: none; }}
         .report-component-panel.active {{ display: block; }}
@@ -9922,20 +9924,20 @@ class ReportGenerator:
         .report-component-slot {{ min-height: 80px; }}
         .report-sidebar .pheno-selector,
         .report-sidebar .filter-panel,
-        .report-sidebar .zoom-controls {{ display: flex; margin: 0 0 8px 0; padding: 10px; border: 1px solid rgba(148,163,184,0.18);
-                                        border-radius: 8px; background: #101b27; color: #dbeafe; max-width: 100%; box-sizing: border-box; }}
+        .report-sidebar .zoom-controls {{ display: flex; margin: 0 0 8px 0; padding: 10px; border: 1px solid #d8e0ea;
+                                        border-radius: 8px; background: #ffffff; color: #334155; max-width: 100%; box-sizing: border-box; }}
         .report-sidebar .filter-panel {{ flex-direction: column; align-items: stretch; gap: 10px; }}
         .report-sidebar .filter-group {{ flex-wrap: wrap; }}
-        .report-sidebar .filter-group label {{ color: #cbd5e1; }}
+        .report-sidebar .filter-group label {{ color: #405066; }}
         .report-sidebar .zoom-controls {{ flex-wrap: wrap; }}
         .report-sidebar .zoom-controls label,
-        .report-sidebar .zoom-controls span {{ color: #cbd5e1; }}
+        .report-sidebar .zoom-controls span {{ color: #405066; }}
         .report-sidebar .score-panel,
         .report-sidebar .network-panel,
         .report-sidebar .gene-gwas-panel,
         .report-sidebar .ld-right-panel,
         .report-sidebar .post-gwas-evidence {{ width: 100% !important; min-width: 0 !important; flex: none !important; margin: 0 0 10px 0; }}
-        .report-sidebar .score-panel {{ background: #101b27; border-color: rgba(148,163,184,0.22); }}
+        .report-sidebar .score-panel {{ background: #ffffff; border-color: #d8e0ea; }}
         .report-sidebar #score-scatter-viz {{ height: 320px !important; }}
         .report-sidebar .network-panel {{ height: 340px; position: relative; }}
         .report-sidebar .gene-gwas-panel {{ height: 260px; position: relative; }}
