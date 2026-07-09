@@ -1556,6 +1556,37 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertNotIn("switchScoreMode('robust_discovery')", html)
             self.assertNotIn("mode-toggle-btn", html)
 
+    def test_haplotype_score_html_escapes_dynamic_score_mode_label(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+
+        malicious_mode = "robust_discovery<img src=x onerror=alert(1)>"
+        score_data = {
+            "score_mode": malicious_mode,
+            "per_sample": [
+                {"sample_id": "S1", "haplotype": "Hap1", "score": 1.0, "phenotype": 10.0},
+                {"sample_id": "S2", "haplotype": "Hap2", "score": 2.0, "phenotype": 12.0},
+            ],
+            "per_haplotype": {
+                "Hap1": {"total": 1.0, "sample_reliability": 0.9},
+                "Hap2": {"total": 2.0, "sample_reliability": 0.8},
+            },
+            "component_weights": {"variant_effect": 1.0},
+            "r_squared": 0.5,
+            "regression_pvalue": 0.01,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            generator = ReportGenerator(output_dir=str(Path(tmp) / "GeneA__robust_discovery"))
+            generator._cached_all_haplotype_scores = {"Trait": score_data}
+            generator._cached_haplotype_score = score_data
+
+            html_path = generator.generate_haplotype_score_html(gene_id="GeneA", phenotype_col="Trait")
+            html = Path(html_path).read_text(encoding="utf-8")
+
+            self.assertNotIn("<img", html)
+            self.assertIn("\\u003cimg", html)
+            self.assertNotIn("status.innerHTML", html)
+
     def test_score_plot_display_haplotypes_filter_tiny_groups_and_cap_at_five(self):
         from haplotype_phenotype_analysis import ReportGenerator
 
@@ -1619,10 +1650,66 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("var allScoreModeData", integrated_block)
         self.assertIn("currentScoreMode = allScoreModeData.current_mode || 'robust_discovery'", integrated_block)
         self.assertIn("Robust discovery", integrated_block)
+        self.assertIn("html = html.replace('{score_mode_status_html}', score_mode_status_html)", integrated_block)
+        self.assertIn("updateScoreModeStatus(scoreData)", integrated_block)
         self.assertNotIn("switchScoreMode('default')", integrated_block)
         self.assertNotIn("switchScoreMode('robust_discovery')", integrated_block)
         self.assertNotIn("mode-toggle-btn", integrated_block)
         self.assertNotIn("original / robust", integrated_block)
+        self.assertNotIn("status.innerHTML", integrated_block)
+
+    def test_integrated_html_replaces_score_mode_status_placeholder(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+        import pandas as pd
+
+        score_data = {
+            "score_mode": "robust_discovery",
+            "per_sample": [
+                {"sample_id": "S1", "haplotype": "Hap1", "score": 1.0, "phenotype": 10.0},
+                {"sample_id": "S2", "haplotype": "Hap2", "score": 2.0, "phenotype": 12.0},
+            ],
+            "per_haplotype": {
+                "Hap1": {"total": 1.0, "sample_reliability": 0.9},
+                "Hap2": {"total": 2.0, "sample_reliability": 0.8},
+            },
+            "component_weights": {"variant_effect": 1.0},
+            "r_squared": 0.5,
+            "regression_pvalue": 0.01,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            df = pd.DataFrame({
+                "SampleID": ["S1", "S2"],
+                "Hap_Name": ["Hap1", "Hap2"],
+                "Haplotype_Seq": ["A", "G"],
+                "Trait": [10.0, 12.0],
+            })
+            generator = ReportGenerator(output_dir=tmp)
+            generator._cached_all_haplotype_scores = {"Trait": score_data}
+            generator._cached_haplotype_score = score_data
+            generator.generate_integrated_html(
+                hap_sample_df=df,
+                effect_results={"grand_mean": 11.0, "haplotype_effects": []},
+                variant_positions=[100],
+                region_start=50,
+                region_end=150,
+                phenotype_col="Trait",
+                gene_start=80,
+                gene_end=150,
+                promoter_start=50,
+                promoter_end=79,
+                chrom="chr1",
+                gene_id="GeneX",
+                variant_info={100: {"ref": "A", "alt": "G", "annotation": "base_snp"}},
+                variant_pvalues={100: 0.05},
+                snp_effects={100: "base_snp"},
+            )
+            html = (Path(tmp) / "GeneX.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("{score_mode_status_html}", html)
+        self.assertIn('class="score-mode-current">Robust discovery</span>', html)
+        self.assertNotIn("status.innerHTML", html)
+        self.assertNotIn("mode-toggle-btn", html)
 
     def test_integrated_html_keeps_validation_markers_visible_by_default(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -2073,7 +2160,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("Candidate Key Sites", default_panel["top_haplotype_key_sites_html"])
         self.assertIn("Candidate Key Sites", robust_panel["top_haplotype_key_sites_html"])
         self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
-        self.assertIn("Score mode: <strong>Robust</strong>", robust_panel["meta_html"])
+        self.assertIn("Score mode: <strong>Robust discovery</strong>", robust_panel["meta_html"])
 
     def test_discovery_candidate_rows_prefer_anchor_candidates_when_available(self):
         from haplotype_phenotype_analysis import _build_discovery_candidate_rows

@@ -2104,6 +2104,25 @@ Report checks:
 - Browser check at 390 px width: document/body scroll width is 390 px; the
   long haplotype table scrolls inside `.main-data-section` instead of pushing
   the whole page.
+- Review follow-up rerun after the score-mode status placeholder fix confirmed
+  the generated integrated HTML and standalone score HTML no longer contain
+  `{score_mode_status_html}`, `status.innerHTML`, visible `Original`/`Default`
+  mode text, or score-mode toggle classes; `available_modes` remains
+  `["robust_discovery"]`.
+
+Validation fields:
+
+- Target gene: `VRN-B1`.
+- Data source: `wheat2024` / `wheat_nature_2024`;
+  `VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database.
+- Score mode: `robust_discovery`.
+- Top-scored haplotype: `Hap6`, total score `1.2016`.
+- Literature functional haplotype: `Vrn-B1f` 837 bp insertion.
+- Match to literature functional haplotype: yes; `Hap6` carries the 837 bp
+  insertion at the diagnostic site.
+- Sample count/reliability: n=3 for the exact insertion haplotype; positive
+  control but small-sample reliability caveat remains.
+- Blocked reason: none for this report rerun.
 
 Validation interpretation:
 This rerun is a report-layout rerun, not a new biological conclusion. The

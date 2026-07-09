@@ -3229,9 +3229,22 @@ def _render_reliability_population_panel(candidate_rows: list) -> str:
 def _format_score_mode_label(score_mode: str) -> str:
     labels = {
         "default": "Original",
-        "robust_discovery": "Robust",
+        "robust_discovery": "Robust discovery",
     }
     return labels.get(str(score_mode or "default"), str(score_mode or "default"))
+
+
+def _render_score_mode_status_html(score_mode: str, label_tag: str = "span") -> str:
+    """Render static score-mode status; dynamic mode text is updated via textContent."""
+    mode_label = _html_escape(_format_score_mode_label(score_mode))
+    if label_tag == "strong":
+        prefix = "<strong>Score mode:</strong>"
+    else:
+        prefix = '<span class="score-mode-label">Score mode:</span>'
+    return (
+        f'{prefix} <span class="score-mode-current">{mode_label}</span> '
+        '<span class="score-mode-suffix">(current mode only)</span>'
+    )
 
 
 def _render_discovery_candidate_panel_meta(score_mode: str, phenotype_col: str) -> str:
@@ -9346,6 +9359,12 @@ class ReportGenerator:
         haplotype_score_json = _script_json_dumps(all_score_data)
         score_mode_data = self._collect_score_mode_data(all_score_data)
         score_mode_json = _script_json_dumps(score_mode_data)
+        current_score_mode = score_mode_data.get(
+            'current_mode',
+            score_results.get('score_mode', getattr(self, 'score_mode', 'default')) if isinstance(score_results, dict) else getattr(self, 'score_mode', 'default'),
+        )
+        score_mode_status_html = _render_score_mode_status_html(current_score_mode)
+        score_tab_mode_label = _html_escape(_format_score_mode_label(current_score_mode))
         # ==================== 评分模型计算结束 ====================
 
         post_gwas_evidence = _summarize_post_gwas_evidence(
@@ -9977,7 +9996,7 @@ class ReportGenerator:
         </div>
         <div class="report-sidebar-tabs">
             <button class="report-sidebar-tab active" data-component="filters" onclick="chooseReportComponent('filters')"><b>Filters</b><span>zoom, MAF, type</span></button>
-            <button class="report-sidebar-tab" data-component="score" onclick="chooseReportComponent('score')"><b>Score</b><span>Robust discovery</span></button>
+            <button class="report-sidebar-tab" data-component="score" onclick="chooseReportComponent('score')"><b>Score</b><span>{score_tab_mode_label}</span></button>
             <button class="report-sidebar-tab" data-component="network" onclick="chooseReportComponent('network')"><b>Network</b><span>haplotype graph</span></button>
             <button class="report-sidebar-tab" data-component="ld" onclick="chooseReportComponent('ld')"><b>LD</b><span>triangle heatmap</span></button>
             <button class="report-sidebar-tab" data-component="gwas" onclick="chooseReportComponent('gwas')"><b>GWAS</b><span>P-value view</span></button>
@@ -10589,7 +10608,7 @@ class ReportGenerator:
 	<div class="score-section">
 	    <div class="score-panel" id="haplotype-score-panel">
 	        <div class="score-title">Haplotype Score vs Phenotype</div>
-	        <div id="score-mode-status" class="score-mode-status"><span class="score-mode-label">Score mode:</span> Robust discovery</div>
+	        <div id="score-mode-status" class="score-mode-status">{score_mode_status_html}</div>
 	        <div id="score-scatter-viz" style="width:100%;height:330px;"></div>
 	        <div class="score-stats" id="score-stats"></div>
 	        <div class="score-legend" id="score-legend"></div>
@@ -10876,6 +10895,12 @@ function getScoreData(mode, pheno) {{
     return modeScores[pheno] || modeScores[Object.keys(modeScores)[0]] || null;
 }}
 
+function formatScoreModeLabel(mode) {{
+    if (mode === 'default') return 'Original';
+    if (mode === 'robust_discovery') return 'Robust discovery';
+    return mode || 'robust_discovery';
+}}
+
 function getDiscoveryCandidatePanel(mode, pheno) {{
     var modePanels = (allDiscoveryCandidatePanelData && allDiscoveryCandidatePanelData.modes) ? allDiscoveryCandidatePanelData.modes[mode] : null;
     if (!modePanels) return null;
@@ -10912,7 +10937,8 @@ function updateScoreModeStatus(scoreData) {{
     var status = document.getElementById('score-mode-status');
     if (status) {{
         var mode = (scoreData && scoreData.score_mode) || currentScoreMode || 'robust_discovery';
-        status.innerHTML = '<span class="score-mode-label">Score mode:</span> ' + mode + ' (robust discovery only)';
+        var current = status.querySelector('.score-mode-current');
+        if (current) current.textContent = formatScoreModeLabel(mode);
     }}
 }}
 
@@ -12369,14 +12395,21 @@ function updateScoreTitle(scoreData) {
     var titleEl = document.querySelector('.score-title');
     if (!titleEl) return;
     var level = scoreData.confidence_level;
-    var badge = '';
-    if (level === 'low') {
-        badge = ' <span style=\'font-size:10px;color:#c0392b;\'>[Low Confidence]</span>';
-    } else if (level === 'high') {
-        badge = ' <span style=\'font-size:10px;color:#27ae60;\'>[High Confidence]</span>';
-    }
     var modeLabel = scoreData.score_mode || currentScoreMode || 'default';
-    titleEl.innerHTML = 'Haplotype Score vs Phenotype <span style=\'font-size:10px;color:#666;\'>[' + modeLabel + ', axis=' + (scoreData.score_axis || 'total') + ']</span>' + badge;
+    titleEl.textContent = '';
+    titleEl.appendChild(document.createTextNode('Haplotype Score vs Phenotype '));
+    var meta = document.createElement('span');
+    meta.style.fontSize = '10px';
+    meta.style.color = '#666';
+    meta.textContent = '[' + formatScoreModeLabel(modeLabel) + ', axis=' + (scoreData.score_axis || 'total') + ']';
+    titleEl.appendChild(meta);
+    if (level === 'low' || level === 'high') {
+        var badge = document.createElement('span');
+        badge.style.fontSize = '10px';
+        badge.style.color = level === 'low' ? '#c0392b' : '#27ae60';
+        badge.textContent = level === 'low' ? ' [Low Confidence]' : ' [High Confidence]';
+        titleEl.appendChild(badge);
+    }
 }
 
 function collectReportExportSVGElements() {
@@ -12561,6 +12594,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{post_gwas_evidence_json}', post_gwas_evidence_json)
         html = html.replace('{haplotype_score_json}', haplotype_score_json)
         html = html.replace('{score_mode_json}', score_mode_json)
+        html = html.replace('{score_mode_status_html}', score_mode_status_html)
         html = html.replace('{discovery_candidate_panel_json}', discovery_candidate_panel_json)
         html = html.replace('{all_pheno_data_for_js}', all_pheno_data_for_js)
         html = html.replace('{all_pheno_names_json}', all_pheno_names_json)
@@ -15283,8 +15317,9 @@ draw();
         all_score_mode_data = self._collect_score_mode_data(
             getattr(self, '_cached_all_haplotype_scores', {}) or {phenotype_col or 'phenotype': score_results}
         )
-        score_mode_json = json.dumps(all_score_mode_data, cls=NumpyEncoder, allow_nan=False)
+        score_mode_json = _script_json_dumps(all_score_mode_data)
         current_mode = all_score_mode_data.get('current_mode', score_results.get('score_mode', 'default'))
+        score_mode_status_html = _render_score_mode_status_html(current_mode, label_tag="strong")
         initial_pheno = phenotype_col
         if not initial_pheno:
             current_scores = all_score_mode_data.get('modes', {}).get(current_mode, {})
@@ -15322,7 +15357,7 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
     <h1>Haplotype Score vs Phenotype — {gene_label}</h1>
     <div class="header-info" id="header-info">R² = {score_results.get('r_squared', 'N/A')} | p = {score_results.get('regression_pvalue', 'N/A')}</div>
 </div>
-<div class="mode-status" id="mode-status"><strong>Score mode:</strong> Robust discovery</div>
+<div class="mode-status" id="mode-status">{score_mode_status_html}</div>
 <div class="plot-container"><div id="score-viz"></div></div>
 <div class="stats-area" id="stats"></div>
 <div class="legend-area" id="legend"></div>
@@ -15340,11 +15375,18 @@ function getScoreData(mode, pheno) {{
     return modeScores[pheno] || modeScores[Object.keys(modeScores)[0]] || null;
 }}
 
+function formatScoreModeLabel(mode) {{
+    if (mode === 'default') return 'Original';
+    if (mode === 'robust_discovery') return 'Robust discovery';
+    return mode || 'robust_discovery';
+}}
+
 function updateModeStatus(scoreData) {{
     var status = document.getElementById('mode-status');
     if (status) {{
         var mode = (scoreData && scoreData.score_mode) || currentScoreMode || 'robust_discovery';
-        status.innerHTML = '<strong>Score mode:</strong> ' + mode + ' (robust discovery only)';
+        var current = status.querySelector('.score-mode-current');
+        if (current) current.textContent = formatScoreModeLabel(mode);
     }}
 }}
 
