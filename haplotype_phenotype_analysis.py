@@ -9601,9 +9601,8 @@ class ReportGenerator:
         main_min_width = max(svg_width_for_min, table_width_for_min)
         # GWAS图绘图区域宽度（只包含基因区域，不包含左侧固定列）
         gwas_plot_width = gene_area_width + legend_w_for_min  # 基因区域 + 图例区域
-        # GWAS图左边距（GWAS SVG内部基因区域起始的x坐标，固定86与01b88e0对齐公式一致）
-        # 对齐公式：network_w + 14(margin-left) + 86(gwasLeftMargin) = gene_area_start
-        gwas_left_margin = 86
+        # GWAS图放在主数据区，左边距直接使用基因结构图的基因区域起点，确保纵向一一对应
+        gwas_left_margin = gene_area_start
         gwas_panel_h = 280
         gwas_svg_h = 180
         gwas_mt = 26
@@ -9708,8 +9707,8 @@ class ReportGenerator:
                             transition: all 0.2s; }}
         .network-mode-btn:hover {{ background: #3498db; color: white; }}
         .network-mode-btn.active {{ background: #3498db; color: white; }}
-        /* GWAS面板：14px间距 → left edge = network_w+14，内部ml=86 → gene area起始 = network_w+100 = gene_area_start */
-        .gene-gwas-panel {{ flex: 1; height: {gwas_panel_h}px; margin-left: 14px; border: 1px solid #e0e0e0;
+        .gene-gwas-panel {{ width: {svg_total_width}px; min-width: {svg_total_width}px; height: {gwas_panel_h}px;
+                           margin: 0 0 10px 0; border: 1px solid #e0e0e0;
                            border-radius: 6px; background: #fafafa; position: relative; }}
         .gene-gwas-title {{ position: absolute; top: 8px; left: 10px;
                            font-size: 12px; font-weight: 600; color: #2c3e50;
@@ -10001,7 +10000,6 @@ class ReportGenerator:
             <button class="report-sidebar-tab" data-component="score" onclick="chooseReportComponent('score')"><b>Score</b><span>{score_tab_mode_label}</span></button>
             <button class="report-sidebar-tab" data-component="network" onclick="chooseReportComponent('network')"><b>Network</b><span>haplotype graph</span></button>
             <button class="report-sidebar-tab" data-component="ld" onclick="chooseReportComponent('ld')"><b>LD</b><span>triangle heatmap</span></button>
-            <button class="report-sidebar-tab" data-component="gwas" onclick="chooseReportComponent('gwas')"><b>GWAS</b><span>P-value view</span></button>
             <button class="report-sidebar-tab" data-component="audit" onclick="chooseReportComponent('audit')"><b>Audit</b><span>candidate evidence</span></button>
         </div>
         <div class="report-sidebar-body">
@@ -10078,7 +10076,6 @@ class ReportGenerator:
             <section class="report-component-panel" id="component-score"><div id="score-side-slot" class="report-component-slot"></div></section>
             <section class="report-component-panel" id="component-network"><div id="network-side-slot" class="report-component-slot"></div></section>
             <section class="report-component-panel" id="component-ld"><div id="ld-side-slot" class="report-component-slot"></div></section>
-            <section class="report-component-panel" id="component-gwas"><div id="gwas-side-slot" class="report-component-slot"></div></section>
             <section class="report-component-panel" id="component-audit"><div id="audit-side-slot" class="report-component-slot"></div></section>
         </div>
     </aside>
@@ -10162,21 +10159,21 @@ class ReportGenerator:
                 </details>
             </section>
 
-            <!-- 顶部区域：网络图 + GWAS/基因结构图 -->
+            <!-- 顶部区域：网络图会在 workbench 模式移入右侧栏 -->
             <div class="top-section">
                 <div class="network-panel" id="network-panel-workbench">
                     <div class="network-panel-title">Haplotype Network <span style="font-size:11px;color:#888;">| Click node to copy samples</span></div>
                     <button id="networkModeBtn" class="network-mode-btn" onclick="toggleNetworkMode()">Copy Mode</button>
                     <div id="network-viz" style="width:100%;height:100%;"></div>
                 </div>
+            </div>
+
+            <!-- 主数据区：GWAS P值图、基因结构、效应图、箱线图、单倍型序列共用横向坐标 -->
+            <div class="main-data-section">
                 <div class="gene-gwas-panel" id="gene-gwas-panel-workbench">
                     <div class="gene-gwas-title">GWAS P-values</div>
                     <div id="gwas-gene-viz" style="width:100%;height:100%;"></div>
                 </div>
-            </div>
-            
-            <!-- 下方区域：原有的效应图、箱线图、单倍型序列 -->
-            <div class="main-data-section">
 '''
         
         # SVG 基因结构图和连线（参照老师指定样式）
@@ -10712,11 +10709,9 @@ function stageReportComponents() {
     moveElementToSlot('post-gwas-evidence', 'audit-side-slot');
     moveElementToSlot('haplotype-score-panel', 'score-side-slot');
     moveElementToSlot('network-panel-workbench', 'network-side-slot');
-    moveElementToSlot('gene-gwas-panel-workbench', 'gwas-side-slot');
     moveElementToSlot('ld-right-panel-workbench', 'ld-side-slot');
 
     moveFirstMatchToSlot('.network-panel', 'network-side-slot');
-    moveFirstMatchToSlot('.gene-gwas-panel', 'gwas-side-slot');
     moveFirstMatchToSlot('.ld-right-panel', 'ld-side-slot');
 
     var topSection = document.querySelector('.top-section');
@@ -10736,7 +10731,6 @@ function chooseReportComponent(name) {
     setTimeout(function() {
         if (name === 'score') drawHaplotypeScorePlot(haplotypeScoreData);
         if (name === 'network') drawNetworkPlot();
-        if (name === 'gwas') drawGWASPlot(gwasData);
         if (name === 'ld') drawLDTriangle();
         updateConnectorLines();
     }, 80);

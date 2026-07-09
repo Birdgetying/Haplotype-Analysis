@@ -1811,6 +1811,26 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertNotIn('id="mode-btn-default"', integrated_block)
         self.assertNotIn('id="mode-btn-robust_discovery"', integrated_block)
 
+    def test_integrated_report_keeps_gwas_aligned_above_gene_structure_in_main_view(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        main_idx = integrated_block.index('<div class="main-data-section">')
+        gwas_idx = integrated_block.index('id="gene-gwas-panel-workbench"')
+        gene_svg_idx = integrated_block.index('gene-structure-svg')
+
+        self.assertLess(main_idx, gwas_idx)
+        self.assertLess(gwas_idx, gene_svg_idx)
+        self.assertIn("gwas_left_margin = gene_area_start", integrated_block)
+        self.assertNotIn('data-component="gwas"', integrated_block)
+        self.assertNotIn('id="component-gwas"', integrated_block)
+        self.assertNotIn('id="gwas-side-slot"', integrated_block)
+        self.assertNotIn("moveElementToSlot('gene-gwas-panel-workbench', 'gwas-side-slot')", integrated_block)
+        self.assertNotIn("moveFirstMatchToSlot('.gene-gwas-panel', 'gwas-side-slot')", integrated_block)
+
     def test_integrated_report_constrains_horizontal_overflow_to_content_pane(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
