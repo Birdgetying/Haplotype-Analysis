@@ -8123,7 +8123,7 @@ class ReportGenerator:
         return mode_data
 
     def _collect_score_mode_data(self, all_score_data: dict = None) -> dict:
-        """Collect current and sibling default/robust score JSON for HTML toggles."""
+        """Collect the current score JSON for robust-only HTML reports."""
         current_scores = _json_safe(all_score_data or self._cached_all_haplotype_scores or {})
         configured_mode = getattr(self, 'score_mode', None)
         inferred_mode = None
@@ -8138,24 +8138,6 @@ class ReportGenerator:
             inferred_mode = 'robust_discovery'
         current_mode = inferred_mode or configured_mode or 'default'
         mode_data = {current_mode: current_scores}
-
-        parent = os.path.dirname(out_dir)
-        if base_name.endswith('__robust_discovery'):
-            sibling_names = {'default': base_name[:-len('__robust_discovery')]}
-        else:
-            sibling_names = {'robust_discovery': base_name + '__robust_discovery'}
-
-        for mode, sibling_name in sibling_names.items():
-            if mode in mode_data:
-                continue
-            score_path = os.path.join(parent, sibling_name, 'haplotype_scores.json')
-            if not os.path.exists(score_path):
-                continue
-            try:
-                with open(score_path, 'r', encoding='utf-8') as f:
-                    mode_data[mode] = _json_safe(json.load(f))
-            except Exception as e:
-                print(f"[WARNING] Failed to load {mode} score mode data from {score_path}: {e}")
 
         mode_data = self._add_score_plot_display_metadata(mode_data)
         return {
@@ -9828,18 +9810,14 @@ class ReportGenerator:
         .score-legend-item {{ display: flex; align-items: center; gap: 4px; }}
         .score-legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
         .score-stats {{ font-size: 10px; color: #555; padding: 2px 12px; }}
-        .score-mode-controls {{ display: flex; align-items: center; gap: 6px; padding: 6px 12px 4px; border-bottom: 1px solid #e8e8e8; flex-wrap: wrap; }}
+        .score-mode-status {{ display: block; padding: 6px 12px 4px; border-bottom: 1px solid #e8e8e8; font-size: 10px; color: #667085; }}
         .score-mode-label {{ font-size: 10px; color: #666; font-weight: 600; }}
-        .mode-toggle-btn {{ padding: 4px 10px; border: 1px solid #d8dde3; border-radius: 4px; background: white; color: #4a5568; cursor: pointer; font-size: 10px; }}
-        .mode-toggle-btn:hover:not(:disabled) {{ border-color: #3498db; color: #2475a8; }}
-        .mode-toggle-btn.active {{ background: #3498db; border-color: #3498db; color: white; }}
-        .mode-toggle-btn:disabled {{ background: #f3f4f6; color: #a0a7b0; cursor: not-allowed; }}
-        .score-mode-status {{ font-size: 10px; color: #777; }}
         .ld-right-panel {{ flex: 1; overflow: visible; }}
         .footer {{ background: #f8f9fa; padding: 10px 20px; border-top: 1px solid #e8e8e8;
                   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
                   border-radius: 0 0 10px 10px; }}
-        .base-legend {{ display: flex; gap: 12px; }}
+        .footer > * {{ min-width: 0; }}
+        .base-legend {{ display: flex; flex-wrap: wrap; gap: 12px; }}
         .base-legend-item {{ display: flex; align-items: center; gap: 4px; font-size: 11px; }}
         .base-box {{ width: 18px; height: 18px; border-radius: 3px; display: flex;
                     align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 11px; }}
@@ -9884,20 +9862,22 @@ class ReportGenerator:
         .pheno-selector select:focus {{ outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52,152,219,0.2); }}
         /* Workbench layout: keep gene structure and haplotype sequence as the main view.
            Existing panels are moved into the right sidebar at runtime so their JS ids/functions remain intact. */
+        html, body {{ width: 100%; max-width: 100%; margin: 0; overflow: hidden; }}
         body {{ background: #071017; padding: 0; overflow: hidden; color: #e5edf5; }}
-        .report-shell {{ height: 100vh; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }}
-        .container {{ width: 100%; height: 100vh; margin: 0; border-radius: 0; box-shadow: none; background: #071017; }}
+        .report-shell {{ width: 100%; max-width: 100vw; height: 100vh; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }}
+        .container {{ width: 100%; max-width: 100vw; height: 100vh; margin: 0; border-radius: 0; box-shadow: none; background: #071017; overflow: hidden; }}
         .header {{ min-height: 44px; padding: 0 16px; border-radius: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
                   background: rgba(7,16,23,0.94); border-bottom: 1px solid rgba(148,163,184,0.22); }}
+        .header > div {{ min-width: 0; }}
         .header h1 {{ margin: 0; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
         .header-info {{ display: none; }}
         .sidebar-open-btn {{ width: 36px; height: 32px; border: 1px solid rgba(34,211,238,0.45); border-radius: 8px;
                             background: #0f1c27; color: #dff8ff; cursor: pointer; font-size: 18px; line-height: 1; }}
         .sidebar-open-btn:hover {{ border-color: #22d3ee; }}
-        .content-wrapper {{ overflow: auto; height: calc(100vh - 44px); max-height: none; background: #071017; }}
+        .content-wrapper {{ min-width: 0; overflow: auto; height: calc(100vh - 44px); max-height: none; background: #071017; }}
         .content {{ padding: 12px; }}
         .integrated-view {{ gap: 10px; }}
-        .main-data-section {{ border: 1px solid rgba(148,163,184,0.22); border-radius: 8px; background: #0d1720; overflow: auto; padding: 10px; }}
+        .main-data-section {{ max-width: 100%; overflow: auto; border: 1px solid rgba(148,163,184,0.22); border-radius: 8px; background: #0d1720; padding: 10px; }}
         .top-section.workbench-staged {{ display: none; }}
         .report-sidebar {{ position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 92vw); z-index: 9000;
                            display: grid; grid-template-rows: 44px auto 1fr; background: #0b141e;
@@ -9924,7 +9904,7 @@ class ReportGenerator:
         .report-sidebar .pheno-selector,
         .report-sidebar .filter-panel,
         .report-sidebar .zoom-controls {{ display: flex; margin: 0 0 8px 0; padding: 10px; border: 1px solid rgba(148,163,184,0.18);
-                                        border-radius: 8px; background: #101b27; color: #dbeafe; }}
+                                        border-radius: 8px; background: #101b27; color: #dbeafe; max-width: 100%; box-sizing: border-box; }}
         .report-sidebar .filter-panel {{ flex-direction: column; align-items: stretch; gap: 10px; }}
         .report-sidebar .filter-group {{ flex-wrap: wrap; }}
         .report-sidebar .filter-group label {{ color: #cbd5e1; }}
@@ -9997,7 +9977,7 @@ class ReportGenerator:
         </div>
         <div class="report-sidebar-tabs">
             <button class="report-sidebar-tab active" data-component="filters" onclick="chooseReportComponent('filters')"><b>Filters</b><span>zoom, MAF, type</span></button>
-            <button class="report-sidebar-tab" data-component="score" onclick="chooseReportComponent('score')"><b>Score</b><span>original / robust</span></button>
+            <button class="report-sidebar-tab" data-component="score" onclick="chooseReportComponent('score')"><b>Score</b><span>Robust discovery</span></button>
             <button class="report-sidebar-tab" data-component="network" onclick="chooseReportComponent('network')"><b>Network</b><span>haplotype graph</span></button>
             <button class="report-sidebar-tab" data-component="ld" onclick="chooseReportComponent('ld')"><b>LD</b><span>triangle heatmap</span></button>
             <button class="report-sidebar-tab" data-component="gwas" onclick="chooseReportComponent('gwas')"><b>GWAS</b><span>P-value view</span></button>
@@ -10609,12 +10589,7 @@ class ReportGenerator:
 	<div class="score-section">
 	    <div class="score-panel" id="haplotype-score-panel">
 	        <div class="score-title">Haplotype Score vs Phenotype</div>
-	        <div class="score-mode-controls">
-	            <span class="score-mode-label">Score mode:</span>
-	            <button id="mode-btn-default" class="mode-toggle-btn" onclick="switchScoreMode('default')">Original</button>
-	            <button id="mode-btn-robust_discovery" class="mode-toggle-btn" onclick="switchScoreMode('robust_discovery')">Robust</button>
-	            <span id="score-mode-status" class="score-mode-status"></span>
-	        </div>
+	        <div id="score-mode-status" class="score-mode-status"><span class="score-mode-label">Score mode:</span> Robust discovery</div>
 	        <div id="score-scatter-viz" style="width:100%;height:330px;"></div>
 	        <div class="score-stats" id="score-stats"></div>
 	        <div class="score-legend" id="score-legend"></div>
@@ -10857,7 +10832,7 @@ var regionEnd    = {region_end};
 var allHaplotypeScoreData = {haplotype_score_json};
 var allScoreModeData = {score_mode_json};
 var allDiscoveryCandidatePanelData = {discovery_candidate_panel_json};
-var currentScoreMode = allScoreModeData.current_mode || 'default';
+var currentScoreMode = allScoreModeData.current_mode || 'robust_discovery';
 var currentPhenotype = {pheno_first_for_js};
 var haplotypeScoreData = getScoreData(currentScoreMode, currentPhenotype);
 var geneStart    = {gene_start};
@@ -10901,18 +10876,6 @@ function getScoreData(mode, pheno) {{
     return modeScores[pheno] || modeScores[Object.keys(modeScores)[0]] || null;
 }}
 
-function switchScoreMode(mode) {{
-    if (!allScoreModeData || !allScoreModeData.modes || !allScoreModeData.modes[mode]) return;
-    currentScoreMode = mode;
-    var selectedScoreData = getScoreData(currentScoreMode, currentPhenotype);
-    if (selectedScoreData) {{
-        haplotypeScoreData = selectedScoreData;
-        drawHaplotypeScorePlot(haplotypeScoreData);
-    }}
-    updateDiscoveryCandidatePanels();
-    updateScoreModeControls();
-}}
-
 function getDiscoveryCandidatePanel(mode, pheno) {{
     var modePanels = (allDiscoveryCandidatePanelData && allDiscoveryCandidatePanelData.modes) ? allDiscoveryCandidatePanelData.modes[mode] : null;
     if (!modePanels) return null;
@@ -10945,19 +10908,11 @@ function highlightKeySiteColumns(panel) {{
     }});
 }}
 
-function updateScoreModeControls() {{
-    ['default', 'robust_discovery'].forEach(function(mode) {{
-        var btn = document.getElementById('mode-btn-' + mode);
-        if (!btn) return;
-        var available = !!(allScoreModeData && allScoreModeData.modes && allScoreModeData.modes[mode]);
-        btn.disabled = !available;
-        btn.classList.toggle('active', mode === currentScoreMode);
-        btn.title = available ? ('Show ' + mode + ' scoring') : ('Run ' + mode + ' mode to enable this comparison');
-    }});
+function updateScoreModeStatus(scoreData) {{
     var status = document.getElementById('score-mode-status');
     if (status) {{
-        var availableModes = allScoreModeData && allScoreModeData.modes ? Object.keys(allScoreModeData.modes) : [];
-        status.textContent = availableModes.length > 1 ? 'Switch updates score plot and candidate panels.' : 'Other mode unavailable.';
+        var mode = (scoreData && scoreData.score_mode) || currentScoreMode || 'robust_discovery';
+        status.innerHTML = '<span class="score-mode-label">Score mode:</span> ' + mode + ' (robust discovery only)';
     }}
 }}
 
@@ -12141,7 +12096,7 @@ function drawGWASPlot(data) {
 function drawHaplotypeScorePlot(scoreData) {
     if (!scoreData || !scoreData.per_sample || scoreData.per_sample.length === 0) {
         console.log('[ScorePlot] No score data available, skipping');
-        updateScoreModeControls();
+        updateScoreModeStatus(scoreData);
         return;
     }
 
@@ -12168,7 +12123,7 @@ function drawHaplotypeScorePlot(scoreData) {
         updateScoreLegend(scoreData, {});
         updateScoreStats(scoreData);
         updateScoreTitle(scoreData);
-        updateScoreModeControls();
+        updateScoreModeStatus(scoreData);
         return;
     }
     var margin = {{top: 18, right: 24, bottom: 38, left: 48}};
@@ -12341,7 +12296,7 @@ function drawHaplotypeScorePlot(scoreData) {
     updateScoreLegend(scoreData, hapColor);
     updateScoreStats(scoreData);
     updateScoreTitle(scoreData);
-    updateScoreModeControls();
+    updateScoreModeStatus(scoreData);
 }
 
 function updateScoreLegend(scoreData, hapColor) {
@@ -15356,13 +15311,8 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
 .legend-item {{ display: flex; align-items: center; gap: 4px; }}
 .legend-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
 .stats-area {{ padding: 8px 20px 16px; font-size: 11px; color: #555; }}
-.mode-switch {{ display: flex; align-items: center; gap: 8px; padding: 12px 20px 0; font-size: 11px; }}
-.mode-switch-label {{ color: #555; font-weight: 600; }}
-.mode-toggle-btn {{ padding: 5px 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff; color: #555; cursor: pointer; font-size: 11px; }}
-.mode-toggle-btn:hover:not(:disabled) {{ border-color: #d35400; color: #d35400; }}
-.mode-toggle-btn.active {{ background: #d35400; border-color: #d35400; color: #fff; }}
-.mode-toggle-btn:disabled {{ background: #f2f2f2; color: #aaa; cursor: not-allowed; }}
-.mode-status {{ color: #777; }}
+.mode-status {{ padding: 12px 20px 0; color: #667085; font-size: 11px; }}
+.mode-status strong {{ color: #344054; }}
 .tooltip {{ position: fixed; background: rgba(44,62,80,0.92); color: #fff; padding: 7px 11px; border-radius: 5px; font-size: 11px; pointer-events: none; display: none; z-index: 9999; }}
 </style>
 </head>
@@ -15372,12 +15322,7 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
     <h1>Haplotype Score vs Phenotype — {gene_label}</h1>
     <div class="header-info" id="header-info">R² = {score_results.get('r_squared', 'N/A')} | p = {score_results.get('regression_pvalue', 'N/A')}</div>
 </div>
-<div class="mode-switch">
-    <span class="mode-switch-label">Score mode:</span>
-    <button id="mode-btn-default" class="mode-toggle-btn" onclick="switchScoreMode('default')">Original</button>
-    <button id="mode-btn-robust_discovery" class="mode-toggle-btn" onclick="switchScoreMode('robust_discovery')">Robust</button>
-    <span class="mode-status" id="mode-status"></span>
-</div>
+<div class="mode-status" id="mode-status"><strong>Score mode:</strong> Robust discovery</div>
 <div class="plot-container"><div id="score-viz"></div></div>
 <div class="stats-area" id="stats"></div>
 <div class="legend-area" id="legend"></div>
@@ -15386,7 +15331,7 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding
 
 <script>
 var allScoreModeData = {score_mode_json};
-var currentScoreMode = allScoreModeData.current_mode || 'default';
+var currentScoreMode = allScoreModeData.current_mode || 'robust_discovery';
 var currentPhenotype = {json.dumps(initial_pheno)};
 var scoreData = getScoreData(currentScoreMode, currentPhenotype);
 
@@ -15395,27 +15340,12 @@ function getScoreData(mode, pheno) {{
     return modeScores[pheno] || modeScores[Object.keys(modeScores)[0]] || null;
 }}
 
-function updateModeButtons() {{
-    ['default', 'robust_discovery'].forEach(function(mode) {{
-        var btn = document.getElementById('mode-btn-' + mode);
-        if (!btn) return;
-        var available = !!((allScoreModeData.modes || {{}})[mode]);
-        btn.disabled = !available;
-        btn.classList.toggle('active', mode === currentScoreMode);
-        btn.title = available ? ('Show ' + mode + ' scoring') : ('Run ' + mode + ' mode to enable this comparison');
-    }});
+function updateModeStatus(scoreData) {{
     var status = document.getElementById('mode-status');
     if (status) {{
-        var availableModes = Object.keys(allScoreModeData.modes || {{}});
-        status.textContent = availableModes.length > 1 ? 'Switch updates scores, regression, ranking and tooltips.' : 'Other mode is not available yet.';
+        var mode = (scoreData && scoreData.score_mode) || currentScoreMode || 'robust_discovery';
+        status.innerHTML = '<strong>Score mode:</strong> ' + mode + ' (robust discovery only)';
     }}
-}}
-
-function switchScoreMode(mode) {{
-    if (!((allScoreModeData.modes || {{}})[mode])) return;
-    currentScoreMode = mode;
-    scoreData = getScoreData(currentScoreMode, currentPhenotype);
-    renderScorePlot(scoreData);
 }}
 
 function formatMetric(v, digits) {{
@@ -15428,7 +15358,7 @@ var container = d3.select('#score-viz');
 container.selectAll('*').remove();
 if (!scoreData) {{
     container.append('p').style('color','#999').style('text-align','center').style('padding','60px').text('No score data for this mode');
-    updateModeButtons();
+    updateModeStatus(scoreData);
     return;
 }}
 var headerInfo = document.getElementById('header-info');
@@ -15577,7 +15507,7 @@ if (samples.length < 2) {{
     }}
     if (scoreData.circularity_warning) statsText += ' | ⚠ Circularity warning';
     document.getElementById('stats').textContent = statsText;
-    updateModeButtons();
+    updateModeStatus(scoreData);
 }}
 }}
 renderScorePlot(scoreData);

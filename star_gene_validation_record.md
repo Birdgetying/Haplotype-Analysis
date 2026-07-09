@@ -2075,3 +2075,38 @@ The new external-prior support did not break the existing VRN-B1 positive
 control. The highest-scored haplotype still matches the literature `Vrn-B1f`
 837 bp insertion, with the same caveat that this exact insertion group has
 only 3 samples.
+
+### 2026-07-09 robust-only report rendering rerun
+
+Target:
+`VRN-B1-fullSequence-IJMS2021`
+
+Purpose:
+UI/report rerun after deciding that validation conclusions should be read from
+`robust_discovery` only. Literature functional variation was not used as a
+discovery-scoring input.
+
+Command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/VRN-B1-fullSequence-IJMS2021.html`
+
+Report checks:
+
+- Score mode shown in the generated integrated HTML is `robust_discovery`;
+  the previous `Original`/`Default` score-mode switch is removed.
+- Browser check at desktop width found no `Original`/`Default` text or mode
+  buttons, and `allScoreModeData.modes` contains only `robust_discovery`.
+- Browser check at 390 px width: document/body scroll width is 390 px; the
+  long haplotype table scrolls inside `.main-data-section` instead of pushing
+  the whole page.
+
+Validation interpretation:
+This rerun is a report-layout rerun, not a new biological conclusion. The
+previous VRN-B1 positive-control interpretation remains unchanged: the robust
+top haplotype contains the literature `Vrn-B1f` 837 bp insertion, with the
+same small-sample reliability caveat.

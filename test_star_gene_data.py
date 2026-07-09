@@ -1508,7 +1508,7 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertNotIn("pageX", block)
             self.assertNotIn("pageY", block)
 
-    def test_haplotype_score_html_embeds_default_and_robust_modes(self):
+    def test_haplotype_score_html_shows_only_current_robust_mode(self):
         from haplotype_phenotype_analysis import ReportGenerator
 
         def score_bundle(mode, score):
@@ -1547,14 +1547,14 @@ class StarGeneDataTests(unittest.TestCase):
             html = Path(html_path).read_text(encoding="utf-8")
 
             self.assertIn("var allScoreModeData", html)
-            self.assertIn('"default"', html)
             self.assertIn('"robust_discovery"', html)
             self.assertIn('"current_mode": "robust_discovery"', html)
             self.assertIn('"score": 2.0', html)
-            self.assertIn('"score": 1.0', html)
-            self.assertIn("switchScoreMode('default')", html)
-            self.assertIn("switchScoreMode('robust_discovery')", html)
-            self.assertIn("mode-toggle-btn", html)
+            self.assertNotIn('"score": 1.0', html)
+            self.assertNotIn('"default"', html)
+            self.assertNotIn("switchScoreMode('default')", html)
+            self.assertNotIn("switchScoreMode('robust_discovery')", html)
+            self.assertNotIn("mode-toggle-btn", html)
 
     def test_score_plot_display_haplotypes_filter_tiny_groups_and_cap_at_five(self):
         from haplotype_phenotype_analysis import ReportGenerator
@@ -1609,7 +1609,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(5, trait_data["score_plot_policy"]["max_haplotypes"])
         self.assertEqual(sum(hap_counts.values()), len(trait_data["per_sample"]))
 
-    def test_integrated_html_has_score_mode_toggle_wiring(self):
+    def test_integrated_html_shows_robust_only_without_score_mode_toggle(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
         integrated_start = source.index("def generate_integrated_html")
@@ -1617,10 +1617,12 @@ class StarGeneDataTests(unittest.TestCase):
         integrated_block = source[integrated_start:integrated_end]
 
         self.assertIn("var allScoreModeData", integrated_block)
-        self.assertIn("function switchScoreMode", integrated_block)
-        self.assertIn("switchScoreMode('default')", integrated_block)
-        self.assertIn("switchScoreMode('robust_discovery')", integrated_block)
-        self.assertIn("mode-toggle-btn", integrated_block)
+        self.assertIn("currentScoreMode = allScoreModeData.current_mode || 'robust_discovery'", integrated_block)
+        self.assertIn("Robust discovery", integrated_block)
+        self.assertNotIn("switchScoreMode('default')", integrated_block)
+        self.assertNotIn("switchScoreMode('robust_discovery')", integrated_block)
+        self.assertNotIn("mode-toggle-btn", integrated_block)
+        self.assertNotIn("original / robust", integrated_block)
 
     def test_integrated_html_keeps_validation_markers_visible_by_default(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -1716,10 +1718,30 @@ class StarGeneDataTests(unittest.TestCase):
             'id="ld-triangle-canvas"',
             'id="network-viz"',
             'id="networkModeBtn"',
-            'id="mode-btn-default"',
-            'id="mode-btn-robust_discovery"',
         ]:
             self.assertIn(required_id, integrated_block)
+
+        self.assertNotIn('id="mode-btn-default"', integrated_block)
+        self.assertNotIn('id="mode-btn-robust_discovery"', integrated_block)
+
+    def test_integrated_report_constrains_horizontal_overflow_to_content_pane(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("html, body {{ width: 100%; max-width: 100%;", integrated_block)
+        self.assertIn("body {{ background: #071017; padding: 0; overflow: hidden;", integrated_block)
+        self.assertIn(".report-shell {{ width: 100%; max-width: 100vw;", integrated_block)
+        self.assertIn(".container {{ width: 100%; max-width: 100vw;", integrated_block)
+        self.assertIn(".content-wrapper {{ min-width: 0; overflow: auto;", integrated_block)
+        self.assertIn(".main-data-section {{ max-width: 100%; overflow: auto;", integrated_block)
+        self.assertIn(".header > div {{ min-width: 0;", integrated_block)
+        self.assertIn(".base-legend {{ display: flex; flex-wrap: wrap;", integrated_block)
+        self.assertIn(".footer > * {{ min-width: 0;", integrated_block)
+        self.assertIn(".report-sidebar .pheno-selector", integrated_block)
+        self.assertIn("max-width: 100%; box-sizing: border-box;", integrated_block)
 
     def test_integrated_report_keeps_gene_structure_above_sequence_and_connected(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -1900,7 +1922,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("top-hap-key-site", integrated_block)
         self.assertIn("highlightKeySiteColumns", integrated_block)
 
-    def test_integrated_candidate_panels_are_score_mode_and_phenotype_aware(self):
+    def test_integrated_candidate_panels_are_robust_mode_and_phenotype_aware(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
         integrated_start = source.index("def generate_integrated_html")
@@ -1917,12 +1939,9 @@ class StarGeneDataTests(unittest.TestCase):
             integrated_block.index("function switchPhenotype"):
             integrated_block.index("function getScoreData")
         ]
-        score_mode_switch = integrated_block[
-            integrated_block.index("function switchScoreMode"):
-            integrated_block.index("function updateScoreModeControls")
-        ]
         self.assertIn("updateDiscoveryCandidatePanels()", phenotype_switch)
-        self.assertIn("updateDiscoveryCandidatePanels()", score_mode_switch)
+        self.assertIn("getDiscoveryCandidatePanel(currentScoreMode, currentPhenotype)", integrated_block)
+        self.assertNotIn("function switchScoreMode", integrated_block)
         self.assertNotIn("Switch updates score plot only.", integrated_block)
 
     def test_render_discovery_candidate_panels_are_literature_free(self):
