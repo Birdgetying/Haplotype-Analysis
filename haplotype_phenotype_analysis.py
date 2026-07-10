@@ -9928,6 +9928,10 @@ class ReportGenerator:
         .report-sidebar .filter-panel {{ flex-direction: column; align-items: stretch; gap: 10px; }}
         .report-sidebar .filter-group {{ flex-wrap: wrap; }}
         .report-sidebar .filter-group label {{ color: #405066; }}
+        .range-inputs {{ display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }}
+        .range-inputs input {{ width: 92px; padding: 4px 6px; border: 1px solid #cfd8e3; border-radius: 6px; font-size: 11px; }}
+        .range-inputs button {{ padding: 4px 8px; border: 1px solid #cfd8e3; border-radius: 6px; background: #f8fafc; color: #334155; cursor: pointer; }}
+        .range-inputs button:hover {{ background: #eef7ff; border-color: #5aa9e6; }}
         .report-sidebar .zoom-controls {{ flex-wrap: wrap; }}
         .report-sidebar .zoom-controls label,
         .report-sidebar .zoom-controls span {{ color: #405066; }}
@@ -10047,6 +10051,15 @@ class ReportGenerator:
             <span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;">
                 <label><input type="checkbox" class="syn-cb" value="synonymous" checked onchange="applyFilters()"> Synonymous</label>
                 <label><input type="checkbox" class="syn-cb" value="missense" checked onchange="applyFilters()"> Missense</label>
+            </span>
+        </div>
+        <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
+            <label style="width:100%;margin-bottom:4px;">Display Range:</label>
+            <span class="range-inputs">
+                <input type="number" id="rangeStartInput" placeholder="Start" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs()">
+                <span>to</span>
+                <input type="number" id="rangeEndInput" placeholder="End" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs()">
+                <button type="button" onclick="clearRangeFilter()">Clear</button>
             </span>
         </div>
         <span style="border-left:1px solid #ddd;padding-left:12px;margin-left:4px;"></span>
@@ -11012,7 +11025,7 @@ function renderPhenotypeColumn(pheno) {{
 }}
 
 // ==================== 过滤功能 ====================
-var currentFilter = { maf: 0.05, missingRate: 0.2 };
+var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null };
 var manualFilterMode = false;
 var manualBlacklist = new Set();
 var manualFilterHistory = [];
@@ -11119,6 +11132,45 @@ function updateFilterDisplay(type, value) {
     }
 }
 
+function readRangeFilter() {
+    var startInput = document.getElementById('rangeStartInput');
+    var endInput = document.getElementById('rangeEndInput');
+    var start = startInput && startInput.value !== '' ? parseInt(startInput.value, 10) : null;
+    var end = endInput && endInput.value !== '' ? parseInt(endInput.value, 10) : null;
+    if (start !== null && isNaN(start)) start = null;
+    if (end !== null && isNaN(end)) end = null;
+    if (start !== null && end !== null && start > end) {
+        var tmp = start;
+        start = end;
+        end = tmp;
+    }
+    currentFilter.rangeStart = start;
+    currentFilter.rangeEnd = end;
+    return { start: start, end: end };
+}
+
+function inDisplayRange(pos) {
+    var range = readRangeFilter();
+    if (range.start !== null && pos < range.start) return false;
+    if (range.end !== null && pos > range.end) return false;
+    return true;
+}
+
+function updateRangeFilterFromInputs() {
+    readRangeFilter();
+    applyFilters();
+}
+
+function clearRangeFilter() {
+    var rangeStartInput = document.getElementById('rangeStartInput');
+    var rangeEndInput = document.getElementById('rangeEndInput');
+    if (rangeStartInput) rangeStartInput.value = '';
+    if (rangeEndInput) rangeEndInput.value = '';
+    currentFilter.rangeStart = null;
+    currentFilter.rangeEnd = null;
+    applyFilters();
+}
+
 function toggleManualFilter() {
     manualFilterMode = !manualFilterMode;
     var btn = document.getElementById('manualFilterBtn');
@@ -11181,9 +11233,13 @@ function resetFilters() {
     // Reset 时恢复默认参数
     document.getElementById('mafSlider').value     = 0.05;
     document.getElementById('missingSlider').value = 0.2;
-    currentFilter = { maf: 0.05, missingRate: 0.2 };
+    currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null };
     document.getElementById('mafValue').textContent    = '0.05';
     document.getElementById('missingValue').textContent = '0.2';
+    var rangeStartInput = document.getElementById('rangeStartInput');
+    var rangeEndInput = document.getElementById('rangeEndInput');
+    if (rangeStartInput) rangeStartInput.value = '';
+    if (rangeEndInput) rangeEndInput.value = '';
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
@@ -11206,6 +11262,13 @@ window.addEventListener('message', function(ev) {
         currentFilter.missingRate = f.missingRate;
         var mx = document.getElementById('missingSlider');
         if (mx) { mx.value = f.missingRate; document.getElementById('missingValue').textContent = parseFloat(f.missingRate).toFixed(2); }
+    }
+    if (f.rangeStart !== undefined || f.rangeEnd !== undefined) {
+        var rs = document.getElementById('rangeStartInput');
+        var re = document.getElementById('rangeEndInput');
+        if (rs && f.rangeStart !== undefined) rs.value = f.rangeStart == null ? '' : f.rangeStart;
+        if (re && f.rangeEnd !== undefined) re.value = f.rangeEnd == null ? '' : f.rangeEnd;
+        readRangeFilter();
     }
     if (f.annotationEnabled) {
         Object.keys(f.annotationEnabled).forEach(function(k) {
@@ -11600,13 +11663,14 @@ function applyFilters() {
     // 过滤数据（基于MAF、Missing Rate和Annotation）
     var filtered = gwasData.filter(function(d) {
         var priorityPass = isPriorityValidationSite(d);
+        var rangePass = inDisplayRange(d.pos);
         var mafPass = d.maf >= currentFilter.maf;
         var missPass = d.missing_rate <= currentFilter.missingRate;
         var annPass = annAllowed(d);
         var typePass = typeAllowed(d);
         var synPass = synAllowed(d);
         var normAnn = annNorm(d);
-        return priorityPass || (mafPass && missPass && annPass && typePass && synPass);
+        return rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass));
     });
     
     drawGWASPlot(filtered);
@@ -11660,7 +11724,7 @@ function applyFilters() {
         el.style.display = passed ? '' : 'none';
     });
     
-    console.log('[applyFilters] maf=' + currentFilter.maf + ' miss=' + currentFilter.missingRate + ' filtered=' + filtered.length + ' varIndices=' + varIndices.length);
+    console.log('[applyFilters] maf=' + currentFilter.maf + ' miss=' + currentFilter.missingRate + ' range=' + currentFilter.rangeStart + '-' + currentFilter.rangeEnd + ' filtered=' + filtered.length + ' varIndices=' + varIndices.length);
 
     // 同步更新表格：隐藏被过滤的列，重新排列保留的列
     updateTableColumns(varIndices, varPositions);

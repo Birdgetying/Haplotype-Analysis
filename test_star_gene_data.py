@@ -1722,7 +1722,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("diagnostic_marker", integrated_block)
         self.assertIn("functional_marker", integrated_block)
         self.assertIn(
-            "return priorityPass || (mafPass && missPass && annPass && typePass && synPass);",
+            "return rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass));",
             integrated_block,
         )
 
@@ -1810,6 +1810,23 @@ class StarGeneDataTests(unittest.TestCase):
 
         self.assertNotIn('id="mode-btn-default"', integrated_block)
         self.assertNotIn('id="mode-btn-robust_discovery"', integrated_block)
+
+    def test_integrated_report_has_position_range_filter_controls(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn('id="rangeStartInput"', integrated_block)
+        self.assertIn('id="rangeEndInput"', integrated_block)
+        self.assertIn("updateRangeFilterFromInputs()", integrated_block)
+        self.assertIn("function readRangeFilter()", integrated_block)
+        self.assertIn("rangeStartInput.value = ''", integrated_block)
+        self.assertIn("rangeEndInput.value = ''", integrated_block)
+        self.assertIn("rangePass = inDisplayRange(d.pos)", integrated_block)
+        self.assertIn("rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass))", integrated_block)
+        self.assertIn("currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null }", integrated_block)
 
     def test_integrated_report_keeps_gwas_aligned_above_gene_structure_in_main_view(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")

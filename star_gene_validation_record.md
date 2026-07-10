@@ -2227,3 +2227,53 @@ does not call the GWAS sidebar staging helpers, and uses `gwasLeftMargin`
 equal to the gene-structure `data-gene-start`, preserving one-to-one horizontal
 alignment between GWAS markers and the gene structure. Robust-only mode remains
 `["robust_discovery"]`.
+
+### 2026-07-10 robust-only report display-range filter
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. This UI-only rerun preserves the previous biological interpretation:
+`Hap6` carries the literature `Vrn-B1f` 837 bp insertion.
+
+Sample count / reliability:
+n=3 for the exact insertion haplotype; positive-control match remains useful
+but small-sample reliability caveat remains.
+
+Blocked reason:
+None for analysis. Browser automation was not used because Playwright is not
+available in the local Python/Node runtimes; verification used unit tests plus
+generated HTML source checks.
+
+Report/UI check:
+Added a `Display Range` control in the right-sidebar `Filters` panel with
+start/end numeric inputs and a `Clear` button. The selected range is a hard
+viewport for the main sequence/GWAS/LD filtering path: only positions within
+the chosen interval pass into `applyFilters()`, while existing MAF, missing
+rate, annotation, variant-type, CDS, and manual filters continue to combine
+inside that range. Reset and message-based filters clear or update the range.
+Generated HTML contains `rangeStartInput`, `rangeEndInput`, and the range
+filter logic; robust-only mode remains `["robust_discovery"]`.
