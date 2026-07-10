@@ -1827,6 +1827,23 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("rangePass = inDisplayRange(d.pos)", integrated_block)
         self.assertIn("rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass))", integrated_block)
         self.assertIn("currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null }", integrated_block)
+        export_start = integrated_block.index("function prepareReportExportVisuals")
+        export_end = integrated_block.index("function exportSVG", export_start)
+        export_block = integrated_block[export_start:export_end]
+        self.assertIn("applyFilters();", export_block)
+        self.assertNotIn("drawGWASPlot(gwasData);", export_block)
+
+    def test_multi_panel_reset_clears_integrated_display_range(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        multi_start = source.index("def generate_multi_panel_html")
+        multi_end = source.index("def generate_ld_triangle_html", multi_start)
+        multi_block = source[multi_start:multi_end]
+
+        self.assertIn("applyFilters({{ clearRange: true }});", multi_block)
+        self.assertIn("function applyFilters(options)", multi_block)
+        self.assertIn("integratedFilters.rangeStart = null", multi_block)
+        self.assertIn("integratedFilters.rangeEnd = null", multi_block)
 
     def test_integrated_report_keeps_gwas_aligned_above_gene_structure_in_main_view(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")

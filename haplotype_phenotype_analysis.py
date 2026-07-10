@@ -12516,7 +12516,7 @@ function prepareReportExportVisuals() {
     try {
         drawHaplotypeScorePlot(haplotypeScoreData);
         drawNetworkPlot();
-        drawGWASPlot(gwasData);
+        applyFilters();
         drawLDTriangle();
     } finally {
         if (sidebar) sidebar.classList.remove('export-measure');
@@ -14424,10 +14424,10 @@ function resetFilters() {{
     document.getElementById('mafValue').textContent = '0';
     document.getElementById('missingValue').textContent = '1.0';
     document.querySelectorAll('.ann-cb-mp').forEach(cb => {{ cb.checked = true; }});
-    applyFilters();
+    applyFilters({{ clearRange: true }});
 }}
 
-function applyFilters() {{
+function applyFilters(options) {{
     const filteredData = manhattanData.filter(d => {{
         const mafPass = d.maf >= filterState.maf;
         const missingPass = d.missing_rate <= filterState.missingRate;
@@ -14438,13 +14438,18 @@ function applyFilters() {{
     
     const iframe = document.getElementById('integrated-frame');
     if (iframe && iframe.contentWindow) {{
+        const integratedFilters = {{
+            maf: filterState.maf,
+            missingRate: filterState.missingRate,
+            annotationEnabled: getAnnotationEnabledMp()
+        }};
+        if (options && options.clearRange) {{
+            integratedFilters.rangeStart = null;
+            integratedFilters.rangeEnd = null;
+        }}
         iframe.contentWindow.postMessage({{
             type: 'filter',
-            filters: {{
-                maf: filterState.maf,
-                missingRate: filterState.missingRate,
-                annotationEnabled: getAnnotationEnabledMp()
-            }}
+            filters: integratedFilters
         }}, '*');
     }}
 }}

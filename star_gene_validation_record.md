@@ -2277,3 +2277,50 @@ rate, annotation, variant-type, CDS, and manual filters continue to combine
 inside that range. Reset and message-based filters clear or update the range.
 Generated HTML contains `rangeStartInput`, `rangeEndInput`, and the range
 filter logic; robust-only mode remains `["robust_discovery"]`.
+
+### 2026-07-10 display-range review fixes
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. This UI-only rerun preserves the previous biological interpretation:
+`Hap6` carries the literature `Vrn-B1f` 837 bp insertion.
+
+Sample count / reliability:
+n=3 for the exact insertion haplotype; positive-control match remains useful
+but small-sample reliability caveat remains.
+
+Blocked reason:
+None for analysis. Browser automation was not used because Playwright is not
+available in the local Python/Node runtimes; verification used unit tests,
+regeneration, and generated HTML source checks.
+
+Report/UI check:
+Code review found two important Display Range edge cases. Export/print now
+reuse `applyFilters()` so the exported GWAS/LD views preserve the active hard
+display range instead of redrawing all markers. The outer multi-panel Reset now
+sends `rangeStart: null` and `rangeEnd: null` to the integrated report iframe,
+so a range selected inside the large figure is cleared consistently on reset.
