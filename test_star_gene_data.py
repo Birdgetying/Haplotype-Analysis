@@ -1793,6 +1793,58 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn('<span>50</span>', html)
         self.assertIn('<span>150</span>', html)
 
+    def test_integrated_html_initializes_a_neutral_25_variant_window(self):
+        from haplotype_phenotype_analysis import ReportGenerator
+
+        positions = list(range(1, 41))
+        variant_info = {
+            pos: {"ref": "A", "alt": "G", "annotation": "base_snp"}
+            for pos in positions
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            df = pd.DataFrame({
+                "SampleID": ["S1", "S2", "S3", "S4"],
+                "Hap_Name": ["Hap1", "Hap1", "Hap2", "Hap2"],
+                "Haplotype_Seq": [
+                    "|".join(["A"] * 40),
+                    "|".join(["A"] * 40),
+                    "|".join(["G"] * 40),
+                    "|".join(["G"] * 40),
+                ],
+                "Trait": [10.0, 11.0, 20.0, 21.0],
+            })
+            generator = ReportGenerator(output_dir=tmp)
+            generator.generate_integrated_html(
+                hap_sample_df=df,
+                effect_results={"grand_mean": 15.5, "haplotype_effects": []},
+                variant_positions=positions,
+                region_start=1,
+                region_end=40,
+                phenotype_col="Trait",
+                gene_start=1,
+                gene_end=40,
+                promoter_start=1,
+                promoter_end=0,
+                chrom="chr1",
+                gene_id="GeneX",
+                variant_info=variant_info,
+                variant_pvalues={pos: 0.5 for pos in positions},
+                snp_effects={pos: "base_snp" for pos in positions},
+            )
+            html = (Path(tmp) / "GeneX.html").read_text(encoding="utf-8")
+
+        self.assertIn('var initialDisplayRange = {"start": 8, "end": 32};', html)
+        self.assertIn(
+            "var currentFilter = { maf: 0.05, missingRate: 0.2, "
+            "rangeStart: initialDisplayRange.start, rangeEnd: initialDisplayRange.end };",
+            html,
+        )
+        self.assertIn(
+            "var pendingRangeFilter = { start: initialDisplayRange.start, "
+            "end: initialDisplayRange.end };",
+            html,
+        )
+
     def test_integrated_html_keeps_validation_markers_visible_by_default(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
@@ -1917,7 +1969,11 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("function syncRangeControls(range, preserveInputs)", integrated_block)
         self.assertIn("function updateRangeFilterFromSliders(changedHandle)", integrated_block)
         self.assertIn("function activateRangeHandle(handle)", integrated_block)
-        self.assertIn("var pendingRangeFilter = { start: null, end: null };", integrated_block)
+        self.assertIn("var initialDisplayRange = {initial_display_range_json};", integrated_block)
+        self.assertIn(
+            "var pendingRangeFilter = { start: initialDisplayRange.start, end: initialDisplayRange.end };",
+            integrated_block,
+        )
         self.assertIn("function updateRangePendingState()", integrated_block)
         self.assertIn("function setPendingRangeFilter(range, preserveInputs)", integrated_block)
         self.assertIn("function commitRangeFilter()", integrated_block)
@@ -1942,6 +1998,8 @@ class StarGeneDataTests(unittest.TestCase):
         commit_end = integrated_block.find("\nfunction ", commit_start + 1)
         commit_block = integrated_block[commit_start:commit_end]
         self.assertEqual(commit_block.count("applyFilters();"), 1)
+        self.assertIn("canonicalizeRangeFilter(pendingRangeFilter)", commit_block)
+        self.assertNotIn("canonicalizeRangeFilter(readRangeFilter())", commit_block)
         message_start = integrated_block.index("window.addEventListener('message'")
         message_end = integrated_block.index("function scheduleConnectorRedraw", message_start)
         message_block = integrated_block[message_start:message_end]
@@ -1959,7 +2017,9 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("rangeEndInput.value = ''", integrated_block)
         self.assertIn("rangePass = inDisplayRange(d.pos)", integrated_block)
         self.assertIn("rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass))", integrated_block)
-        self.assertIn("currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null }", integrated_block)
+        self.assertIn("rangeStart: initialDisplayRange.start", integrated_block)
+        self.assertIn("rangeEnd: initialDisplayRange.end", integrated_block)
+        self.assertIn("setPendingRangeFilter(initialDisplayRange);", integrated_block)
         export_start = integrated_block.index("function prepareReportExportVisuals")
         export_end = integrated_block.index("function exportSVG", export_start)
         export_block = integrated_block[export_start:export_end]
@@ -2021,6 +2081,7 @@ class StarGeneDataTests(unittest.TestCase):
             "updateRangeFilterFromSliders",
             "clearRangeFilter",
             "commitRangeFilter",
+            "resetFilters",
             "scheduleLDTriangleRedraw",
         ])
         script = functions + r"""
@@ -2038,6 +2099,10 @@ assertEqual(chooseRangeHandle(50, 50, 50, 'start'), 'end', 'overlap exact toggle
 assertEqual(resolveDraggedRange('start', 60, 50, 55), {start: 55, end: 55}, 'start cannot cross end');
 assertEqual(resolveDraggedRange('end', 40, 50, 55), {start: 50, end: 50}, 'end cannot cross start');
 var elements = {
+    mafSlider: { value: '0.05' },
+    missingSlider: { value: '0.2' },
+    mafValue: { textContent: '0.05' },
+    missingValue: { textContent: '0.2' },
     rangeStartInput: { value: '', min: '1', max: '101' },
     rangeEndInput: { value: '', min: '1', max: '101' },
     rangeStartSlider: { value: '1', min: '1', max: '101', style: {}, setAttribute: function() {} },
@@ -2047,9 +2112,18 @@ var elements = {
     rangeApplyBtn: { disabled: true },
     rangePendingStatus: { hidden: true }
 };
-var document = { getElementById: function(id) { return elements[id] || null; } };
-var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null };
-var pendingRangeFilter = { start: null, end: null };
+var document = {
+    getElementById: function(id) { return elements[id] || null; },
+    querySelectorAll: function() { return []; }
+};
+var initialDisplayRange = {start: 10, end: 90};
+var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: 10, rangeEnd: 90 };
+var pendingRangeFilter = { start: 10, end: 90 };
+var manualBlacklist = new Set();
+var manualFilterHistory = [];
+var manualFilterMode = false;
+function updateUndoButton() {}
+function toggleManualFilter() {}
 var applyCount = 0;
 function applyFilters() { applyCount += 1; }
 
@@ -2059,7 +2133,7 @@ assertEqual(elements.rangeStartInput.value, '1', 'number typing preserves a boun
 elements.rangeStartInput.value = '20';
 updateRangeFilterFromInputs('start');
 assertEqual(applyCount, 0, 'number edit stays pending');
-assertEqual(currentFilter.rangeStart, null, 'number edit leaves applied start unchanged');
+assertEqual(currentFilter.rangeStart, 10, 'number edit leaves applied start unchanged');
 assertEqual(elements.rangeApplyBtn.disabled, false, 'pending edit enables apply');
 commitRangeFilter();
 assertEqual(applyCount, 1, 'changed range applies once');
@@ -2080,6 +2154,26 @@ updateRangeFilterFromSliders('start');
 assertEqual(applyCount, 2, 'slider edit stays pending');
 commitRangeFilter();
 assertEqual(applyCount, 3, 'slider range applies on explicit commit');
+elements.rangeEndInput.value = '80';
+updateRangeFilterFromInputs('end');
+elements.rangeStartInput.value = '90';
+updateRangeFilterFromInputs('start');
+assertEqual(pendingRangeFilter, {start: 80, end: 80}, 'crossed input preview');
+commitRangeFilter();
+assertEqual(
+    {start: currentFilter.rangeStart, end: currentFilter.rangeEnd},
+    {start: 80, end: 80},
+    'commit uses pending preview'
+);
+resetFilters();
+assertEqual(applyCount, 5, 'reset applies once');
+assertEqual(
+    {start: currentFilter.rangeStart, end: currentFilter.rangeEnd},
+    initialDisplayRange,
+    'reset restores generated initial window'
+);
+assertEqual(pendingRangeFilter, initialDisplayRange, 'reset synchronizes pending range');
+assertEqual(elements.rangeApplyBtn.disabled, true, 'reset leaves no pending change');
 var clearedTimers = [];
 var nextTimer = 0;
 var ldRedrawTimer = null;

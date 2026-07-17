@@ -9631,6 +9631,18 @@ class ReportGenerator:
         
         # 计算SVG宽度（与基因结构图对齐，使用相同的变量体系）
         n_vars = len(display_positions)
+        initial_range_start, initial_range_end = _select_initial_display_range(
+            display_positions,
+            region_start,
+            region_end,
+            g_start,
+            g_end,
+            max_variants=25,
+        )
+        initial_display_range_json = _script_json_dumps({
+            'start': initial_range_start,
+            'end': initial_range_end,
+        })
 
         # 协变量列已移除——所有表型通过下拉框切换，仅显示当前选中表型的一列箱线图
         n_cov_cols = 0
@@ -10964,6 +10976,7 @@ var leadVariantPos = __LEAD_POS__;
 var exonRegions = __EXON_REGIONS__;
 var geneLabelText = __GENE_LABEL__;
 var displayPositions = __DISPLAY_POSITIONS__;  // 显示的变异位置列表
+var initialDisplayRange = {initial_display_range_json};
 var ldR2Matrix = __LD_R2_MATRIX__;
 var allPhenotypeData = {all_pheno_data_for_js};
 var allPhenoNames = {all_pheno_names_json};
@@ -11114,11 +11127,11 @@ function renderPhenotypeColumn(pheno) {{
 }}
 
 // ==================== 过滤功能 ====================
-var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null };
+var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: initialDisplayRange.start, rangeEnd: initialDisplayRange.end };
 var manualFilterMode = false;
 var manualBlacklist = new Set();
 var manualFilterHistory = [];
-var pendingRangeFilter = { start: null, end: null };
+var pendingRangeFilter = { start: initialDisplayRange.start, end: initialDisplayRange.end };
 var activeRangeHandle = 'start';
 var rangePointerState = { pointerId: null, handle: null, overlapValue: null };
 var connectorRedrawFrame = null;
@@ -11494,7 +11507,7 @@ function clearRangeFilter() {
 }
 
 function commitRangeFilter() {
-    var nextRange = canonicalizeRangeFilter(readRangeFilter());
+    var nextRange = canonicalizeRangeFilter(pendingRangeFilter);
     var appliedRange = canonicalizeRangeFilter(currentFilter);
     setPendingRangeFilter(nextRange);
     if (rangeFiltersEqual(nextRange, appliedRange)) return;
@@ -11566,14 +11579,19 @@ function resetFilters() {
     // Reset 时恢复默认参数
     document.getElementById('mafSlider').value     = 0.05;
     document.getElementById('missingSlider').value = 0.2;
-    currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null };
+    currentFilter = {
+        maf: 0.05,
+        missingRate: 0.2,
+        rangeStart: initialDisplayRange.start,
+        rangeEnd: initialDisplayRange.end
+    };
     document.getElementById('mafValue').textContent    = '0.05';
     document.getElementById('missingValue').textContent = '0.2';
     var rangeStartInput = document.getElementById('rangeStartInput');
     var rangeEndInput = document.getElementById('rangeEndInput');
     if (rangeStartInput) rangeStartInput.value = '';
     if (rangeEndInput) rangeEndInput.value = '';
-    setPendingRangeFilter({ start: null, end: null });
+    setPendingRangeFilter(initialDisplayRange);
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
@@ -12924,6 +12942,7 @@ document.addEventListener('DOMContentLoaded', function() {
     drawGWASPlot(gwasData);
     drawHaplotypeScorePlot(haplotypeScoreData);
     updateDiscoveryCandidatePanels();
+    setPendingRangeFilter(initialDisplayRange);
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
     // 初始化LD倒三角图
@@ -13014,6 +13033,7 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{region_end}',         str(region_end))
         html = html.replace('{gene_start}',         str(g_start))
         html = html.replace('{gene_end}',           str(g_end))
+        html = html.replace('{initial_display_range_json}', initial_display_range_json)
         html = html.replace('{svg_total_width}',    str(svg_total_width))
         html = html.replace('{gene_area_width_js}', str(gene_area_width))
         html = html.replace('{gwas_plot_width}',    str(gwas_plot_width))
