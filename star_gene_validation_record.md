@@ -2385,3 +2385,69 @@ dragging left and right; Clear reset; crossed numeric-input clamping; selected
 track/label synchronization; and no page-level JavaScript errors. Playwright
 and its Firefox runtime were installed under the Windows temporary directory,
 not added to project dependencies.
+
+### 2026-07-17 explicit display-range apply
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by diagnostic marker
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at alignment position `13,077`.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database
+with 102 samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. Direct post-run database verification maps the literature marker to
+variant index 251 and confirms that `Hap6` carries the 837 bp inserted sequence
+rather than the `DEL_837` allele. The literature marker remains post-hoc audit
+evidence and was not used as a discovery-scoring feature.
+
+Sample count / reliability:
+`Hap6` has n=3. The exact positive-control match is preserved, but the
+small-sample reliability limitation remains.
+
+Blocked reason:
+None for analysis or UI verification. The manifest still reports a missing
+optional WatSeq phenotype table, while the complete precomputed database
+provides the 102-sample `GrowthHabitSpringScore` analysis input.
+
+Report/UI check:
+Display-range slider movement, numeric edits, and Clear now update only the
+pending range, selected-track fill, numeric controls, and range label. They do
+not call `applyFilters()`. The report shows `Unapplied changes`; only the
+explicit `Apply Range` button commits `currentFilter.rangeStart/rangeEnd` and
+redraws GWAS, gene structure, sequence, connectors, and LD. The button is
+disabled when pending and applied ranges are equal. Scientific outputs are
+unchanged by this report-interaction rerun.
+
+Browser verification:
+Generated local HTML passed Playwright checks in Microsoft Edge Chromium and
+Playwright Firefox. In both browsers, apply-call counts stayed at zero during
+and after slider dragging; the first Apply Range click changed the count to
+one. Numeric input and Clear did not increase the count; applying the cleared
+full range changed it to two. Both browsers ended with `rangeStart=null`,
+`rangeEnd=null`, a disabled Apply Range button, and no page-level JavaScript or
+console errors in the full-range phase. A final regression pass also verified
+sequential typing of `1000` and a partial external range message: the message
+applied only its `rangeStart=2000`, ignored the local pending end value, and
+left pending/applied state synchronized. `python -m py_compile` and all 129
+`test_star_gene_data` tests also passed.

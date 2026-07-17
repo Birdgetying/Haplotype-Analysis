@@ -1838,12 +1838,12 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("updateRangeFilterFromSliders('end')", integrated_block)
         self.assertIn('onclick="commitRangeFilter()"', integrated_block)
         self.assertIn("function readRangeFilter(changedHandle)", integrated_block)
-        self.assertIn("function syncRangeControls(range)", integrated_block)
+        self.assertIn("function syncRangeControls(range, preserveInputs)", integrated_block)
         self.assertIn("function updateRangeFilterFromSliders(changedHandle)", integrated_block)
         self.assertIn("function activateRangeHandle(handle)", integrated_block)
         self.assertIn("var pendingRangeFilter = { start: null, end: null };", integrated_block)
         self.assertIn("function updateRangePendingState()", integrated_block)
-        self.assertIn("function setPendingRangeFilter(range)", integrated_block)
+        self.assertIn("function setPendingRangeFilter(range, preserveInputs)", integrated_block)
         self.assertIn("function commitRangeFilter()", integrated_block)
         self.assertNotIn("function scheduleRangeFilterApply()", integrated_block)
         self.assertIn("function beginRangeSliderDrag(event)", integrated_block)
@@ -1866,6 +1866,17 @@ class StarGeneDataTests(unittest.TestCase):
         commit_end = integrated_block.find("\nfunction ", commit_start + 1)
         commit_block = integrated_block[commit_start:commit_end]
         self.assertEqual(commit_block.count("applyFilters();"), 1)
+        message_start = integrated_block.index("window.addEventListener('message'")
+        message_end = integrated_block.index("function scheduleConnectorRedraw", message_start)
+        message_block = integrated_block[message_start:message_end]
+        self.assertIn(
+            "f.rangeStart !== undefined ? f.rangeStart : currentFilter.rangeStart",
+            message_block,
+        )
+        self.assertIn(
+            "f.rangeEnd !== undefined ? f.rangeEnd : currentFilter.rangeEnd",
+            message_block,
+        )
         self.assertIn("aria-valuetext", integrated_block)
         self.assertNotIn('aria-live="polite"', integrated_block)
         self.assertIn("rangeStartInput.value = ''", integrated_block)
@@ -1966,6 +1977,9 @@ var pendingRangeFilter = { start: null, end: null };
 var applyCount = 0;
 function applyFilters() { applyCount += 1; }
 
+elements.rangeStartInput.value = '1';
+updateRangeFilterFromInputs('start');
+assertEqual(elements.rangeStartInput.value, '1', 'number typing preserves a boundary prefix');
 elements.rangeStartInput.value = '20';
 updateRangeFilterFromInputs('start');
 assertEqual(applyCount, 0, 'number edit stays pending');

@@ -11349,7 +11349,7 @@ function endRangeSliderDrag(event) {
     rangePointerState = { pointerId: null, handle: null, overlapValue: null };
 }
 
-function syncRangeControls(range) {
+function syncRangeControls(range, preserveInputs) {
     range = range || readRangeFilter();
     var startInput = document.getElementById('rangeStartInput');
     var endInput = document.getElementById('rangeEndInput');
@@ -11365,8 +11365,8 @@ function syncRangeControls(range) {
         sliderStart = sliderEnd;
         sliderEnd = tmp;
     }
-    if (startInput) startInput.value = formatRangeNumber(range.start);
-    if (endInput) endInput.value = formatRangeNumber(range.end);
+    if (!preserveInputs && startInput) startInput.value = formatRangeNumber(range.start);
+    if (!preserveInputs && endInput) endInput.value = formatRangeNumber(range.end);
     if (startSlider) {
         startSlider.value = sliderStart;
         startSlider.setAttribute('aria-valuetext', sliderStart.toLocaleString());
@@ -11401,10 +11401,10 @@ function updateRangePendingState() {
     if (status) status.hidden = !isDirty;
 }
 
-function setPendingRangeFilter(range) {
+function setPendingRangeFilter(range, preserveInputs) {
     var normalized = canonicalizeRangeFilter(range);
     pendingRangeFilter = { start: normalized.start, end: normalized.end };
-    syncRangeControls(normalized);
+    syncRangeControls(normalized, preserveInputs);
     updateRangePendingState();
 }
 
@@ -11415,7 +11415,7 @@ function inDisplayRange(pos) {
 }
 
 function updateRangeFilterFromInputs(changedHandle) {
-    setPendingRangeFilter(readRangeFilter(changedHandle));
+    setPendingRangeFilter(readRangeFilter(changedHandle), true);
 }
 
 function updateRangeFilterFromSliders(changedHandle) {
@@ -11548,11 +11548,10 @@ window.addEventListener('message', function(ev) {
         if (mx) { mx.value = f.missingRate; document.getElementById('missingValue').textContent = parseFloat(f.missingRate).toFixed(2); }
     }
     if (f.rangeStart !== undefined || f.rangeEnd !== undefined) {
-        var rs = document.getElementById('rangeStartInput');
-        var re = document.getElementById('rangeEndInput');
-        if (rs && f.rangeStart !== undefined) rs.value = f.rangeStart == null ? '' : f.rangeStart;
-        if (re && f.rangeEnd !== undefined) re.value = f.rangeEnd == null ? '' : f.rangeEnd;
-        var incomingRange = canonicalizeRangeFilter(readRangeFilter());
+        var incomingRange = canonicalizeRangeFilter({
+            start: f.rangeStart !== undefined ? f.rangeStart : currentFilter.rangeStart,
+            end: f.rangeEnd !== undefined ? f.rangeEnd : currentFilter.rangeEnd
+        });
         currentFilter.rangeStart = incomingRange.start;
         currentFilter.rangeEnd = incomingRange.end;
         setPendingRangeFilter(incomingRange);
