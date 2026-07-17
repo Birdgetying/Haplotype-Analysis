@@ -1944,6 +1944,14 @@ class StarGeneDataTests(unittest.TestCase):
 
         self.assertNotIn('id="mode-btn-default"', integrated_block)
         self.assertNotIn('id="mode-btn-robust_discovery"', integrated_block)
+        self.assertIn("function captureMainDataCenter()", integrated_block)
+        self.assertIn("function restoreMainDataCenter(centerRatio)", integrated_block)
+        self.assertIn("zc.style.zoom = String(cz / 100);", integrated_block)
+        self.assertIn("zc.style.transform = 'none';", integrated_block)
+        self.assertNotIn("zc.style.transform = 'scale('", integrated_block)
+        self.assertIn("function getIntrinsicReportWidth()", integrated_block)
+        self.assertIn("scheduleConnectorRedraw();", integrated_block)
+        self.assertIn("scheduleLDTriangleRedraw();", integrated_block)
 
     def test_integrated_report_has_position_range_filter_controls(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -2124,6 +2132,7 @@ var manualFilterHistory = [];
 var manualFilterMode = false;
 function updateUndoButton() {}
 function toggleManualFilter() {}
+function scheduleAppliedRangeCentering() {}
 var applyCount = 0;
 function applyFilters() { applyCount += 1; }
 
@@ -2283,6 +2292,8 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         self.assertIn("root.querySelectorAll('svg')", export_block)
         self.assertIn("var attrW = parseFloat(svg.getAttribute('width')) || 0;", export_block)
         self.assertIn("var svgElements = collectReportExportSVGElements();", export_block)
+        self.assertIn("function withIntrinsicReportZoom(callback)", export_block)
+        self.assertIn("return withIntrinsicReportZoom(function()", export_block)
         self.assertNotIn("content.querySelectorAll('svg')", export_block)
 
     def test_integrated_report_export_uses_fallback_svg_dimensions_for_hidden_panels(self):
@@ -2316,7 +2327,9 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         self.assertIn(".content-wrapper {{ height: auto; max-height: none; overflow: visible;", integrated_block)
         self.assertIn(".report-sidebar {{ order: 3; position: static;", integrated_block)
         self.assertIn(".report-sidebar .report-component-panel {{ display: block !important;", integrated_block)
-        self.assertIn("window.addEventListener('beforeprint', prepareReportExportVisuals);", integrated_block)
+        self.assertIn("zoom: 1 !important", integrated_block)
+        self.assertIn("window.addEventListener('beforeprint', prepareReportForPrint);", integrated_block)
+        self.assertIn("window.addEventListener('afterprint', restoreReportAfterPrint);", integrated_block)
 
     def test_integrated_report_auto_center_scrolls_content_wrapper(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -2325,8 +2338,10 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
         integrated_block = source[integrated_start:integrated_end]
 
-        self.assertIn("var wrapper = document.querySelector('.content-wrapper');", integrated_block)
-        self.assertIn("wrapper.scrollTo({ left: scrollX, behavior: 'auto' });", integrated_block)
+        self.assertIn("function scrollToAppliedRange()", integrated_block)
+        self.assertIn("var section = document.querySelector('.main-data-section');", integrated_block)
+        self.assertIn("function scheduleAppliedRangeCentering()", integrated_block)
+        self.assertIn("scheduleAppliedRangeCentering();", integrated_block)
         self.assertNotIn("window.scrollTo({ left: scrollX", integrated_block)
 
     def test_summarize_post_gwas_evidence_uses_local_variant_context(self):

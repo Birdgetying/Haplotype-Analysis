@@ -9746,7 +9746,7 @@ class ReportGenerator:
         
         /* 可缩放内容区 */
         .content-wrapper {{ overflow-x: visible; overflow-y: auto; max-height: calc(100vh - 200px); }}
-        .content {{ padding: 15px; transform-origin: top left; transition: transform 0.2s ease; }}
+        .content {{ padding: 15px; width: 100%; }}
         
         /* 表格容器 - 移除滚动条，确保基因结构和序列对齐 */
         .table-scroll-container {{ overflow-x: visible; overflow-y: visible; margin-top: 0; padding-bottom: 10px; width: 100%; }}
@@ -9955,7 +9955,7 @@ class ReportGenerator:
                             background: #ffffff; color: #3e5873; cursor: pointer; font-size: 18px; line-height: 1; }}
         .sidebar-open-btn:hover {{ border-color: #5aa9e6; background: #eef7ff; }}
         .content-wrapper {{ min-width: 0; overflow: auto; height: calc(100vh - 44px); max-height: none; background: #f5f7fa; }}
-        .content {{ padding: 12px; }}
+        .content {{ padding: 12px; width: 100%; }}
         .integrated-view {{ gap: 10px; }}
         .main-data-section {{ max-width: 100%; overflow: auto; border: 1px solid #d8e0ea; border-radius: 8px; background: #ffffff; padding: 10px; box-shadow: 0 1px 3px rgba(15,23,42,0.05); }}
         .top-section.workbench-staged {{ display: none; }}
@@ -10043,7 +10043,7 @@ class ReportGenerator:
             .header h1 {{ color: #111827; }}
             .sidebar-open-btn, .sidebar-close-btn, .report-sidebar-tabs {{ display: none !important; }}
             .content-wrapper {{ height: auto; max-height: none; overflow: visible; order: 2; background: white; }}
-            .content {{ transform: none !important; padding: 8px; }}
+            .content {{ transform: none !important; zoom: 1 !important; padding: 8px; }}
             .main-data-section {{ overflow: visible; background: white; border-color: #d1d5db; }}
             .report-sidebar {{ order: 3; position: static; transform: none !important; width: auto; display: block;
                 box-shadow: none; border: 1px solid #d1d5db; background: white; color: #111827; page-break-before: always; }}
@@ -10777,18 +10777,62 @@ var zc = document.getElementById('zoomContent');
 var zs = document.getElementById('zoomSlider');
 var zl = document.getElementById('zoomLevel');
 var cz = 100;
+
+function captureMainDataCenter() {
+    var section = document.querySelector('.main-data-section');
+    if (!section || section.scrollWidth <= 0) return 0.5;
+    return (section.scrollLeft + section.clientWidth / 2) / section.scrollWidth;
+}
+
+function restoreMainDataCenter(centerRatio) {
+    var section = document.querySelector('.main-data-section');
+    if (!section) return;
+    var maxScroll = Math.max(0, section.scrollWidth - section.clientWidth);
+    section.scrollLeft = Math.max(
+        0,
+        Math.min(maxScroll, centerRatio * section.scrollWidth - section.clientWidth / 2)
+    );
+}
+
 function applyZoom() {
-    if (zc) { zc.style.transform = 'scale(' + (cz/100) + ')'; zc.style.transformOrigin = 'top left'; }
+    var centerRatio = captureMainDataCenter();
+    if (zc) {
+        zc.style.transform = 'none';
+        zc.style.zoom = String(cz / 100);
+    }
     if (zs) zs.value = cz;
     if (zl) zl.innerText = cz + '%';
+    requestAnimationFrame(function() {
+        restoreMainDataCenter(centerRatio);
+        scheduleConnectorRedraw();
+        scheduleLDTriangleRedraw();
+    });
 }
 function zoomIn()  { cz = Math.min(150, cz + 10); applyZoom(); }
 function zoomOut() { cz = Math.max(20,  cz - 10); applyZoom(); }
 function resetZoom() { cz = 100; applyZoom(); }
 function setZoom(v)  { cz = parseInt(v); applyZoom(); }
+
+function getIntrinsicReportWidth() {
+    if (!zc) return 1;
+    var previousZoom = zc.style.zoom;
+    zc.style.zoom = '1';
+    var width = Math.max(zc.scrollWidth || 0, 1);
+    document.querySelectorAll(
+        '.gene-gwas-panel, #gene-structure-svg, .data-table, .ld-right-panel'
+    ).forEach(function(node) {
+        width = Math.max(width, node.scrollWidth || 0, node.offsetWidth || 0);
+    });
+    zc.style.zoom = previousZoom;
+    return width;
+}
+
 function fitToWindow() {
     var w = document.querySelector('.content-wrapper');
-    if (zc && w) { cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / zc.scrollWidth) * 100))); applyZoom(); }
+    if (zc && w) {
+        cz = Math.max(20, Math.min(150, Math.floor((w.clientWidth / getIntrinsicReportWidth()) * 100)));
+        applyZoom();
+    }
 }
 applyZoom();
 
@@ -11477,6 +11521,29 @@ function inDisplayRange(pos) {
     return true;
 }
 
+function scrollToAppliedRange() {
+    var section = document.querySelector('.main-data-section');
+    if (!section) return;
+    var start = currentFilter.rangeStart === null ? regionStart : currentFilter.rangeStart;
+    var end = currentFilter.rangeEnd === null ? regionEnd : currentFilter.rangeEnd;
+    var center = (start + end) / 2;
+    var regionRatio = (center - regionStart) / Math.max(1, regionEnd - regionStart);
+    regionRatio = Math.max(0, Math.min(1, regionRatio));
+    var logicalX = gwasLeftMargin + regionRatio * geneAreaWidth;
+    var contentRatio = logicalX / Math.max(1, svgTotalWidth);
+    var maxScroll = Math.max(0, section.scrollWidth - section.clientWidth);
+    section.scrollLeft = Math.max(
+        0,
+        Math.min(maxScroll, contentRatio * section.scrollWidth - section.clientWidth / 2)
+    );
+}
+
+function scheduleAppliedRangeCentering() {
+    requestAnimationFrame(function() {
+        requestAnimationFrame(scrollToAppliedRange);
+    });
+}
+
 function updateRangeFilterFromInputs(changedHandle) {
     setPendingRangeFilter(readRangeFilter(changedHandle), true);
 }
@@ -11515,6 +11582,7 @@ function commitRangeFilter() {
     currentFilter.rangeEnd = nextRange.end;
     updateRangePendingState();
     applyFilters();
+    scheduleAppliedRangeCentering();
 }
 
 function toggleManualFilter() {
@@ -11600,6 +11668,7 @@ function resetFilters() {
     updateUndoButton();
     if (manualFilterMode) { toggleManualFilter(); }
     applyFilters();
+    scheduleAppliedRangeCentering();
 }
 
 window.addEventListener('message', function(ev) {
@@ -11615,7 +11684,8 @@ window.addEventListener('message', function(ev) {
         var mx = document.getElementById('missingSlider');
         if (mx) { mx.value = f.missingRate; document.getElementById('missingValue').textContent = parseFloat(f.missingRate).toFixed(2); }
     }
-    if (f.rangeStart !== undefined || f.rangeEnd !== undefined) {
+    var hasIncomingRange = f.rangeStart !== undefined || f.rangeEnd !== undefined;
+    if (hasIncomingRange) {
         var incomingRange = canonicalizeRangeFilter({
             start: f.rangeStart !== undefined ? f.rangeStart : currentFilter.rangeStart,
             end: f.rangeEnd !== undefined ? f.rangeEnd : currentFilter.rangeEnd
@@ -11631,6 +11701,7 @@ window.addEventListener('message', function(ev) {
         });
     }
     applyFilters();
+    if (hasIncomingRange) scheduleAppliedRangeCentering();
 });
 
 // ==================== 动态计算基因结构到表格的连线 ====================
@@ -12875,6 +12946,22 @@ function getSvgExportSize(svg) {
     };
 }
 
+function withIntrinsicReportZoom(callback) {
+    if (!zc) return callback();
+    var previousZoom = zc.style.zoom;
+    var previousTransform = zc.style.transform;
+    zc.style.transform = 'none';
+    zc.style.zoom = '1';
+    try {
+        return callback();
+    } finally {
+        zc.style.zoom = previousZoom;
+        zc.style.transform = previousTransform;
+        scheduleConnectorRedraw();
+        scheduleLDTriangleRedraw();
+    }
+}
+
 function prepareReportExportVisuals() {
     var sidebar = document.getElementById('reportSidebar');
     if (sidebar) sidebar.classList.add('export-measure');
@@ -12889,51 +12976,73 @@ function prepareReportExportVisuals() {
 }
 
 function exportSVG() {{
-    prepareReportExportVisuals();
-    var svgElements = collectReportExportSVGElements();
-    if (svgElements.length === 0) {{ alert('No SVG'); return; }}
-    var svgNS = "http://www.w3.org/2000/svg";
-    var combinedSVG = document.createElementNS(svgNS, "svg");
-    var totalWidth = 0, totalHeight = 0;
-    for (var i = 0; i < svgElements.length; i++) {{
-        var size = getSvgExportSize(svgElements[i]);
-        totalWidth = Math.max(totalWidth, size.width);
-        totalHeight += size.height + 20;
-    }}
-    combinedSVG.setAttribute("width", totalWidth);
-    combinedSVG.setAttribute("height", totalHeight);
-    combinedSVG.setAttribute("xmlns", svgNS);
-    var bg = document.createElementNS(svgNS, "rect");
-    bg.setAttribute("width", "100%");
-    bg.setAttribute("height", "100%");
-    bg.setAttribute("fill", "white");
-    combinedSVG.appendChild(bg);
-    var currentY = 0;
-    for (var j = 0; j < svgElements.length; j++) {{
-        var size = getSvgExportSize(svgElements[j]);
-        var clonedSVG = svgElements[j].cloneNode(true);
-        var g = document.createElementNS(svgNS, "g");
-        g.setAttribute("transform", "translate(0," + currentY + ")");
-        while (clonedSVG.firstChild) {{
-            g.appendChild(clonedSVG.firstChild);
+    return withIntrinsicReportZoom(function() {{
+        prepareReportExportVisuals();
+        var svgElements = collectReportExportSVGElements();
+        if (svgElements.length === 0) {{ alert('No SVG'); return; }}
+        var svgNS = "http://www.w3.org/2000/svg";
+        var combinedSVG = document.createElementNS(svgNS, "svg");
+        var totalWidth = 0, totalHeight = 0;
+        for (var i = 0; i < svgElements.length; i++) {{
+            var size = getSvgExportSize(svgElements[i]);
+            totalWidth = Math.max(totalWidth, size.width);
+            totalHeight += size.height + 20;
         }}
-        combinedSVG.appendChild(g);
-        currentY += size.height + 20;
-    }}
-    var serializer = new XMLSerializer();
-    var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
-    var blob = new Blob([svgString], {{type: "image/svg+xml"}});
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = "haplotype_analysis.svg";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+        combinedSVG.setAttribute("width", totalWidth);
+        combinedSVG.setAttribute("height", totalHeight);
+        combinedSVG.setAttribute("xmlns", svgNS);
+        var bg = document.createElementNS(svgNS, "rect");
+        bg.setAttribute("width", "100%");
+        bg.setAttribute("height", "100%");
+        bg.setAttribute("fill", "white");
+        combinedSVG.appendChild(bg);
+        var currentY = 0;
+        for (var j = 0; j < svgElements.length; j++) {{
+            var size = getSvgExportSize(svgElements[j]);
+            var clonedSVG = svgElements[j].cloneNode(true);
+            var g = document.createElementNS(svgNS, "g");
+            g.setAttribute("transform", "translate(0," + currentY + ")");
+            while (clonedSVG.firstChild) {{
+                g.appendChild(clonedSVG.firstChild);
+            }}
+            combinedSVG.appendChild(g);
+            currentY += size.height + 20;
+        }}
+        var serializer = new XMLSerializer();
+        var svgString = '<?xml version="1.0" standalone="no"?>\\n' + serializer.serializeToString(combinedSVG);
+        var blob = new Blob([svgString], {{type: "image/svg+xml"}});
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "haplotype_analysis.svg";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }});
 }}
 
-window.addEventListener('beforeprint', prepareReportExportVisuals);
+var reportZoomBeforePrint = null;
+
+function prepareReportForPrint() {
+    if (zc && reportZoomBeforePrint === null) {
+        reportZoomBeforePrint = zc.style.zoom || String(cz / 100);
+        zc.style.transform = 'none';
+        zc.style.zoom = '1';
+    }
+    prepareReportExportVisuals();
+}
+
+function restoreReportAfterPrint() {
+    if (zc && reportZoomBeforePrint !== null) {
+        zc.style.zoom = reportZoomBeforePrint;
+    }
+    reportZoomBeforePrint = null;
+    applyZoom();
+}
+
+window.addEventListener('beforeprint', prepareReportForPrint);
+window.addEventListener('afterprint', restoreReportAfterPrint);
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
@@ -12945,6 +13054,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setPendingRangeFilter(initialDisplayRange);
     // 初始加载时应用过滤器，确保初始状态与过滤后的状态一致
     applyFilters();
+    scheduleAppliedRangeCentering();
     // 初始化LD倒三角图
     setTimeout(function() { drawLDTriangle(); }, 300);
 
@@ -12978,26 +13088,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 自动水平居中到基因结构区域
-    setTimeout(function() {
-        var wrapper = document.querySelector('.content-wrapper');
-        var svg = document.getElementById('gene-structure-svg');
-        if (!svg) return;
-        var gs = parseFloat(svg.getAttribute('data-gene-start')) || 450;
-        var gw = parseFloat(svg.getAttribute('data-gene-width')) || 1000;
-        var geneCenterSvg = gs + gw / 2;
-        var svgRect = svg.getBoundingClientRect();
-        var svgLogicalW = svg.width.baseVal.value;
-        if (!svgLogicalW || svgLogicalW <= 0) return;
-        var scale = svgRect.width / svgLogicalW;
-        var wrapperRect = wrapper ? wrapper.getBoundingClientRect() : {left: 0, width: window.innerWidth};
-        var geneCenterScreen = svgRect.left + geneCenterSvg * scale;
-        var currentScrollLeft = wrapper ? wrapper.scrollLeft : window.scrollX;
-        var scrollX = currentScrollLeft + geneCenterScreen - wrapperRect.left - wrapperRect.width / 2;
-        if (scrollX > 0) {
-            if (wrapper) wrapper.scrollTo({ left: scrollX, behavior: 'auto' });
-        }
-    }, 150);
 });
 </script>
 </body>
