@@ -109,6 +109,56 @@ def _script_json_dumps(obj) -> str:
     )
 
 
+def _select_initial_display_range(
+    variant_positions,
+    region_start,
+    region_end,
+    gene_start=None,
+    gene_end=None,
+    max_variants=25,
+):
+    """Select a neutral coordinate window around the gene or region midpoint."""
+    try:
+        lower = int(region_start)
+        upper = int(region_end)
+    except (TypeError, ValueError):
+        return None, None
+    if upper < lower:
+        lower, upper = upper, lower
+
+    normalized_positions = set()
+    for pos in variant_positions or []:
+        try:
+            numeric_pos = int(pos)
+        except (TypeError, ValueError):
+            continue
+        if lower <= numeric_pos <= upper:
+            normalized_positions.add(numeric_pos)
+    positions = sorted(normalized_positions)
+
+    try:
+        limit = max(1, int(max_variants))
+    except (TypeError, ValueError):
+        limit = 25
+    if len(positions) <= limit:
+        return None, None
+
+    try:
+        anchor = (int(gene_start) + int(gene_end)) / 2.0
+    except (TypeError, ValueError):
+        anchor = (lower + upper) / 2.0
+    center_index = min(
+        range(len(positions)),
+        key=lambda index: abs(positions[index] - anchor),
+    )
+    first_index = max(
+        0,
+        min(len(positions) - limit, center_index - limit // 2),
+    )
+    selected = positions[first_index:first_index + limit]
+    return selected[0], selected[-1]
+
+
 def _safe_str(val, default=''):
     """Convert a potentially NaN (float) value from CSV loading to string."""
     if not isinstance(val, str):

@@ -15,6 +15,82 @@ import pandas as pd
 
 
 class StarGeneDataTests(unittest.TestCase):
+    def test_initial_display_range_uses_full_range_for_small_variant_sets(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range([10, 20, 30], 1, 100, 20, 80),
+            (None, None),
+        )
+
+    def test_initial_display_range_caps_midpoint_window_at_25_variants(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(100, 4100, 100))
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            5000,
+            gene_start=1500,
+            gene_end=2500,
+            max_variants=25,
+        )
+
+        selected = [pos for pos in positions if start <= pos <= end]
+        self.assertEqual(len(selected), 25)
+        self.assertLessEqual(start, 2000)
+        self.assertGreaterEqual(end, 2000)
+
+    def test_initial_display_range_uses_region_midpoint_without_gene_coordinates(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(1, 41))
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            40,
+            gene_start=None,
+            gene_end=None,
+            max_variants=25,
+        )
+
+        self.assertEqual(len([p for p in positions if start <= p <= end]), 25)
+        self.assertLessEqual(start, 20)
+        self.assertGreaterEqual(end, 20)
+
+    def test_initial_display_range_clamps_window_at_variant_boundaries(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(1, 41))
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            40,
+            gene_start=1,
+            gene_end=1,
+            max_variants=25,
+        )
+
+        self.assertEqual((start, end), (1, 25))
+
+    def test_initial_display_range_ignores_invalid_and_duplicate_positions(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(1, 41)) + [None, "bad", 20, 999]
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            40,
+            gene_start="bad",
+            gene_end=30,
+            max_variants=25,
+        )
+
+        selected = [pos for pos in range(1, 41) if start <= pos <= end]
+        self.assertEqual(len(selected), 25)
+        self.assertLessEqual(start, 20)
+        self.assertGreaterEqual(end, 20)
+
     def test_frontiers2022_vrn_b1_builds_structural_marker_tables(self):
         from prepare_wheat2024_vrn_b1_frontiers2022 import build_frontiers2022_marker_tables
 
