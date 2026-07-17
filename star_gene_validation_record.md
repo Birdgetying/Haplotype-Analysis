@@ -2451,3 +2451,70 @@ sequential typing of `1000` and a partial external range message: the message
 applied only its `rangeStart=2000`, ignored the local pending end value, and
 left pending/applied state synchronized. `python -m py_compile` and all 129
 `test_star_gene_data` tests also passed.
+
+### 2026-07-17 bounded initial range and stable zoom
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by diagnostic marker
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at alignment position `13,077`.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database
+with 102 samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`.
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. Direct post-run database verification remains unchanged: marker index 251
+shows that `Hap6` carries the 837 bp inserted sequence rather than `DEL_837`.
+This literature marker was used only for post-hoc validation and was not an
+input to discovery scoring or initial-window selection.
+
+Sample count / reliability:
+`Hap6` has n=3. The exact positive-control match is preserved, but the
+small-sample reliability limitation remains.
+
+Blocked reason:
+None. The manifest still reports a missing optional WatSeq phenotype table,
+while the complete precomputed database supplies the 102-sample
+`GrowthHabitSpringScore` input.
+
+Report/UI check:
+The initial report range is now selected from variant positions and the gene
+midpoint only. For this target it is `5,447–12,446`, containing exactly 25
+visible variant columns; applied and pending states are identical on load.
+Clear remains pending until Apply, Reset returns to this generated window, and
+crossed numeric input `90/80` previews and applies as `80–80`. Report zoom now
+uses CSS `zoom`, preserves the active genomic range and main-data center, and
+redraws connectors and LD. Fit, print, and SVG export measure at intrinsic 100%
+layout without changing the stored interactive zoom.
+
+Browser verification:
+Generated local HTML passed Microsoft Edge Chromium and Playwright Firefox at
+a 1440 px viewport. In both browsers the initial and pending ranges were
+`5,447–12,446`, 25 sequence columns were visible, and Apply was disabled.
+At 50% Zoom the report content and wrapper both remained 1440 px wide and the
+range state did not change. Crossed input, Clear + Apply, and Reset behaved as
+specified. The sidebar LD canvas tracked the visible table span in both engines
+(500 vs 480 px at 100%; 250 vs 240 px at 50%) with zero left padding, instead
+of being inversely enlarged by main-content Zoom. Duplicate genomic coordinates
+are collapsed to one report column while full scoring positions remain intact.
+No page-level JavaScript or console errors occurred. The rerun preserved `Hap6`,
+score `1.2016`, n=3, and the 837 bp post-hoc match.

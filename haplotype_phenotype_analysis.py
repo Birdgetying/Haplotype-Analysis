@@ -126,14 +126,14 @@ def _select_initial_display_range(
     if upper < lower:
         lower, upper = upper, lower
 
-    normalized_positions = set()
+    normalized_positions = []
     for pos in variant_positions or []:
         try:
             numeric_pos = int(pos)
         except (TypeError, ValueError):
             continue
         if lower <= numeric_pos <= upper:
-            normalized_positions.add(numeric_pos)
+            normalized_positions.append(numeric_pos)
     positions = sorted(normalized_positions)
 
     try:
@@ -147,16 +147,76 @@ def _select_initial_display_range(
         anchor = (int(gene_start) + int(gene_end)) / 2.0
     except (TypeError, ValueError):
         anchor = (lower + upper) / 2.0
+    position_counts = Counter(positions)
+    unique_positions = sorted(position_counts)
     center_index = min(
-        range(len(positions)),
-        key=lambda index: abs(positions[index] - anchor),
+        range(len(unique_positions)),
+        key=lambda index: abs(unique_positions[index] - anchor),
     )
-    first_index = max(
-        0,
-        min(len(positions) - limit, center_index - limit // 2),
+
+    prefix_counts = [0]
+    for pos in unique_positions:
+        prefix_counts.append(prefix_counts[-1] + position_counts[pos])
+    anchor_occurrence_index = (
+        prefix_counts[center_index] + prefix_counts[center_index + 1] - 1
+    ) / 2.0
+
+    best = None
+    for left_candidate in range(len(unique_positions)):
+        for right_candidate in range(left_candidate, len(unique_positions)):
+            selected_count = (
+                prefix_counts[right_candidate + 1] - prefix_counts[left_candidate]
+            )
+            if selected_count > limit:
+                break
+            contains_anchor = left_candidate <= center_index <= right_candidate
+            window_occurrence_center = (
+                prefix_counts[left_candidate]
+                + prefix_counts[right_candidate + 1]
+                - 1
+            ) / 2.0
+            score = (
+                0 if contains_anchor else 1,
+                -selected_count,
+                abs(window_occurrence_center - anchor_occurrence_index),
+                abs(
+                    (unique_positions[left_candidate] + unique_positions[right_candidate])
+                    / 2.0
+                    - anchor
+                ),
+                left_candidate,
+            )
+            if best is None or score < best[0]:
+                best = (score, left_candidate, right_candidate)
+
+    if best is None:
+        return None, None
+    _, left, right = best
+
+    selected_start = unique_positions[left]
+    selected_end = unique_positions[right]
+    return (
+        None if selected_start <= lower else selected_start,
+        None if selected_end >= upper else selected_end,
     )
-    selected = positions[first_index:first_index + limit]
-    return selected[0], selected[-1]
+
+
+def _deduplicate_display_position_pairs(display_positions, display_orig_indices):
+    """Keep one report column per genomic coordinate, preserving first occurrence."""
+    positions = []
+    sequence_indices = []
+    seen = set()
+    for pos, sequence_index in zip(display_positions or [], display_orig_indices or []):
+        try:
+            coordinate = int(pos)
+        except (TypeError, ValueError):
+            continue
+        if coordinate in seen:
+            continue
+        seen.add(coordinate)
+        positions.append(coordinate)
+        sequence_indices.append(sequence_index)
+    return positions, sequence_indices
 
 
 def _safe_str(val, default=''):
@@ -8289,6 +8349,10 @@ class ReportGenerator:
             sorted_pairs = sorted(zip(display_positions, display_orig_indices), key=lambda x: x[0])
             display_positions = [p for p, _ in sorted_pairs]
             display_orig_indices = [i for _, i in sorted_pairs]
+            display_positions, display_orig_indices = _deduplicate_display_position_pairs(
+                display_positions,
+                display_orig_indices,
+            )
             region_positions, region_indices = [], []
             for pos, idx in zip(display_positions, display_orig_indices):
                 if region_start <= pos <= region_end:
@@ -9105,6 +9169,10 @@ class ReportGenerator:
             sorted_pairs = sorted(zip(display_positions, display_orig_indices), key=lambda x: x[0])
             display_positions = [p for p, _ in sorted_pairs]
             display_orig_indices = [i for _, i in sorted_pairs]
+            display_positions, display_orig_indices = _deduplicate_display_position_pairs(
+                display_positions,
+                display_orig_indices,
+            )
             
             # 过滤掉绘图区域之外的变异（避免连线指向屏幕外）
             region_positions = []
@@ -11876,22 +11944,21 @@ function drawLDTriangle() {
         colWidths.push(cw);
     }
 
-    // 直接从.content元素测量CSS transform缩放比例，避免表格估算不准确
+    // 主内容缩放只用于把表格逻辑列宽转换为屏幕坐标。
     var contentEl = document.querySelector('.content');
-    var zoomFactor = 1;
+    var contentZoomFactor = 1;
     if (contentEl && contentEl.offsetWidth > 0) {
         var contentRect = contentEl.getBoundingClientRect();
-        zoomFactor = contentRect.width / contentEl.offsetWidth;
+        contentZoomFactor = contentRect.width / contentEl.offsetWidth;
     }
-    // 限制合理范围，防止异常值
-    zoomFactor = Math.max(0.1, Math.min(10, zoomFactor));
+    contentZoomFactor = Math.max(0.1, Math.min(10, contentZoomFactor));
 
     var colInfosAbs = [];  // {absScreenX, matIdx}
     var runningX = 0;
     for (var ci2 = 0; ci2 < allThs.length; ci2++) {
         var cw2 = colWidths[ci2];
         if (colIsSeqMap[ci2] && allThs[ci2].style.display !== 'none' && cw2 > 0) {
-            var absCenterX = tableLeft2 + (runningX + cw2 / 2) * zoomFactor;
+            var absCenterX = tableLeft2 + (runningX + cw2 / 2) * contentZoomFactor;
             var thEl2 = allThs[ci2];
             var posText2 = thEl2.getAttribute('data-pos') || thEl2.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
             var posVal2 = parseInt(posText2);
@@ -11931,10 +11998,16 @@ function drawLDTriangle() {
     var canvasW_screen = Math.ceil(absLastX - absFirstX + cellW);
     canvasW_screen = Math.max(canvasW_screen, cellW * ncAbs);
 
-    // Step C: canvas尺寸必须用CSS像素（屏幕像素/zoomFactor），而非屏幕像素
-    // 否则zoom<1时buffer太小→右半菱形被截断
-    var canvasCSSW = Math.ceil(canvasW_screen / zoomFactor);
-    var canvasCSSH = Math.ceil(canvasH / zoomFactor);
+    // Step C: LD 已位于主内容缩放区域之外，使用自身视觉缩放换算 CSS 尺寸。
+    // 不能除以 contentZoomFactor，否则主内容缩小时侧栏画布会被反向放大。
+    var ldZoomFactor = 1;
+    if (canvas.offsetWidth > 0) {
+        var previousCanvasRect = canvas.getBoundingClientRect();
+        ldZoomFactor = previousCanvasRect.width / canvas.offsetWidth;
+    }
+    ldZoomFactor = Math.max(0.1, Math.min(10, ldZoomFactor));
+    var canvasCSSW = Math.ceil(canvasW_screen / ldZoomFactor);
+    var canvasCSSH = Math.ceil(canvasH / ldZoomFactor);
     canvas.width = canvasCSSW;
     canvas.height = canvasCSSH;
     canvas.style.width = canvasCSSW + 'px';
@@ -11946,12 +12019,13 @@ function drawLDTriangle() {
 
     var wrapper = document.getElementById('ld-triangle-wrapper');
     var wrapRectNew = wrapper.getBoundingClientRect();
+    var isSidebarLD = !!wrapper.closest('.report-sidebar');
 
     // Step E: 将绝对屏幕坐标转换为wrapper相对坐标（使用新的wrapRect）
-    var firstColX = absFirstX - wrapRectNew.left;
+    var firstColX = isSidebarLD ? cellW / 2 : absFirstX - wrapRectNew.left;
 
     // Step F: 设置paddingLeft对齐序列列
-    var padLeft = Math.max(0, (firstColX - cellW/2) * canvasScaleX);
+    var padLeft = isSidebarLD ? 0 : Math.max(0, (firstColX - cellW/2) * canvasScaleX);
     wrapper.style.paddingLeft = padLeft + 'px';
 
     // Step G: 将ld-right-panel的min-width设置为内容实际宽度
@@ -11963,7 +12037,9 @@ function drawLDTriangle() {
     // Step H: 构建canvas坐标（相对canvas左上角）
     var colInfos = [];
     for (var ci = 0; ci < colInfosAbs.length; ci++) {
-        var relX = colInfosAbs[ci].absScreenX - wrapRectNew.left;  // 相对wrapper左边缘
+        var relX = isSidebarLD
+            ? firstColX + (colInfosAbs[ci].absScreenX - absFirstX)
+            : colInfosAbs[ci].absScreenX - wrapRectNew.left;
         var cx = (relX - firstColX) * canvasScaleX + cellW/2 * canvasScaleX;
         colInfos.push({ canvasX: cx, matIdx: colInfosAbs[ci].matIdx });
     }
@@ -12071,7 +12147,7 @@ function drawLDTriangle() {
         if (tipEl) tipEl.textContent = '';
     };
     
-    console.log('[LD] nc=' + nc + ' canvasCSSW=' + canvasCSSW + ' canvasW_screen=' + canvasW_screen + ' padLeft=' + padLeft + ' halfCell=' + halfCell.toFixed(1) + ' canvasScaleX=' + canvasScaleX.toFixed(3) + ' zoomFactor=' + zoomFactor.toFixed(3));
+    console.log('[LD] nc=' + nc + ' canvasCSSW=' + canvasCSSW + ' canvasW_screen=' + canvasW_screen + ' padLeft=' + padLeft + ' halfCell=' + halfCell.toFixed(1) + ' canvasScaleX=' + canvasScaleX.toFixed(3) + ' contentZoomFactor=' + contentZoomFactor.toFixed(3) + ' ldZoomFactor=' + ldZoomFactor.toFixed(3));
     console.log('[LD] firstColX=' + firstColX.toFixed(1) + ' absFirstX=' + absFirstX.toFixed(1) + ' absLastX=' + absLastX.toFixed(1) + ' wrapRectNew.left=' + wrapRectNew.left.toFixed(1));
     console.log('[LD] LD倒三角图: ' + nc + '列, 菱形' + nc*(nc-1)/2 + '个, canvas=' + canvasCSSW + 'x' + canvasCSSH);
 }

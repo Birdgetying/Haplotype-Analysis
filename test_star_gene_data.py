@@ -15,6 +15,17 @@ import pandas as pd
 
 
 class StarGeneDataTests(unittest.TestCase):
+    def test_display_position_pairs_keep_one_rendered_column_per_coordinate(self):
+        from haplotype_phenotype_analysis import _deduplicate_display_position_pairs
+
+        positions, sequence_indices = _deduplicate_display_position_pairs(
+            [10, 10, 20, 20, 30],
+            [2, 7, 8, 11, 12],
+        )
+
+        self.assertEqual(positions, [10, 20, 30])
+        self.assertEqual(sequence_indices, [2, 8, 12])
+
     def test_initial_display_range_uses_full_range_for_small_variant_sets(self):
         from haplotype_phenotype_analysis import _select_initial_display_range
 
@@ -40,6 +51,21 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(len(selected), 25)
         self.assertLessEqual(start, 2000)
         self.assertGreaterEqual(end, 2000)
+
+    def test_initial_display_range_centers_by_sorted_index_across_large_gaps(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(1, 21)) + list(range(1000, 1020))
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            2000,
+            gene_start=999,
+            gene_end=1001,
+            max_variants=25,
+        )
+
+        self.assertEqual((start, end), (9, 1012))
 
     def test_initial_display_range_uses_region_midpoint_without_gene_coordinates(self):
         from haplotype_phenotype_analysis import _select_initial_display_range
@@ -71,7 +97,7 @@ class StarGeneDataTests(unittest.TestCase):
             max_variants=25,
         )
 
-        self.assertEqual((start, end), (1, 25))
+        self.assertEqual((start, end), (None, 25))
 
     def test_initial_display_range_ignores_invalid_and_duplicate_positions(self):
         from haplotype_phenotype_analysis import _select_initial_display_range
@@ -86,10 +112,36 @@ class StarGeneDataTests(unittest.TestCase):
             max_variants=25,
         )
 
-        selected = [pos for pos in range(1, 41) if start <= pos <= end]
-        self.assertEqual(len(selected), 25)
-        self.assertLessEqual(start, 20)
-        self.assertGreaterEqual(end, 20)
+        lower = 1 if start is None else start
+        upper = 40 if end is None else end
+        selected = [
+            int(pos)
+            for pos in positions
+            if str(pos).isdigit() and 1 <= int(pos) <= 40 and lower <= int(pos) <= upper
+        ]
+        self.assertLessEqual(len(selected), 25)
+        self.assertLessEqual(lower, 20)
+        self.assertGreaterEqual(upper, 20)
+
+    def test_initial_display_range_caps_rendered_columns_with_duplicate_positions(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(1, 27)) + [13] * 10
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            26,
+            gene_start=1,
+            gene_end=26,
+            max_variants=25,
+        )
+        lower = 1 if start is None else start
+        upper = 26 if end is None else end
+        rendered_columns = [pos for pos in positions if lower <= pos <= upper]
+
+        self.assertLessEqual(len(rendered_columns), 25)
+        self.assertLessEqual(lower, 13)
+        self.assertGreaterEqual(upper, 13)
 
     def test_frontiers2022_vrn_b1_builds_structural_marker_tables(self):
         from prepare_wheat2024_vrn_b1_frontiers2022 import build_frontiers2022_marker_tables
@@ -1912,6 +1964,24 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("html = html.replace('{gwas_mt}', str(gwas_mt))", integrated_block)
         self.assertIn("html = html.replace('{gwas_mr}', str(gwas_mr))", integrated_block)
         self.assertIn("html = html.replace('{gwas_mb}', str(gwas_mb))", integrated_block)
+
+    def test_integrated_report_ld_sidebar_uses_its_own_visual_scale(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+        ld_start = integrated_block.index("function drawLDTriangle()")
+        ld_end = integrated_block.index("function scheduleConnectorRedraw()", ld_start)
+        ld_block = integrated_block[ld_start:ld_end]
+
+        self.assertIn("var contentZoomFactor = 1;", ld_block)
+        self.assertIn("var ldZoomFactor = 1;", ld_block)
+        self.assertIn("var isSidebarLD = !!wrapper.closest('.report-sidebar');", ld_block)
+        self.assertIn("var padLeft = isSidebarLD ? 0", ld_block)
+        self.assertIn("canvasW_screen / ldZoomFactor", ld_block)
+        self.assertIn("canvasH / ldZoomFactor", ld_block)
+        self.assertNotIn("canvasW_screen / zoomFactor", ld_block)
 
     def test_integrated_report_uses_right_sidebar_workbench_without_losing_controls(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
