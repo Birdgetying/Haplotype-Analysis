@@ -1830,15 +1830,22 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn('id="rangeEndSlider"', integrated_block)
         self.assertIn('id="rangeSliderFill"', integrated_block)
         self.assertIn('id="rangeSliderLabel"', integrated_block)
+        self.assertIn('id="rangeApplyBtn"', integrated_block)
+        self.assertIn('id="rangePendingStatus"', integrated_block)
         self.assertIn("updateRangeFilterFromInputs('start')", integrated_block)
         self.assertIn("updateRangeFilterFromInputs('end')", integrated_block)
         self.assertIn("updateRangeFilterFromSliders('start')", integrated_block)
         self.assertIn("updateRangeFilterFromSliders('end')", integrated_block)
+        self.assertIn('onclick="commitRangeFilter()"', integrated_block)
         self.assertIn("function readRangeFilter(changedHandle)", integrated_block)
         self.assertIn("function syncRangeControls(range)", integrated_block)
         self.assertIn("function updateRangeFilterFromSliders(changedHandle)", integrated_block)
         self.assertIn("function activateRangeHandle(handle)", integrated_block)
-        self.assertIn("function scheduleRangeFilterApply()", integrated_block)
+        self.assertIn("var pendingRangeFilter = { start: null, end: null };", integrated_block)
+        self.assertIn("function updateRangePendingState()", integrated_block)
+        self.assertIn("function setPendingRangeFilter(range)", integrated_block)
+        self.assertIn("function commitRangeFilter()", integrated_block)
+        self.assertNotIn("function scheduleRangeFilterApply()", integrated_block)
         self.assertIn("function beginRangeSliderDrag(event)", integrated_block)
         self.assertIn("function moveRangeSliderDrag(event)", integrated_block)
         self.assertIn("function endRangeSliderDrag(event)", integrated_block)
@@ -1846,7 +1853,19 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("function resolveDraggedRange(handle, value, start, end)", integrated_block)
         self.assertIn("function scheduleLDTriangleRedraw()", integrated_block)
         self.assertIn("clearTimeout(ldRedrawTimer)", integrated_block)
-        self.assertIn("scheduleRangeFilterApply();", integrated_block)
+        for function_name in (
+            "updateRangeFilterFromInputs",
+            "updateRangeFilterFromSliders",
+            "clearRangeFilter",
+        ):
+            function_start = integrated_block.index(f"function {function_name}(")
+            function_end = integrated_block.find("\nfunction ", function_start + 1)
+            function_block = integrated_block[function_start:function_end]
+            self.assertNotIn("applyFilters();", function_block)
+        commit_start = integrated_block.index("function commitRangeFilter()")
+        commit_end = integrated_block.find("\nfunction ", commit_start + 1)
+        commit_block = integrated_block[commit_start:commit_end]
+        self.assertEqual(commit_block.count("applyFilters();"), 1)
         self.assertIn("aria-valuetext", integrated_block)
         self.assertNotIn('aria-live="polite"', integrated_block)
         self.assertIn("rangeStartInput.value = ''", integrated_block)
@@ -1897,9 +1916,24 @@ class StarGeneDataTests(unittest.TestCase):
             self.fail(f"Could not extract JavaScript function {name}")
 
         functions = "\n".join(extract_js_function(name) for name in [
+            "getRangeBounds",
+            "parseRangeNumber",
+            "clampRangeNumber",
+            "normalizeRangeValues",
+            "readRangeFilter",
+            "formatRangeNumber",
             "rangeValueFromClientX",
             "chooseRangeHandle",
             "resolveDraggedRange",
+            "canonicalizeRangeFilter",
+            "rangeFiltersEqual",
+            "syncRangeControls",
+            "updateRangePendingState",
+            "setPendingRangeFilter",
+            "updateRangeFilterFromInputs",
+            "updateRangeFilterFromSliders",
+            "clearRangeFilter",
+            "commitRangeFilter",
             "scheduleLDTriangleRedraw",
         ])
         script = functions + r"""
@@ -1916,6 +1950,46 @@ assertEqual(chooseRangeHandle(51, 50, 50, 'start'), 'end', 'overlap drag right')
 assertEqual(chooseRangeHandle(50, 50, 50, 'start'), 'end', 'overlap exact toggles handle');
 assertEqual(resolveDraggedRange('start', 60, 50, 55), {start: 55, end: 55}, 'start cannot cross end');
 assertEqual(resolveDraggedRange('end', 40, 50, 55), {start: 50, end: 50}, 'end cannot cross start');
+var elements = {
+    rangeStartInput: { value: '', min: '1', max: '101' },
+    rangeEndInput: { value: '', min: '1', max: '101' },
+    rangeStartSlider: { value: '1', min: '1', max: '101', style: {}, setAttribute: function() {} },
+    rangeEndSlider: { value: '101', min: '1', max: '101', style: {}, setAttribute: function() {} },
+    rangeSliderFill: { style: {} },
+    rangeSliderLabel: { textContent: '' },
+    rangeApplyBtn: { disabled: true },
+    rangePendingStatus: { hidden: true }
+};
+var document = { getElementById: function(id) { return elements[id] || null; } };
+var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: null };
+var pendingRangeFilter = { start: null, end: null };
+var applyCount = 0;
+function applyFilters() { applyCount += 1; }
+
+elements.rangeStartInput.value = '20';
+updateRangeFilterFromInputs('start');
+assertEqual(applyCount, 0, 'number edit stays pending');
+assertEqual(currentFilter.rangeStart, null, 'number edit leaves applied start unchanged');
+assertEqual(elements.rangeApplyBtn.disabled, false, 'pending edit enables apply');
+commitRangeFilter();
+assertEqual(applyCount, 1, 'changed range applies once');
+assertEqual(currentFilter.rangeStart, 20, 'commit updates applied start');
+elements.rangeEndInput.value = '80';
+updateRangeFilterFromInputs('end');
+clearRangeFilter();
+assertEqual(applyCount, 1, 'clear stays pending');
+assertEqual(currentFilter.rangeStart, 20, 'clear leaves applied range unchanged');
+commitRangeFilter();
+assertEqual(applyCount, 2, 'cleared range applies once');
+assertEqual(currentFilter.rangeStart, null, 'clear commit restores full range');
+commitRangeFilter();
+assertEqual(applyCount, 2, 'unchanged commit is skipped');
+elements.rangeStartSlider.value = '30';
+elements.rangeEndSlider.value = '101';
+updateRangeFilterFromSliders('start');
+assertEqual(applyCount, 2, 'slider edit stays pending');
+commitRangeFilter();
+assertEqual(applyCount, 3, 'slider range applies on explicit commit');
 var clearedTimers = [];
 var nextTimer = 0;
 var ldRedrawTimer = null;

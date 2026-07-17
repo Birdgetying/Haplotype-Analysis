@@ -9931,9 +9931,14 @@ class ReportGenerator:
         .range-inputs {{ display: grid; width: 100%; gap: 6px; }}
         .range-number-row {{ display: flex; align-items: center; gap: 6px; }}
         .range-number-row input {{ width: 92px; min-width: 0; padding: 4px 6px; border: 1px solid #cfd8e3; border-radius: 6px; font-size: 11px; }}
-        .range-number-row .range-clear-btn {{ margin-left: auto; }}
+        .range-action-row {{ display: flex; align-items: center; gap: 6px; min-height: 26px; }}
+        .range-pending-status {{ margin-right: auto; color: #9a6700; font-size: 10px; font-weight: 600; }}
         .range-inputs button {{ padding: 4px 8px; border: 1px solid #cfd8e3; border-radius: 6px; background: #f8fafc; color: #334155; cursor: pointer; }}
         .range-inputs button:hover {{ background: #eef7ff; border-color: #5aa9e6; }}
+        .range-inputs .range-apply-btn {{ border-color: #2f80c2; background: #2f80c2; color: #ffffff; }}
+        .range-inputs .range-apply-btn:hover {{ background: #256da8; border-color: #256da8; }}
+        .range-inputs button:disabled {{ border-color: #d8e0ea; background: #eef2f6; color: #98a2b3; cursor: not-allowed; }}
+        .range-inputs button:disabled:hover {{ border-color: #d8e0ea; background: #eef2f6; }}
         .range-slider {{ position: relative; width: 100%; min-width: 0; height: 28px; cursor: pointer; touch-action: none; user-select: none; }}
         .range-slider-track,
         .range-slider-fill {{ position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 999px; }}
@@ -10077,7 +10082,6 @@ class ReportGenerator:
                     <input type="number" id="rangeStartInput" aria-label="Display range start" placeholder="Start" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs('start')">
                     <span>to</span>
                     <input type="number" id="rangeEndInput" aria-label="Display range end" placeholder="End" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs('end')">
-                    <button class="range-clear-btn" type="button" onclick="clearRangeFilter()">Clear</button>
                 </span>
                 <span class="range-slider" id="displayRangeSlider" title="Drag both handles to choose the visible position range" onpointerdown="beginRangeSliderDrag(event)" onpointermove="moveRangeSliderDrag(event)" onpointerup="endRangeSliderDrag(event)" onpointercancel="endRangeSliderDrag(event)">
                     <span class="range-slider-track"></span>
@@ -10089,6 +10093,11 @@ class ReportGenerator:
                     <span>{region_start:,}</span>
                     <span class="range-slider-label" id="rangeSliderLabel">Full range</span>
                     <span>{region_end:,}</span>
+                </span>
+                <span class="range-action-row">
+                    <span class="range-pending-status" id="rangePendingStatus" hidden>Unapplied changes</span>
+                    <button class="range-clear-btn" type="button" onclick="clearRangeFilter()">Clear</button>
+                    <button class="range-apply-btn" id="rangeApplyBtn" type="button" onclick="commitRangeFilter()" disabled>Apply Range</button>
                 </span>
             </span>
         </div>
@@ -11059,7 +11068,7 @@ var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: n
 var manualFilterMode = false;
 var manualBlacklist = new Set();
 var manualFilterHistory = [];
-var rangeFilterFrame = null;
+var pendingRangeFilter = { start: null, end: null };
 var activeRangeHandle = 'start';
 var rangePointerState = { pointerId: null, handle: null, overlapValue: null };
 var connectorRedrawFrame = null;
@@ -11213,9 +11222,27 @@ function readRangeFilter(changedHandle) {
         var resolved = resolveDraggedRange(changedHandle, clampRangeNumber(changedHandle === 'start' ? rawStart : rawEnd, bounds), clampRangeNumber(rawStart, bounds), clampRangeNumber(rawEnd, bounds));
         range = { start: resolved.start, end: resolved.end, min: bounds.min, max: bounds.max };
     }
-    currentFilter.rangeStart = range.start;
-    currentFilter.rangeEnd = range.end;
     return range;
+}
+
+function canonicalizeRangeFilter(range) {
+    var bounds = getRangeBounds();
+    var rawStart = range && range.start !== undefined ? range.start : range && range.rangeStart;
+    var rawEnd = range && range.end !== undefined ? range.end : range && range.rangeEnd;
+    var normalized = normalizeRangeValues(
+        parseRangeNumber(rawStart),
+        parseRangeNumber(rawEnd)
+    );
+    return {
+        start: normalized.start === null || normalized.start <= bounds.min ? null : normalized.start,
+        end: normalized.end === null || normalized.end >= bounds.max ? null : normalized.end,
+        min: bounds.min,
+        max: bounds.max
+    };
+}
+
+function rangeFiltersEqual(a, b) {
+    return a.start === b.start && a.end === b.end;
 }
 
 function formatRangeNumber(value) {
@@ -11322,14 +11349,6 @@ function endRangeSliderDrag(event) {
     rangePointerState = { pointerId: null, handle: null, overlapValue: null };
 }
 
-function scheduleRangeFilterApply() {
-    if (rangeFilterFrame !== null) return;
-    rangeFilterFrame = requestAnimationFrame(function() {
-        rangeFilterFrame = null;
-        applyFilters();
-    });
-}
-
 function syncRangeControls(range) {
     range = range || readRangeFilter();
     var startInput = document.getElementById('rangeStartInput');
@@ -11372,6 +11391,23 @@ function syncRangeControls(range) {
     }
 }
 
+function updateRangePendingState() {
+    var pending = canonicalizeRangeFilter(pendingRangeFilter);
+    var applied = canonicalizeRangeFilter(currentFilter);
+    var isDirty = !rangeFiltersEqual(pending, applied);
+    var applyButton = document.getElementById('rangeApplyBtn');
+    var status = document.getElementById('rangePendingStatus');
+    if (applyButton) applyButton.disabled = !isDirty;
+    if (status) status.hidden = !isDirty;
+}
+
+function setPendingRangeFilter(range) {
+    var normalized = canonicalizeRangeFilter(range);
+    pendingRangeFilter = { start: normalized.start, end: normalized.end };
+    syncRangeControls(normalized);
+    updateRangePendingState();
+}
+
 function inDisplayRange(pos) {
     if (currentFilter.rangeStart !== null && pos < currentFilter.rangeStart) return false;
     if (currentFilter.rangeEnd !== null && pos > currentFilter.rangeEnd) return false;
@@ -11379,8 +11415,7 @@ function inDisplayRange(pos) {
 }
 
 function updateRangeFilterFromInputs(changedHandle) {
-    syncRangeControls(readRangeFilter(changedHandle));
-    scheduleRangeFilterApply();
+    setPendingRangeFilter(readRangeFilter(changedHandle));
 }
 
 function updateRangeFilterFromSliders(changedHandle) {
@@ -11397,10 +11432,7 @@ function updateRangeFilterFromSliders(changedHandle) {
             end = start;
         }
     }
-    currentFilter.rangeStart = (start === null || start <= bounds.min) ? null : start;
-    currentFilter.rangeEnd = (end === null || end >= bounds.max) ? null : end;
-    syncRangeControls({ start: currentFilter.rangeStart, end: currentFilter.rangeEnd, min: bounds.min, max: bounds.max });
-    scheduleRangeFilterApply();
+    setPendingRangeFilter({ start: start, end: end, min: bounds.min, max: bounds.max });
 }
 
 function clearRangeFilter() {
@@ -11408,9 +11440,17 @@ function clearRangeFilter() {
     var rangeEndInput = document.getElementById('rangeEndInput');
     if (rangeStartInput) rangeStartInput.value = '';
     if (rangeEndInput) rangeEndInput.value = '';
-    currentFilter.rangeStart = null;
-    currentFilter.rangeEnd = null;
-    syncRangeControls(readRangeFilter());
+    setPendingRangeFilter({ start: null, end: null });
+}
+
+function commitRangeFilter() {
+    var nextRange = canonicalizeRangeFilter(readRangeFilter());
+    var appliedRange = canonicalizeRangeFilter(currentFilter);
+    setPendingRangeFilter(nextRange);
+    if (rangeFiltersEqual(nextRange, appliedRange)) return;
+    currentFilter.rangeStart = nextRange.start;
+    currentFilter.rangeEnd = nextRange.end;
+    updateRangePendingState();
     applyFilters();
 }
 
@@ -11483,7 +11523,7 @@ function resetFilters() {
     var rangeEndInput = document.getElementById('rangeEndInput');
     if (rangeStartInput) rangeStartInput.value = '';
     if (rangeEndInput) rangeEndInput.value = '';
-    syncRangeControls(readRangeFilter());
+    setPendingRangeFilter({ start: null, end: null });
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
@@ -11512,7 +11552,10 @@ window.addEventListener('message', function(ev) {
         var re = document.getElementById('rangeEndInput');
         if (rs && f.rangeStart !== undefined) rs.value = f.rangeStart == null ? '' : f.rangeStart;
         if (re && f.rangeEnd !== undefined) re.value = f.rangeEnd == null ? '' : f.rangeEnd;
-        syncRangeControls(readRangeFilter());
+        var incomingRange = canonicalizeRangeFilter(readRangeFilter());
+        currentFilter.rangeStart = incomingRange.start;
+        currentFilter.rangeEnd = incomingRange.end;
+        setPendingRangeFilter(incomingRange);
     }
     if (f.annotationEnabled) {
         Object.keys(f.annotationEnabled).forEach(function(k) {
@@ -11916,8 +11959,6 @@ function scheduleLDTriangleRedraw() {
 
 
 function applyFilters() {
-    syncRangeControls(readRangeFilter());
-    
     // 获取所有选中的annotation类型
     var checkedTypes = [];
     document.querySelectorAll('.ann-cb:checked').forEach(function(cb) {
