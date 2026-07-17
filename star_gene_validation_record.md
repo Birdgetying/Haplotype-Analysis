@@ -2518,3 +2518,68 @@ of being inversely enlarged by main-content Zoom. Duplicate genomic coordinates
 are collapsed to one report column while full scoring positions remain intact.
 No page-level JavaScript or console errors occurred. The rerun preserved `Hap6`,
 score `1.2016`, n=3, and the 837 bp post-hoc match.
+
+### 2026-07-17 synchronized display-range coordinate domain
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by diagnostic marker
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at alignment position `13,077`.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database
+with 102 samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`.
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. The report-coordinate rerun does not alter discovery scoring. The existing
+post-hoc verification remains valid: `Hap6` carries the literature 837 bp
+insertion. The literature marker was not used as a scoring feature or as a
+display-range anchor.
+
+Sample count / reliability:
+`Hap6` has n=3. The positive-control match remains small-sample evidence.
+
+Blocked reason:
+None for the analysis or report fix. The manifest still warns that an optional
+WatSeq phenotype table is absent; the complete precomputed database supplies
+the 102-sample `GrowthHabitSpringScore` input. The project-level
+`run_rice_test.py` smoke test produced no output before the 184-second timeout
+because local `pysam` is unavailable and the known pure-Python large-VCF scan
+path is slow; the targeted and full unit-test suites completed successfully.
+
+Report/UI check:
+The applied Display Range is now the single coordinate domain shared by the
+GWAS x axis, gene-structure axis, promoter/gene-body model, variant markers,
+sequence columns, connectors, and LD filtering. Numeric edits and slider
+movement remain pending and do not redraw these views until `Apply Range` is
+clicked. Applying `6,000-8,000` changes both gene ticks and GWAS ticks to that
+interval and leaves four visible variants; applying `1,000-2,000` shows only
+the clipped promoter model; applying the single position `7,605` remains
+valid. Local alignment coordinates are labelled in kb rather than rounded Mb,
+avoiding duplicate-looking GWAS tick labels.
+
+Browser verification:
+The regenerated local HTML passed a Microsoft Edge Chromium Playwright check.
+The test opened the real Filters sidebar, confirmed that pending edits did not
+change either axis, clicked `Apply Range`, and checked the gene-body,
+promoter-only, and single-position cases. There were no page-level JavaScript
+errors. The currently bundled Firefox executable was unavailable, so no
+current Firefox claim is made for this rerun.

@@ -10396,6 +10396,7 @@ class ReportGenerator:
         html += f'<text x="{gene_area_start + gene_area_width/2}" y="8" font-size="10" fill="#3498db" text-anchor="middle" font-weight="500">{gene_id}</text>\n'
                 
         # ==== 坐标轴线（参照老师的图：带小刻度）====
+        html += '<g id="gene-axis-layer">\n'
         html += f'<line x1="{gene_area_start}" y1="{axis_y}" x2="{gene_area_start + gene_area_width}" y2="{axis_y}" stroke="#333" stroke-width="1.2"/>\n'
                 
         # 坐标刻度：方向与箭头方向一致
@@ -10416,6 +10417,7 @@ class ReportGenerator:
             # 坐标轴处加粗小刻度
             html += f'<line x1="{x}" y1="{axis_y-2}" x2="{x}" y2="{axis_y+4}" stroke="#555" stroke-width="1.5"/>\n'
             html += f'<text x="{x}" y="{var_top_y-5}" font-size="8.5" fill="#555" text-anchor="middle">{kb:.1f}</text>\n'
+        html += '</g>\n'
         
         # ==== 基因结构：使用真实的外显子和 CDS 坐标 ====
         # 计算各区域在 SVG 中的位置
@@ -10433,6 +10435,7 @@ class ReportGenerator:
         intron_y = gene_y + gene_h // 2
         
         # ==== 1. 内含子骨架（黑色细线，贯穿整个基因区域）====
+        html += '<g id="gene-model-layer">\n'
         html += f'<line x1="{gene_x1}" y1="{intron_y}" x2="{gene_x2}" y2="{intron_y}" stroke="#2c3e50" stroke-width="2"/>\n'
         
         # ==== 2. 启动子（与基因同一行）====
@@ -10502,6 +10505,7 @@ class ReportGenerator:
             html += f'<line x1="{gene_x1}" y1="{intron_y}" x2="{gene_x1-arrow_line}" y2="{intron_y}" stroke="#2c3e50" stroke-width="2"/>\n'
             # 画箭头三角形（顶点在左）
             html += f'<polygon points="{gene_x1-arrow_line-arrow_size},{intron_y} {gene_x1-arrow_line},{intron_y-arrow_size//2} {gene_x1-arrow_line},{intron_y+arrow_size//2}" fill="#2c3e50"/>\n'
+        html += '</g>\n'
                 
         # ==== 变异位点连线（参照老师的图：斜直线虚线）====
         # gene_x = 真实物理坐标在基因结构上的像素位置
@@ -10540,7 +10544,7 @@ class ReportGenerator:
             # 变异圆圈：lead variant使用更大的圆圈和星形标记
             if is_lead_variant:
                 html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" cx="{gene_x}" cy="{var_top_y}" r="5" fill="{var_color}" stroke="#c0392b" stroke-width="2" data-idx="{idx}"/>\n'
-                html += f'<text x="{gene_x}" y="{var_top_y+1}" font-size="6" fill="white" text-anchor="middle" dominant-baseline="middle" font-weight="bold">★</text>\n'
+                html += f'<text class="var-star" data-pos="{pos}" x="{gene_x}" y="{var_top_y+1}" font-size="6" fill="white" text-anchor="middle" dominant-baseline="middle" font-weight="bold">★</text>\n'
             else:
                 html += f'<circle class="var-circle" data-pos="{pos}" data-maf="{var_maf}" data-missing="{var_missing}" data-ann="{var_type_attr}" cx="{gene_x}" cy="{var_top_y}" r="3" fill="{var_color}" stroke="white" stroke-width="0.5" data-idx="{idx}"/>\n'
             
@@ -11078,6 +11082,7 @@ var currentPhenotype = {pheno_first_for_js};
 var haplotypeScoreData = getScoreData(currentScoreMode, currentPhenotype);
 var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
+var geneModelData = __GENE_MODEL_DATA__;
 var hasPromoter  = {has_promoter_variants_json};
 var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
 var geneAreaWidth = {gene_area_width_js};  // 基因区域宽度（与基因结构图完全一致）
@@ -11589,15 +11594,226 @@ function inDisplayRange(pos) {
     return true;
 }
 
+function getAppliedCoordinateDomain() {
+    var start = currentFilter.rangeStart === null ? regionStart : currentFilter.rangeStart;
+    var end = currentFilter.rangeEnd === null ? regionEnd : currentFilter.rangeEnd;
+    start = Math.max(regionStart, Math.min(regionEnd, Number(start)));
+    end = Math.max(regionStart, Math.min(regionEnd, Number(end)));
+    if (start > end) {
+        var tmp = start;
+        start = end;
+        end = tmp;
+    }
+    return { start: start, end: end };
+}
+
+function getD3CoordinateDomain(domain) {
+    if (domain.start === domain.end) {
+        return [domain.start - 0.5, domain.end + 0.5];
+    }
+    return [domain.start, domain.end];
+}
+
+function formatCoordinateTick(value, domain) {
+    var span = Math.max(1, domain.end - domain.start);
+    if (regionEnd >= 1000000) {
+        var mbDigits = span < 100000 ? 3 : 2;
+        return (value / 1000000).toFixed(mbDigits) + ' Mb';
+    }
+    if (regionEnd >= 1000) {
+        var kbDigits = span < 1000 ? 2 : 1;
+        return (value / 1000).toFixed(kbDigits) + ' kb';
+    }
+    return Math.round(value).toLocaleString() + ' bp';
+}
+
+function coordinateToGeneX(pos, domain) {
+    if (domain.start === domain.end) {
+        return gwasLeftMargin + geneAreaWidth / 2;
+    }
+    return gwasLeftMargin + ((Number(pos) - domain.start) / (domain.end - domain.start)) * geneAreaWidth;
+}
+
+function clipCoordinateInterval(start, end, domain) {
+    if (start === null || start === undefined || end === null || end === undefined) return null;
+    var lo = Math.max(Math.min(Number(start), Number(end)), domain.start);
+    var hi = Math.min(Math.max(Number(start), Number(end)), domain.end);
+    if (lo > hi) return null;
+    return { start: lo, end: hi };
+}
+
+function getGeneStructureGeometry(domain, model) {
+    var tickCount = domain.start === domain.end
+        ? 1
+        : Math.max(2, Math.min(9, Math.floor(geneAreaWidth / 80) + 1));
+    var ticks = [];
+    for (var tickIndex = 0; tickIndex < tickCount; tickIndex++) {
+        var ratio = tickCount === 1 ? 0.5 : tickIndex / (tickCount - 1);
+        var position = domain.start + ratio * (domain.end - domain.start);
+        ticks.push({
+            ratio: ratio,
+            position: position,
+            relativeKb: model.strand === '-'
+                ? (regionEnd - position) / 1000
+                : (position - regionStart) / 1000
+        });
+    }
+
+    var cdsIntervals = Array.isArray(model.cds) ? model.cds : [];
+    var visibleExons = [];
+    (Array.isArray(model.exons) ? model.exons : []).forEach(function(exon) {
+        var exonStart = Math.min(Number(exon[0]), Number(exon[1]));
+        var exonEnd = Math.max(Number(exon[0]), Number(exon[1]));
+        var visibleExon = clipCoordinateInterval(exonStart, exonEnd, domain);
+        if (!visibleExon) return;
+        var visibleCds = [];
+        cdsIntervals.forEach(function(cdsInterval) {
+            var cdsStart = Math.min(Number(cdsInterval[0]), Number(cdsInterval[1]));
+            var cdsEnd = Math.max(Number(cdsInterval[0]), Number(cdsInterval[1]));
+            var overlapStart = Math.max(exonStart, cdsStart);
+            var overlapEnd = Math.min(exonEnd, cdsEnd);
+            if (overlapStart > overlapEnd) return;
+            var clippedCds = clipCoordinateInterval(overlapStart, overlapEnd, domain);
+            if (clippedCds) visibleCds.push(clippedCds);
+        });
+        visibleExons.push({ interval: visibleExon, cds: visibleCds });
+    });
+
+    var threePrimePosition = model.strand === '-'
+        ? Number(model.gene_start)
+        : Number(model.gene_end);
+    return {
+        ticks: ticks,
+        gene: clipCoordinateInterval(model.gene_start, model.gene_end, domain),
+        promoter: clipCoordinateInterval(model.promoter_start, model.promoter_end, domain),
+        exons: visibleExons,
+        threePrimePosition: threePrimePosition >= domain.start && threePrimePosition <= domain.end
+            ? threePrimePosition
+            : null
+    };
+}
+
+function updateGeneStructureDomain() {
+    var svg = d3.select('#gene-structure-svg');
+    if (svg.empty()) return;
+
+    var coordinateDomain = getAppliedCoordinateDomain();
+    var axisY = 28, geneY = 48, geneH = 18, varTopY = axisY - 8;
+    var intronY = geneY + geneH / 2;
+    var axisLayer = svg.select('#gene-axis-layer');
+    var modelLayer = svg.select('#gene-model-layer');
+    if (axisLayer.empty() || modelLayer.empty()) return;
+    var geometry = getGeneStructureGeometry(coordinateDomain, geneModelData);
+
+    axisLayer.selectAll('*').remove();
+    axisLayer.append('line')
+        .attr('x1', gwasLeftMargin).attr('x2', gwasLeftMargin + geneAreaWidth)
+        .attr('y1', axisY).attr('y2', axisY)
+        .attr('stroke', '#333').attr('stroke-width', 1.2);
+
+    geometry.ticks.forEach(function(tick) {
+        var tickX = gwasLeftMargin + tick.ratio * geneAreaWidth;
+        axisLayer.append('line')
+            .attr('x1', tickX).attr('x2', tickX)
+            .attr('y1', varTopY - 2).attr('y2', geneY + geneH)
+            .attr('stroke', '#aaa').attr('stroke-width', 0.7).attr('stroke-dasharray', '2,2');
+        axisLayer.append('line')
+            .attr('x1', tickX).attr('x2', tickX)
+            .attr('y1', axisY - 2).attr('y2', axisY + 4)
+            .attr('stroke', '#555').attr('stroke-width', 1.5);
+        axisLayer.append('text')
+            .attr('x', tickX).attr('y', varTopY - 5)
+            .attr('font-size', 8.5).attr('fill', '#555').attr('text-anchor', 'middle')
+            .text(tick.relativeKb.toFixed(1));
+    });
+
+    modelLayer.selectAll('*').remove();
+
+    function appendRect(interval, fill, stroke, strokeWidth, opacity, dasharray) {
+        if (!interval) return null;
+        var x1 = coordinateToGeneX(interval.start, coordinateDomain);
+        var x2 = coordinateToGeneX(interval.end, coordinateDomain);
+        var width = Math.max(1, Math.abs(x2 - x1));
+        var rect = modelLayer.append('rect')
+            .attr('x', Math.min(x1, x2)).attr('y', geneY)
+            .attr('width', width).attr('height', geneH)
+            .attr('fill', fill).attr('rx', 1);
+        if (stroke) rect.attr('stroke', stroke).attr('stroke-width', strokeWidth || 1);
+        if (opacity !== null && opacity !== undefined) rect.attr('opacity', opacity);
+        if (dasharray) rect.attr('stroke-dasharray', dasharray);
+        return { rect: rect, x: Math.min(x1, x2), width: width };
+    }
+
+    var geneInterval = geometry.gene;
+    if (geneInterval) {
+        modelLayer.append('line')
+            .attr('x1', coordinateToGeneX(geneInterval.start, coordinateDomain))
+            .attr('x2', coordinateToGeneX(geneInterval.end, coordinateDomain))
+            .attr('y1', intronY).attr('y2', intronY)
+            .attr('stroke', '#2c3e50').attr('stroke-width', 2);
+    }
+
+    var promoterInterval = geometry.promoter;
+    var promoterShape = appendRect(promoterInterval, '#f39c12', '#e67e22', 1.5, 0.4, '3,2');
+    if (promoterShape && promoterShape.width > 40) {
+        modelLayer.append('text')
+            .attr('x', promoterShape.x + promoterShape.width / 2)
+            .attr('y', geneY + geneH / 2 + 3)
+            .attr('font-size', 7).attr('fill', '#d35400')
+            .attr('text-anchor', 'middle').attr('font-weight', 600)
+            .text('Promoter');
+    }
+
+    var hasExonModel = Array.isArray(geneModelData.exons) && geneModelData.exons.length > 0;
+    if (hasExonModel) {
+        geometry.exons.forEach(function(exonGeometry) {
+            appendRect(exonGeometry.interval, 'white', '#3498db', 1, null, null);
+            exonGeometry.cds.forEach(function(cdsInterval) {
+                appendRect(cdsInterval, '#3498db', null, null, null, null);
+            });
+        });
+    } else if (geneInterval) {
+        appendRect(geneInterval, '#3498db', '#2980b9', 1, null, null);
+    }
+
+    var threePrimePosition = geometry.threePrimePosition;
+    if (threePrimePosition !== null) {
+        var arrowTipX = coordinateToGeneX(threePrimePosition, coordinateDomain);
+        var arrowSize = 10;
+        if (geneModelData.strand === '-') {
+            var leftBaseX = Math.min(gwasLeftMargin + geneAreaWidth, arrowTipX + arrowSize);
+            modelLayer.append('polygon')
+                .attr('points', arrowTipX + ',' + intronY + ' ' + leftBaseX + ',' + (intronY - arrowSize / 2) + ' ' + leftBaseX + ',' + (intronY + arrowSize / 2))
+                .attr('fill', '#2c3e50');
+        } else {
+            var rightBaseX = Math.max(gwasLeftMargin, arrowTipX - arrowSize);
+            modelLayer.append('polygon')
+                .attr('points', arrowTipX + ',' + intronY + ' ' + rightBaseX + ',' + (intronY - arrowSize / 2) + ' ' + rightBaseX + ',' + (intronY + arrowSize / 2))
+                .attr('fill', '#2c3e50');
+        }
+    }
+
+    document.querySelectorAll('.var-up-line, .var-line, .var-circle, .var-star, .var-connector').forEach(function(el) {
+        var pos = parseInt(el.getAttribute('data-pos'), 10);
+        if (isNaN(pos)) return;
+        var x = coordinateToGeneX(pos, coordinateDomain);
+        if (el.tagName === 'circle') el.setAttribute('cx', x);
+        if (el.tagName === 'text') el.setAttribute('x', x);
+        if (el.tagName === 'line') {
+            if (el.classList.contains('var-connector')) {
+                el.setAttribute('data-gene-x', x);
+            } else {
+                el.setAttribute('x1', x);
+                el.setAttribute('x2', x);
+            }
+        }
+    });
+}
+
 function scrollToAppliedRange() {
     var section = document.querySelector('.main-data-section');
     if (!section) return;
-    var start = currentFilter.rangeStart === null ? regionStart : currentFilter.rangeStart;
-    var end = currentFilter.rangeEnd === null ? regionEnd : currentFilter.rangeEnd;
-    var center = (start + end) / 2;
-    var regionRatio = (center - regionStart) / Math.max(1, regionEnd - regionStart);
-    regionRatio = Math.max(0, Math.min(1, regionRatio));
-    var logicalX = gwasLeftMargin + regionRatio * geneAreaWidth;
+    var logicalX = gwasLeftMargin + geneAreaWidth / 2;
     var contentRatio = logicalX / Math.max(1, svgTotalWidth);
     var maxScroll = Math.max(0, section.scrollWidth - section.clientWidth);
     section.scrollLeft = Math.max(
@@ -12192,7 +12408,9 @@ function applyFilters() {
         return rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass));
     });
     
-    drawGWASPlot(filtered);
+    var coordinateDomain = getAppliedCoordinateDomain();
+    updateGeneStructureDomain();
+    drawGWASPlot(filtered, coordinateDomain);
     
     // 构建通过过滤的位置集合
     var posSet = {};
@@ -12233,7 +12451,7 @@ function applyFilters() {
     }});
     
     // 更新基因结构图上的变异元素（竖线、圆圈、斜线、向上虚线）
-    document.querySelectorAll('.var-line, .var-circle, .var-connector, .var-up-line').forEach(function(el) {
+    document.querySelectorAll('.var-line, .var-circle, .var-star, .var-connector, .var-up-line').forEach(function(el) {
         var pos = parseInt(el.getAttribute('data-pos'));
         
         // 检查是否通过过滤（基于posSet）
@@ -12517,7 +12735,7 @@ function drawNetworkPlot() {
 }
 
 // ==================== GWAS -log10(P) 散点图（仅P值图，基因结构在下方SVG中） ====================
-function drawGWASPlot(data) {
+function drawGWASPlot(data, coordinateDomain) {
     var container = document.getElementById('gwas-gene-viz');
     if (!container) return;
     // GWAS图SVG宽度与基因结构图总宽度相同，绘图区域宽度与基因区域宽度一致
@@ -12544,7 +12762,8 @@ function drawGWASPlot(data) {
         .attr('width', W).attr('height', H).style('display','block').style('margin','0').style('overflow','visible');
     var g = svg.append('g').attr('transform','translate('+ml+','+mt+')');
 
-    var xSc = d3.scaleLinear().domain([regionStart, regionEnd]).range([0, iW]);
+    coordinateDomain = coordinateDomain || getAppliedCoordinateDomain();
+    var xSc = d3.scaleLinear().domain(getD3CoordinateDomain(coordinateDomain)).range([0, iW]);
 
     // 只使用全部高度显示P值图
     var gwasH = iH;
@@ -12648,8 +12867,13 @@ function drawGWASPlot(data) {
         .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#444')
         .text('-log10(P)');
 
+    var xAxis = d3.axisBottom(xSc).ticks(6)
+        .tickFormat(function(d) { return formatCoordinateTick(d, coordinateDomain); });
+    if (coordinateDomain.start === coordinateDomain.end) {
+        xAxis.tickValues([coordinateDomain.start]);
+    }
     g.append('g').attr('transform', 'translate(0,' + iH + ')')
-        .call(d3.axisBottom(xSc).ticks(6).tickFormat(function(d) { return (d / 1e6).toFixed(3) + ' Mb'; }))
+        .call(xAxis)
         .selectAll('text').attr('font-size', '9px').attr('transform', 'rotate(-18)').attr('text-anchor', 'end');
 
     // 在GWAS图底部画竖虚线，与下方基因结构图的变异位置对齐，并向上延伸到散点
@@ -13211,10 +13435,20 @@ document.addEventListener('DOMContentLoaded', function() {
         html = html.replace('{gwas_mb}', str(gwas_mb))
         _lead_js = str(lead_pos) if lead_pos is not None else "null"
         _exon_json = json.dumps([[int(a[0]), int(a[1])] for a in (exons or [])])
+        _gene_model_json = _script_json_dumps({
+            'gene_start': int(g_start),
+            'gene_end': int(g_end),
+            'promoter_start': int(promoter_start) if promoter_start is not None else None,
+            'promoter_end': int(promoter_end) if promoter_end is not None else None,
+            'strand': strand,
+            'exons': [[int(a[0]), int(a[1])] for a in (exons or [])],
+            'cds': [[int(a[0]), int(a[1])] for a in (cds or [])],
+        })
         _glabel = json.dumps(gene_id or chrom or "Gene")
         _display_pos_json = json.dumps([int(p) for p in display_positions]) if display_positions else "[]"
         html = html.replace("__LEAD_POS__", _lead_js)
         html = html.replace("__EXON_REGIONS__", _exon_json)
+        html = html.replace("__GENE_MODEL_DATA__", _gene_model_json)
         html = html.replace("__GENE_LABEL__", _glabel)
         html = html.replace("__DISPLAY_POSITIONS__", _display_pos_json)
         html = html.replace("__LD_R2_MATRIX__", ld_r2_json)

@@ -2104,6 +2104,40 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn("applyFilters();", export_block)
         self.assertNotIn("drawGWASPlot(gwasData);", export_block)
 
+    def test_applied_display_range_drives_gene_structure_and_gwas_domains(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("function getAppliedCoordinateDomain()", integrated_block)
+        self.assertIn("function updateGeneStructureDomain()", integrated_block)
+        self.assertIn('id="gene-axis-layer"', integrated_block)
+        self.assertIn('id="gene-model-layer"', integrated_block)
+        self.assertIn("var geneModelData = __GENE_MODEL_DATA__;", integrated_block)
+        self.assertIn("var coordinateDomain = getAppliedCoordinateDomain();", integrated_block)
+        self.assertIn("updateGeneStructureDomain();", integrated_block)
+        self.assertIn(".domain(getD3CoordinateDomain(coordinateDomain))", integrated_block)
+        self.assertNotIn(".domain([regionStart, regionEnd])", integrated_block)
+
+        commit_start = integrated_block.index("function commitRangeFilter()")
+        commit_end = integrated_block.find("\nfunction ", commit_start + 1)
+        commit_block = integrated_block[commit_start:commit_end]
+        self.assertEqual(commit_block.count("applyFilters();"), 1)
+
+        pending_functions = (
+            "updateRangeFilterFromInputs",
+            "updateRangeFilterFromSliders",
+            "clearRangeFilter",
+        )
+        for function_name in pending_functions:
+            function_start = integrated_block.index(f"function {function_name}(")
+            function_end = integrated_block.find("\nfunction ", function_start + 1)
+            function_block = integrated_block[function_start:function_end]
+            self.assertNotIn("updateGeneStructureDomain();", function_block)
+            self.assertNotIn("drawGWASPlot(", function_block)
+
     def test_display_range_slider_executes_overlap_and_timer_logic(self):
         node = shutil.which("node")
         if not node:
@@ -2159,6 +2193,12 @@ class StarGeneDataTests(unittest.TestCase):
             "updateRangeFilterFromSliders",
             "clearRangeFilter",
             "commitRangeFilter",
+            "getAppliedCoordinateDomain",
+            "getD3CoordinateDomain",
+            "formatCoordinateTick",
+            "coordinateToGeneX",
+            "clipCoordinateInterval",
+            "getGeneStructureGeometry",
             "resetFilters",
             "scheduleLDTriangleRedraw",
         ])
@@ -2197,6 +2237,10 @@ var document = {
 var initialDisplayRange = {start: 10, end: 90};
 var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: 10, rangeEnd: 90 };
 var pendingRangeFilter = { start: 10, end: 90 };
+var regionStart = 1;
+var regionEnd = 101;
+var gwasLeftMargin = 450;
+var geneAreaWidth = 200;
 var manualBlacklist = new Set();
 var manualFilterHistory = [];
 var manualFilterMode = false;
@@ -2205,6 +2249,34 @@ function toggleManualFilter() {}
 function scheduleAppliedRangeCentering() {}
 var applyCount = 0;
 function applyFilters() { applyCount += 1; }
+
+assertEqual(getAppliedCoordinateDomain(), {start: 10, end: 90}, 'applied coordinate domain');
+assertEqual(getD3CoordinateDomain({start: 50, end: 50}), [49.5, 50.5], 'single-position D3 domain');
+assertEqual(coordinateToGeneX(50, {start: 10, end: 90}), 550, 'coordinate maps into gene plot');
+assertEqual(clipCoordinateInterval(1, 20, {start: 10, end: 90}), {start: 10, end: 20}, 'feature interval is clipped');
+assertEqual(formatCoordinateTick(50, {start: 10, end: 90}), '50 bp', 'small coordinates use bp labels');
+var plusModel = {
+    gene_start: 20, gene_end: 90,
+    promoter_start: 1, promoter_end: 19,
+    strand: '+', exons: [[20, 60]], cds: [[25, 55]]
+};
+var partialGeometry = getGeneStructureGeometry({start: 10, end: 30}, plusModel);
+assertEqual(partialGeometry.gene, {start: 20, end: 30}, 'gene body is clipped');
+assertEqual(partialGeometry.promoter, {start: 10, end: 19}, 'promoter is clipped');
+assertEqual(partialGeometry.exons, [{interval: {start: 20, end: 30}, cds: [{start: 25, end: 30}]}], 'exon and CDS are clipped');
+assertEqual(partialGeometry.threePrimePosition, null, 'off-screen arrow is omitted');
+var minusModel = {
+    gene_start: 20, gene_end: 90,
+    promoter_start: 91, promoter_end: 101,
+    strand: '-', exons: [[60, 20]], cds: [[55, 25]]
+};
+var minusGeometry = getGeneStructureGeometry({start: 10, end: 30}, minusModel);
+assertEqual(minusGeometry.ticks.map(function(t) { return Number(t.relativeKb.toFixed(3)); }), [0.091, 0.081, 0.071], 'minus-strand ticks run in reverse');
+assertEqual(minusGeometry.exons, [{interval: {start: 20, end: 30}, cds: [{start: 25, end: 30}]}], 'reversed exon coordinates are normalized');
+assertEqual(minusGeometry.threePrimePosition, 20, 'minus-strand arrow uses gene start');
+var singleGeometry = getGeneStructureGeometry({start: 50, end: 50}, plusModel);
+assertEqual(singleGeometry.ticks.map(function(t) { return t.ratio; }), [0.5], 'single-position range has one centered tick');
+assertEqual(singleGeometry.gene, {start: 50, end: 50}, 'single-position gene interval remains visible');
 
 elements.rangeStartInput.value = '1';
 updateRangeFilterFromInputs('start');
