@@ -2324,3 +2324,64 @@ reuse `applyFilters()` so the exported GWAS/LD views preserve the active hard
 display range instead of redrawing all markers. The outer multi-panel Reset now
 sends `rangeStart: null` and `rangeEnd: null` to the integrated report iframe,
 so a range selected inside the large figure is cleared consistently on reset.
+
+### 2026-07-17 display-range dual-handle slider
+
+Target gene:
+`VRN-B1`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion.
+
+Data source:
+`wheat2024` / `wheat_nature_2024`;
+`VRN-B1-fullSequence-IJMS2021` precomputed full-sequence alignment database.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery
+```
+
+Output directory:
+`star_gene_results/wheat_nature_2024/VRN-B1-fullSequence-IJMS2021__robust_discovery/`
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`.
+
+Match to literature functional haplotype:
+Yes. This report-only rerun preserves the previous biological interpretation:
+`Hap6` carries the literature `Vrn-B1f` 837 bp insertion.
+
+Sample count / reliability:
+n=3 for the exact insertion haplotype; the positive-control match remains
+small-sample evidence.
+
+Blocked reason:
+None for the VRN-B1 rerun. The project-level `run_rice_test.py` was stopped
+after about 70 seconds without output because local `pysam` is unavailable and
+the known pure-Python large-VCF scan path is not a useful quick regression test.
+
+Report/UI check:
+The right-sidebar Display Range control now includes an overlaid two-handle
+slider. The left and right handles synchronize bidirectionally with the numeric
+start/end inputs, selected-track fill, current-range label, Clear, Reset, and
+message-driven filters. Slider updates are limited to one render per animation
+frame, and pending connector/LD redraw callbacks are replaced by the newest
+request while dragging. Code-review follow-up added a unified pointer layer:
+when both handles overlap, moving left selects the start handle and moving right
+selects the end handle, so either endpoint can be separated again with a mouse
+or touch pointer. The generated HTML uses the exact report bounds `1-17,867`;
+discovery scoring and the post-hoc literature comparison are unchanged.
+
+Browser verification:
+Playwright smoke tests passed in both Microsoft Edge (Chromium) and Playwright
+Firefox 151.0. Each browser executed the generated local HTML and verified:
+independent start/end dragging; collapsing both handles and separating them by
+dragging left and right; Clear reset; crossed numeric-input clamping; selected
+track/label synchronization; and no page-level JavaScript errors. Playwright
+and its Firefox runtime were installed under the Windows temporary directory,
+not added to project dependencies.

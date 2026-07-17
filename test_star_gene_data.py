@@ -7,6 +7,8 @@ from io import StringIO
 import csv
 import gzip
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 import pandas as pd
@@ -1710,6 +1712,10 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertIn('class="score-mode-current">Robust discovery</span>', html)
         self.assertNotIn("status.innerHTML", html)
         self.assertNotIn("mode-toggle-btn", html)
+        self.assertIn('id="rangeStartSlider" aria-label="Display range start handle" min="50" max="150" value="50"', html)
+        self.assertIn('id="rangeEndSlider" aria-label="Display range end handle" min="50" max="150" value="150"', html)
+        self.assertIn('<span>50</span>', html)
+        self.assertIn('<span>150</span>', html)
 
     def test_integrated_html_keeps_validation_markers_visible_by_default(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -1820,8 +1826,29 @@ class StarGeneDataTests(unittest.TestCase):
 
         self.assertIn('id="rangeStartInput"', integrated_block)
         self.assertIn('id="rangeEndInput"', integrated_block)
-        self.assertIn("updateRangeFilterFromInputs()", integrated_block)
-        self.assertIn("function readRangeFilter()", integrated_block)
+        self.assertIn('id="rangeStartSlider"', integrated_block)
+        self.assertIn('id="rangeEndSlider"', integrated_block)
+        self.assertIn('id="rangeSliderFill"', integrated_block)
+        self.assertIn('id="rangeSliderLabel"', integrated_block)
+        self.assertIn("updateRangeFilterFromInputs('start')", integrated_block)
+        self.assertIn("updateRangeFilterFromInputs('end')", integrated_block)
+        self.assertIn("updateRangeFilterFromSliders('start')", integrated_block)
+        self.assertIn("updateRangeFilterFromSliders('end')", integrated_block)
+        self.assertIn("function readRangeFilter(changedHandle)", integrated_block)
+        self.assertIn("function syncRangeControls(range)", integrated_block)
+        self.assertIn("function updateRangeFilterFromSliders(changedHandle)", integrated_block)
+        self.assertIn("function activateRangeHandle(handle)", integrated_block)
+        self.assertIn("function scheduleRangeFilterApply()", integrated_block)
+        self.assertIn("function beginRangeSliderDrag(event)", integrated_block)
+        self.assertIn("function moveRangeSliderDrag(event)", integrated_block)
+        self.assertIn("function endRangeSliderDrag(event)", integrated_block)
+        self.assertIn("function chooseRangeHandle(pointerValue, start, end, lastHandle)", integrated_block)
+        self.assertIn("function resolveDraggedRange(handle, value, start, end)", integrated_block)
+        self.assertIn("function scheduleLDTriangleRedraw()", integrated_block)
+        self.assertIn("clearTimeout(ldRedrawTimer)", integrated_block)
+        self.assertIn("scheduleRangeFilterApply();", integrated_block)
+        self.assertIn("aria-valuetext", integrated_block)
+        self.assertNotIn('aria-live="polite"', integrated_block)
         self.assertIn("rangeStartInput.value = ''", integrated_block)
         self.assertIn("rangeEndInput.value = ''", integrated_block)
         self.assertIn("rangePass = inDisplayRange(d.pos)", integrated_block)
@@ -1832,6 +1859,80 @@ class StarGeneDataTests(unittest.TestCase):
         export_block = integrated_block[export_start:export_end]
         self.assertIn("applyFilters();", export_block)
         self.assertNotIn("drawGWASPlot(gwasData);", export_block)
+
+    def test_display_range_slider_executes_overlap_and_timer_logic(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is not available for generated JavaScript logic checks")
+
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        def extract_js_function(name):
+            start = integrated_block.index(f"function {name}(")
+            brace = integrated_block.index("{", start)
+            depth = 0
+            quote = None
+            escaped = False
+            for idx in range(brace, len(integrated_block)):
+                char = integrated_block[idx]
+                if quote:
+                    if escaped:
+                        escaped = False
+                    elif char == "\\":
+                        escaped = True
+                    elif char == quote:
+                        quote = None
+                    continue
+                if char in ("'", '"', "`"):
+                    quote = char
+                elif char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return integrated_block[start:idx + 1]
+            self.fail(f"Could not extract JavaScript function {name}")
+
+        functions = "\n".join(extract_js_function(name) for name in [
+            "rangeValueFromClientX",
+            "chooseRangeHandle",
+            "resolveDraggedRange",
+            "scheduleLDTriangleRedraw",
+        ])
+        script = functions + r"""
+function assertEqual(actual, expected, label) {
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(label + ': expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+    }
+}
+assertEqual(rangeValueFromClientX(0, 0, 100, 1, 101), 1, 'left bound');
+assertEqual(rangeValueFromClientX(50, 0, 100, 1, 101), 51, 'midpoint');
+assertEqual(rangeValueFromClientX(120, 0, 100, 1, 101), 101, 'right clamp');
+assertEqual(chooseRangeHandle(49, 50, 50, 'start'), 'start', 'overlap drag left');
+assertEqual(chooseRangeHandle(51, 50, 50, 'start'), 'end', 'overlap drag right');
+assertEqual(chooseRangeHandle(50, 50, 50, 'start'), 'end', 'overlap exact toggles handle');
+assertEqual(resolveDraggedRange('start', 60, 50, 55), {start: 55, end: 55}, 'start cannot cross end');
+assertEqual(resolveDraggedRange('end', 40, 50, 55), {start: 50, end: 50}, 'end cannot cross start');
+var clearedTimers = [];
+var nextTimer = 0;
+var ldRedrawTimer = null;
+function setTimeout(callback, delay) { nextTimer += 1; return nextTimer; }
+function clearTimeout(timer) { clearedTimers.push(timer); }
+scheduleLDTriangleRedraw();
+scheduleLDTriangleRedraw();
+assertEqual(clearedTimers, [1], 'LD redraw timer is coalesced');
+assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
+"""
+        completed = subprocess.run(
+            [node, "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_multi_panel_reset_clears_integrated_display_range(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")

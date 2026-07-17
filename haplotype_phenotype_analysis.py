@@ -9928,10 +9928,27 @@ class ReportGenerator:
         .report-sidebar .filter-panel {{ flex-direction: column; align-items: stretch; gap: 10px; }}
         .report-sidebar .filter-group {{ flex-wrap: wrap; }}
         .report-sidebar .filter-group label {{ color: #405066; }}
-        .range-inputs {{ display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }}
-        .range-inputs input {{ width: 92px; padding: 4px 6px; border: 1px solid #cfd8e3; border-radius: 6px; font-size: 11px; }}
+        .range-inputs {{ display: grid; width: 100%; gap: 6px; }}
+        .range-number-row {{ display: flex; align-items: center; gap: 6px; }}
+        .range-number-row input {{ width: 92px; min-width: 0; padding: 4px 6px; border: 1px solid #cfd8e3; border-radius: 6px; font-size: 11px; }}
+        .range-number-row .range-clear-btn {{ margin-left: auto; }}
         .range-inputs button {{ padding: 4px 8px; border: 1px solid #cfd8e3; border-radius: 6px; background: #f8fafc; color: #334155; cursor: pointer; }}
         .range-inputs button:hover {{ background: #eef7ff; border-color: #5aa9e6; }}
+        .range-slider {{ position: relative; width: 100%; min-width: 0; height: 28px; cursor: pointer; touch-action: none; user-select: none; }}
+        .range-slider-track,
+        .range-slider-fill {{ position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 999px; }}
+        .range-slider-track {{ background: #d8e0ea; }}
+        .range-slider-fill {{ background: #5aa9e6; }}
+        .range-slider input[type="range"] {{ position: absolute; left: 0; top: 2px; width: 100%; height: 22px; margin: 0; padding: 0; border: 0; background: transparent; pointer-events: none; appearance: none; -webkit-appearance: none; }}
+        .range-slider input[type="range"]::-webkit-slider-thumb {{ width: 15px; height: 15px; border-radius: 50%; border: 2px solid #ffffff; background: #2f80c2; box-shadow: 0 1px 4px rgba(15,23,42,0.28); pointer-events: none; appearance: none; -webkit-appearance: none; }}
+        .range-slider input[type="range"]::-moz-range-thumb {{ width: 13px; height: 13px; border-radius: 50%; border: 2px solid #ffffff; background: #2f80c2; box-shadow: 0 1px 4px rgba(15,23,42,0.28); pointer-events: none; }}
+        .range-slider input[type="range"]::-webkit-slider-runnable-track {{ height: 4px; background: transparent; }}
+        .range-slider input[type="range"]::-moz-range-track {{ height: 4px; background: transparent; }}
+        .range-slider input[type="range"]:focus-visible::-webkit-slider-thumb {{ outline: 2px solid #2563eb; outline-offset: 2px; }}
+        .range-slider input[type="range"]:focus-visible::-moz-range-thumb {{ outline: 2px solid #2563eb; outline-offset: 2px; }}
+        .range-slider-scale {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; font-size: 10px; color: #667085; }}
+        .range-slider-scale span:last-child {{ text-align: right; }}
+        .range-slider-label {{ color: #3e5873; font-weight: 600; text-align: center; }}
         .report-sidebar .zoom-controls {{ flex-wrap: wrap; }}
         .report-sidebar .zoom-controls label,
         .report-sidebar .zoom-controls span {{ color: #405066; }}
@@ -10056,10 +10073,23 @@ class ReportGenerator:
         <div class="filter-group" style="align-items:flex-start;flex-wrap:wrap;max-width:520px;">
             <label style="width:100%;margin-bottom:4px;">Display Range:</label>
             <span class="range-inputs">
-                <input type="number" id="rangeStartInput" placeholder="Start" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs()">
-                <span>to</span>
-                <input type="number" id="rangeEndInput" placeholder="End" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs()">
-                <button type="button" onclick="clearRangeFilter()">Clear</button>
+                <span class="range-number-row">
+                    <input type="number" id="rangeStartInput" aria-label="Display range start" placeholder="Start" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs('start')">
+                    <span>to</span>
+                    <input type="number" id="rangeEndInput" aria-label="Display range end" placeholder="End" min="{region_start}" max="{region_end}" oninput="updateRangeFilterFromInputs('end')">
+                    <button class="range-clear-btn" type="button" onclick="clearRangeFilter()">Clear</button>
+                </span>
+                <span class="range-slider" id="displayRangeSlider" title="Drag both handles to choose the visible position range" onpointerdown="beginRangeSliderDrag(event)" onpointermove="moveRangeSliderDrag(event)" onpointerup="endRangeSliderDrag(event)" onpointercancel="endRangeSliderDrag(event)">
+                    <span class="range-slider-track"></span>
+                    <span class="range-slider-fill" id="rangeSliderFill"></span>
+                    <input type="range" id="rangeStartSlider" aria-label="Display range start handle" min="{region_start}" max="{region_end}" value="{region_start}" step="1" onfocus="activateRangeHandle('start')" oninput="updateRangeFilterFromSliders('start')">
+                    <input type="range" id="rangeEndSlider" aria-label="Display range end handle" min="{region_start}" max="{region_end}" value="{region_end}" step="1" onfocus="activateRangeHandle('end')" oninput="updateRangeFilterFromSliders('end')">
+                </span>
+                <span class="range-slider-scale">
+                    <span>{region_start:,}</span>
+                    <span class="range-slider-label" id="rangeSliderLabel">Full range</span>
+                    <span>{region_end:,}</span>
+                </span>
             </span>
         </div>
         <span style="border-left:1px solid #ddd;padding-left:12px;margin-left:4px;"></span>
@@ -11029,6 +11059,11 @@ var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: null, rangeEnd: n
 var manualFilterMode = false;
 var manualBlacklist = new Set();
 var manualFilterHistory = [];
+var rangeFilterFrame = null;
+var activeRangeHandle = 'start';
+var rangePointerState = { pointerId: null, handle: null, overlapValue: null };
+var connectorRedrawFrame = null;
+var ldRedrawTimer = null;
 
 function annNorm(d) {
     var a = (d.annotation != null && d.annotation !== '') ? String(d.annotation) : 'other';
@@ -11132,33 +11167,240 @@ function updateFilterDisplay(type, value) {
     }
 }
 
-function readRangeFilter() {
+function getRangeBounds() {
+    var startSlider = document.getElementById('rangeStartSlider');
+    var endSlider = document.getElementById('rangeEndSlider');
     var startInput = document.getElementById('rangeStartInput');
     var endInput = document.getElementById('rangeEndInput');
-    var start = startInput && startInput.value !== '' ? parseInt(startInput.value, 10) : null;
-    var end = endInput && endInput.value !== '' ? parseInt(endInput.value, 10) : null;
-    if (start !== null && isNaN(start)) start = null;
-    if (end !== null && isNaN(end)) end = null;
+    var min = parseInt((startSlider && startSlider.min) || (startInput && startInput.min) || '0', 10);
+    var max = parseInt((endSlider && endSlider.max) || (endInput && endInput.max) || String(min), 10);
+    if (isNaN(min)) min = 0;
+    if (isNaN(max) || max < min) max = min;
+    return { min: min, max: max };
+}
+
+function parseRangeNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    var parsed = parseInt(value, 10);
+    return isNaN(parsed) ? null : parsed;
+}
+
+function clampRangeNumber(value, bounds) {
+    if (value === null) return null;
+    return Math.max(bounds.min, Math.min(bounds.max, value));
+}
+
+function normalizeRangeValues(start, end) {
+    var bounds = getRangeBounds();
+    start = clampRangeNumber(start, bounds);
+    end = clampRangeNumber(end, bounds);
     if (start !== null && end !== null && start > end) {
         var tmp = start;
         start = end;
         end = tmp;
     }
-    currentFilter.rangeStart = start;
-    currentFilter.rangeEnd = end;
-    return { start: start, end: end };
+    return { start: start, end: end, min: bounds.min, max: bounds.max };
+}
+
+function readRangeFilter(changedHandle) {
+    var startInput = document.getElementById('rangeStartInput');
+    var endInput = document.getElementById('rangeEndInput');
+    var rawStart = parseRangeNumber(startInput ? startInput.value : null);
+    var rawEnd = parseRangeNumber(endInput ? endInput.value : null);
+    var range = normalizeRangeValues(rawStart, rawEnd);
+    if (rawStart !== null && rawEnd !== null && rawStart > rawEnd && (changedHandle === 'start' || changedHandle === 'end')) {
+        var bounds = getRangeBounds();
+        var resolved = resolveDraggedRange(changedHandle, clampRangeNumber(changedHandle === 'start' ? rawStart : rawEnd, bounds), clampRangeNumber(rawStart, bounds), clampRangeNumber(rawEnd, bounds));
+        range = { start: resolved.start, end: resolved.end, min: bounds.min, max: bounds.max };
+    }
+    currentFilter.rangeStart = range.start;
+    currentFilter.rangeEnd = range.end;
+    return range;
+}
+
+function formatRangeNumber(value) {
+    return value == null ? '' : String(value);
+}
+
+function activateRangeHandle(handle) {
+    var startSlider = document.getElementById('rangeStartSlider');
+    var endSlider = document.getElementById('rangeEndSlider');
+    activeRangeHandle = handle === 'end' ? 'end' : 'start';
+    if (startSlider) startSlider.style.zIndex = handle === 'start' ? '4' : '3';
+    if (endSlider) endSlider.style.zIndex = handle === 'end' ? '4' : '3';
+}
+
+function rangeValueFromClientX(clientX, left, width, min, max) {
+    var safeWidth = Math.max(1, width);
+    var ratio = Math.max(0, Math.min(1, (clientX - left) / safeWidth));
+    return Math.round(min + ratio * (max - min));
+}
+
+function chooseRangeHandle(pointerValue, start, end, lastHandle) {
+    if (start === end) {
+        if (pointerValue < start) return 'start';
+        if (pointerValue > end) return 'end';
+        return lastHandle === 'start' ? 'end' : 'start';
+    }
+    return Math.abs(pointerValue - start) <= Math.abs(pointerValue - end) ? 'start' : 'end';
+}
+
+function resolveDraggedRange(handle, value, start, end) {
+    if (handle === 'start') {
+        return { start: Math.min(value, end), end: end };
+    }
+    return { start: start, end: Math.max(value, start) };
+}
+
+function readRangeSliderValues() {
+    var bounds = getRangeBounds();
+    var startSlider = document.getElementById('rangeStartSlider');
+    var endSlider = document.getElementById('rangeEndSlider');
+    return {
+        start: clampRangeNumber(parseRangeNumber(startSlider ? startSlider.value : bounds.min), bounds),
+        end: clampRangeNumber(parseRangeNumber(endSlider ? endSlider.value : bounds.max), bounds),
+        min: bounds.min,
+        max: bounds.max
+    };
+}
+
+function updateRangeSliderFromPointer(handle, pointerValue) {
+    var values = readRangeSliderValues();
+    var resolved = resolveDraggedRange(handle, pointerValue, values.start, values.end);
+    var startSlider = document.getElementById('rangeStartSlider');
+    var endSlider = document.getElementById('rangeEndSlider');
+    if (startSlider) startSlider.value = resolved.start;
+    if (endSlider) endSlider.value = resolved.end;
+    activateRangeHandle(handle);
+    updateRangeFilterFromSliders(handle);
+}
+
+function beginRangeSliderDrag(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    var slider = document.getElementById('displayRangeSlider');
+    if (!slider) return;
+    var rect = slider.getBoundingClientRect();
+    var values = readRangeSliderValues();
+    var pointerValue = rangeValueFromClientX(event.clientX, rect.left, rect.width, values.min, values.max);
+    var overlapping = values.start === values.end && pointerValue === values.start;
+    var handle = overlapping ? null : chooseRangeHandle(pointerValue, values.start, values.end, activeRangeHandle);
+    rangePointerState = {
+        pointerId: event.pointerId,
+        handle: handle,
+        overlapValue: overlapping ? values.start : null
+    };
+    if (slider.setPointerCapture && event.pointerId !== undefined) {
+        try { slider.setPointerCapture(event.pointerId); } catch (e) { /* capture is best-effort */ }
+    }
+    if (handle) updateRangeSliderFromPointer(handle, pointerValue);
+    event.preventDefault();
+}
+
+function moveRangeSliderDrag(event) {
+    if (rangePointerState.pointerId === null || event.pointerId !== rangePointerState.pointerId) return;
+    var slider = document.getElementById('displayRangeSlider');
+    if (!slider) return;
+    var rect = slider.getBoundingClientRect();
+    var values = readRangeSliderValues();
+    var pointerValue = rangeValueFromClientX(event.clientX, rect.left, rect.width, values.min, values.max);
+    if (!rangePointerState.handle && rangePointerState.overlapValue !== null) {
+        if (pointerValue < rangePointerState.overlapValue) rangePointerState.handle = 'start';
+        if (pointerValue > rangePointerState.overlapValue) rangePointerState.handle = 'end';
+    }
+    if (rangePointerState.handle) {
+        updateRangeSliderFromPointer(rangePointerState.handle, pointerValue);
+        event.preventDefault();
+    }
+}
+
+function endRangeSliderDrag(event) {
+    if (rangePointerState.pointerId === null || event.pointerId !== rangePointerState.pointerId) return;
+    var slider = document.getElementById('displayRangeSlider');
+    if (slider && slider.releasePointerCapture && event.pointerId !== undefined) {
+        try { slider.releasePointerCapture(event.pointerId); } catch (e) { /* already released */ }
+    }
+    rangePointerState = { pointerId: null, handle: null, overlapValue: null };
+}
+
+function scheduleRangeFilterApply() {
+    if (rangeFilterFrame !== null) return;
+    rangeFilterFrame = requestAnimationFrame(function() {
+        rangeFilterFrame = null;
+        applyFilters();
+    });
+}
+
+function syncRangeControls(range) {
+    range = range || readRangeFilter();
+    var startInput = document.getElementById('rangeStartInput');
+    var endInput = document.getElementById('rangeEndInput');
+    var startSlider = document.getElementById('rangeStartSlider');
+    var endSlider = document.getElementById('rangeEndSlider');
+    var fill = document.getElementById('rangeSliderFill');
+    var label = document.getElementById('rangeSliderLabel');
+    var min = range.min, max = range.max;
+    var sliderStart = range.start === null ? min : range.start;
+    var sliderEnd = range.end === null ? max : range.end;
+    if (sliderStart > sliderEnd) {
+        var tmp = sliderStart;
+        sliderStart = sliderEnd;
+        sliderEnd = tmp;
+    }
+    if (startInput) startInput.value = formatRangeNumber(range.start);
+    if (endInput) endInput.value = formatRangeNumber(range.end);
+    if (startSlider) {
+        startSlider.value = sliderStart;
+        startSlider.setAttribute('aria-valuetext', sliderStart.toLocaleString());
+    }
+    if (endSlider) {
+        endSlider.value = sliderEnd;
+        endSlider.setAttribute('aria-valuetext', sliderEnd.toLocaleString());
+    }
+    var span = Math.max(1, max - min);
+    var leftPct = ((sliderStart - min) / span) * 100;
+    var rightPct = 100 - ((sliderEnd - min) / span) * 100;
+    if (fill) {
+        fill.style.left = Math.max(0, Math.min(100, leftPct)) + '%';
+        fill.style.right = Math.max(0, Math.min(100, rightPct)) + '%';
+    }
+    if (label) {
+        if (range.start === null && range.end === null) {
+            label.textContent = 'Full range';
+        } else {
+            label.textContent = (range.start === null ? min : range.start).toLocaleString() + ' - ' + (range.end === null ? max : range.end).toLocaleString();
+        }
+    }
 }
 
 function inDisplayRange(pos) {
-    var range = readRangeFilter();
-    if (range.start !== null && pos < range.start) return false;
-    if (range.end !== null && pos > range.end) return false;
+    if (currentFilter.rangeStart !== null && pos < currentFilter.rangeStart) return false;
+    if (currentFilter.rangeEnd !== null && pos > currentFilter.rangeEnd) return false;
     return true;
 }
 
-function updateRangeFilterFromInputs() {
-    readRangeFilter();
-    applyFilters();
+function updateRangeFilterFromInputs(changedHandle) {
+    syncRangeControls(readRangeFilter(changedHandle));
+    scheduleRangeFilterApply();
+}
+
+function updateRangeFilterFromSliders(changedHandle) {
+    var startSlider = document.getElementById('rangeStartSlider');
+    var endSlider = document.getElementById('rangeEndSlider');
+    if (!startSlider || !endSlider) return;
+    var bounds = getRangeBounds();
+    var start = clampRangeNumber(parseRangeNumber(startSlider.value), bounds);
+    var end = clampRangeNumber(parseRangeNumber(endSlider.value), bounds);
+    if (start !== null && end !== null && start > end) {
+        if (changedHandle === 'start') {
+            start = end;
+        } else {
+            end = start;
+        }
+    }
+    currentFilter.rangeStart = (start === null || start <= bounds.min) ? null : start;
+    currentFilter.rangeEnd = (end === null || end >= bounds.max) ? null : end;
+    syncRangeControls({ start: currentFilter.rangeStart, end: currentFilter.rangeEnd, min: bounds.min, max: bounds.max });
+    scheduleRangeFilterApply();
 }
 
 function clearRangeFilter() {
@@ -11168,6 +11410,7 @@ function clearRangeFilter() {
     if (rangeEndInput) rangeEndInput.value = '';
     currentFilter.rangeStart = null;
     currentFilter.rangeEnd = null;
+    syncRangeControls(readRangeFilter());
     applyFilters();
 }
 
@@ -11240,6 +11483,7 @@ function resetFilters() {
     var rangeEndInput = document.getElementById('rangeEndInput');
     if (rangeStartInput) rangeStartInput.value = '';
     if (rangeEndInput) rangeEndInput.value = '';
+    syncRangeControls(readRangeFilter());
     document.querySelectorAll('.ann-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.type-cb').forEach(function(cb) { cb.checked = true; });
     document.querySelectorAll('.syn-cb').forEach(function(cb) { cb.checked = true; });
@@ -11268,7 +11512,7 @@ window.addEventListener('message', function(ev) {
         var re = document.getElementById('rangeEndInput');
         if (rs && f.rangeStart !== undefined) rs.value = f.rangeStart == null ? '' : f.rangeStart;
         if (re && f.rangeEnd !== undefined) re.value = f.rangeEnd == null ? '' : f.rangeEnd;
-        readRangeFilter();
+        syncRangeControls(readRangeFilter());
     }
     if (f.annotationEnabled) {
         Object.keys(f.annotationEnabled).forEach(function(k) {
@@ -11651,8 +11895,28 @@ function drawLDTriangle() {
     console.log('[LD] LD倒三角图: ' + nc + '列, 菱形' + nc*(nc-1)/2 + '个, canvas=' + canvasCSSW + 'x' + canvasCSSH);
 }
 
+function scheduleConnectorRedraw() {
+    if (connectorRedrawFrame !== null) cancelAnimationFrame(connectorRedrawFrame);
+    connectorRedrawFrame = requestAnimationFrame(function() {
+        connectorRedrawFrame = null;
+        updateConnectorLines();
+    });
+}
+
+function scheduleLDTriangleRedraw() {
+    if (ldRedrawTimer !== null) clearTimeout(ldRedrawTimer);
+    ldRedrawTimer = setTimeout(function() {
+        ldRedrawTimer = null;
+        // 强制读取布局属性，触发同步重排以确保offsetLeft是最新的
+        var table = document.querySelector('.data-table');
+        if (table) { void table.offsetHeight; }
+        drawLDTriangle();
+    }, 60);
+}
+
 
 function applyFilters() {
+    syncRangeControls(readRangeFilter());
     
     // 获取所有选中的annotation类型
     var checkedTypes = [];
@@ -11732,15 +11996,8 @@ function applyFilters() {
     // 更新连线和LD倒三角
     // 先用RAF更新连线（可读取最新的布局信息）
     // 再用setTimeout绘制LD倒三角，确保浏览器完成table-layout:fixed的列重排
-    requestAnimationFrame(function() {
-        updateConnectorLines();
-    });
-    setTimeout(function() {
-        // 强制读取布局属性，触发同步重排以确保offsetLeft是最新的
-        var table = document.querySelector('.data-table');
-        if (table) { void table.offsetHeight; }
-        drawLDTriangle();
-    }, 60);
+    scheduleConnectorRedraw();
+    scheduleLDTriangleRedraw();
 
     // 更新手动过滤视觉状态（仅在手动模式下需要）
     if (manualFilterMode) updateManualFilterVisuals();
