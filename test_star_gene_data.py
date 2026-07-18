@@ -2367,6 +2367,26 @@ class StarGeneDataTests(unittest.TestCase):
             self.assertNotIn("updateGeneStructureDomain();", function_block)
             self.assertNotIn("drawGWASPlot(", function_block)
 
+    def test_integrated_report_resizes_shared_canvases_from_applied_visible_sites(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("function calculateVisibleLayoutDimensions(", integrated_block)
+        self.assertIn("function applyVisibleLayoutDimensions(", integrated_block)
+        apply_start = integrated_block.index("function applyFilters()")
+        apply_end = integrated_block.index("function updateTableColumns", apply_start)
+        apply_block = integrated_block[apply_start:apply_end]
+        layout_idx = apply_block.index("applyVisibleLayoutDimensions(visiblePositions.length)")
+        gene_idx = apply_block.index("updateGeneStructureDomain()")
+        gwas_idx = apply_block.index("drawGWASPlot(visibleGwasData, coordinateDomain)")
+        self.assertLess(layout_idx, gene_idx)
+        self.assertLess(layout_idx, gwas_idx)
+        self.assertIn("new Set(varPositions)", apply_block)
+        self.assertIn("manualBlacklist", apply_block)
+
     def test_display_range_slider_executes_overlap_and_timer_logic(self):
         node = shutil.which("node")
         if not node:
@@ -2423,6 +2443,7 @@ class StarGeneDataTests(unittest.TestCase):
             "clearRangeFilter",
             "commitRangeFilter",
             "getAppliedCoordinateDomain",
+            "calculateVisibleLayoutDimensions",
             "getD3CoordinateDomain",
             "formatCoordinateTick",
             "coordinateToGeneX",
@@ -2469,6 +2490,9 @@ var pendingRangeFilter = { start: 10, end: 90 };
 var regionStart = 1;
 var regionEnd = 101;
 var gwasLeftMargin = 450;
+var sequenceColumnWidth = 20;
+var minimumGeneAreaWidth = 320;
+var legendAreaWidth = 220;
 var geneAreaWidth = 200;
 var manualBlacklist = new Set();
 var manualFilterHistory = [];
@@ -2479,6 +2503,18 @@ function scheduleAppliedRangeCentering() {}
 var applyCount = 0;
 function applyFilters() { applyCount += 1; }
 
+assertEqual(
+    calculateVisibleLayoutDimensions(0),
+    {geneAreaWidth: 320, svgTotalWidth: 990, gwasPlotWidth: 540},
+    'zero sites use readable minimum'
+);
+assertEqual(calculateVisibleLayoutDimensions(1).geneAreaWidth, 320, 'one site uses minimum');
+assertEqual(
+    calculateVisibleLayoutDimensions(25),
+    {geneAreaWidth: 500, svgTotalWidth: 1170, gwasPlotWidth: 720},
+    'twenty-five sites fit the report viewport'
+);
+assertEqual(calculateVisibleLayoutDimensions(100).geneAreaWidth, 2000, 'large sets remain scrollable');
 assertEqual(getAppliedCoordinateDomain(), {start: 10, end: 90}, 'applied coordinate domain');
 assertEqual(getD3CoordinateDomain({start: 50, end: 50}), [49.5, 50.5], 'single-position D3 domain');
 assertEqual(coordinateToGeneX(50, {start: 10, end: 90}), 550, 'coordinate maps into gene plot');
