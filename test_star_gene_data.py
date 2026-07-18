@@ -2385,10 +2385,12 @@ class StarGeneDataTests(unittest.TestCase):
         manual_blacklist_marker = "manualBlacklist.forEach(function(pos)"
         manual_delete_marker = "deleteposSet[pos];"
         var_positions_marker = "varvarPositions=[];"
+        var_positions_fill_marker = "varPositions.push(pos);"
         visible_positions_marker = "varvisiblePositions=Array.from(newSet(varPositions));"
         visible_gwas_marker = "varvisibleGwasData=filtered.filter(function(d)"
         self.assertEqual(compact_apply_block.count(pos_set_marker), 1)
         self.assertEqual(compact_apply_block.count(pos_set_fill_marker), 1)
+        self.assertEqual(compact_apply_block.count(var_positions_fill_marker), 1)
         pos_set_idx = compact_apply_block.index(pos_set_marker)
         pos_set_fill_idx = compact_apply_block.index(pos_set_fill_marker)
         compact_manual_blacklist_idx = compact_apply_block.index(manual_blacklist_marker)
@@ -2396,18 +2398,21 @@ class StarGeneDataTests(unittest.TestCase):
             manual_delete_marker, compact_manual_blacklist_idx
         )
         compact_var_positions_idx = compact_apply_block.index(var_positions_marker)
+        compact_var_positions_fill_idx = compact_apply_block.index(var_positions_fill_marker)
         compact_visible_positions_idx = compact_apply_block.index(visible_positions_marker)
         compact_visible_gwas_idx = compact_apply_block.index(visible_gwas_marker)
         self.assertLess(pos_set_idx, pos_set_fill_idx)
         self.assertLess(pos_set_fill_idx, compact_manual_blacklist_idx)
         self.assertLess(compact_manual_blacklist_idx, compact_manual_delete_idx)
         self.assertLess(compact_manual_delete_idx, compact_var_positions_idx)
-        self.assertLess(compact_var_positions_idx, compact_visible_positions_idx)
+        self.assertLess(compact_var_positions_idx, compact_var_positions_fill_idx)
+        self.assertLess(compact_var_positions_fill_idx, compact_visible_positions_idx)
         self.assertLess(compact_visible_positions_idx, compact_visible_gwas_idx)
         manual_blacklist_idx = apply_block.index("manualBlacklist.forEach(function(pos)")
         manual_delete_idx = apply_block.index("delete posSet[pos];", manual_blacklist_idx)
         manual_blacklist_end = apply_block.index("});", manual_blacklist_idx) + len("});")
         var_positions_idx = apply_block.index("var varPositions = []")
+        var_positions_fill_idx = apply_block.index("varPositions.push(pos)", var_positions_idx)
         visible_positions_idx = apply_block.index(
             "var visiblePositions = Array.from(new Set(varPositions));"
         )
@@ -2424,6 +2429,7 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertLess(manual_blacklist_end, var_positions_idx)
         self.assertLess(manual_delete_idx, visible_positions_idx)
         self.assertLess(var_positions_idx, visible_positions_idx)
+        self.assertLess(var_positions_fill_idx, visible_positions_idx)
         self.assertLess(visible_positions_idx, visible_gwas_idx)
         self.assertIn("return posSet[d.pos] !== undefined;", visible_gwas_block)
         self.assertLess(visible_gwas_idx, layout_idx)
