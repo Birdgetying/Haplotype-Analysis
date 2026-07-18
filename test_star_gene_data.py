@@ -244,6 +244,58 @@ class StarGeneDataTests(unittest.TestCase):
                     self.fail(f"invalid max_span_bp raised OverflowError: {exc}")
                 self.assertEqual(actual, (4000, 6000))
 
+    def test_initial_display_range_invalid_variant_limit_falls_back_to_25(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        actual = _select_initial_display_range(
+            list(range(1, 41)),
+            1,
+            40,
+            gene_start=20,
+            gene_end=20,
+            max_variants=float("inf"),
+        )
+
+        start, end = actual
+        self.assertEqual(len([p for p in range(1, 41) if start <= p <= end]), 25)
+
+    def test_initial_display_range_rejects_infinite_region_coordinates(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range([10, 20], float("inf"), 30),
+            (None, None),
+        )
+
+    def test_initial_display_range_ignores_infinite_variant_coordinates(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [10, float("inf"), 20],
+                0,
+                30,
+                gene_start=15,
+                gene_end=15,
+            ),
+            (None, None),
+        )
+
+    def test_initial_display_range_uses_region_anchor_for_infinite_gene_coordinates(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [10, 20],
+                0,
+                30,
+                gene_start=float("inf"),
+                gene_end=15,
+                max_span_bp=1,
+            ),
+            (10, 10),
+        )
+
     def test_initial_display_range_uses_region_midpoint_without_gene_coordinates(self):
         from haplotype_phenotype_analysis import _select_initial_display_range
 

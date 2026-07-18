@@ -122,7 +122,7 @@ def _select_initial_display_range(
     try:
         lower = int(region_start)
         upper = int(region_end)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None, None
     if upper < lower:
         lower, upper = upper, lower
@@ -131,7 +131,7 @@ def _select_initial_display_range(
     for pos in variant_positions or []:
         try:
             numeric_pos = int(pos)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
         if lower <= numeric_pos <= upper:
             normalized_positions.append(numeric_pos)
@@ -139,7 +139,7 @@ def _select_initial_display_range(
 
     try:
         limit = max(1, int(max_variants))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         limit = 25
     try:
         span_limit = max(1, int(max_span_bp))
@@ -148,7 +148,7 @@ def _select_initial_display_range(
 
     try:
         anchor = (int(gene_start) + int(gene_end)) / 2.0
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         anchor = (lower + upper) / 2.0
 
     candidate = (None, None)
