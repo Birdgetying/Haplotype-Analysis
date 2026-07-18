@@ -2646,3 +2646,80 @@ Chromium `150.0.4078.65`, with 0 page errors and 0 console errors. The verified
 state was current = pending = initial, Apply disabled, 25 circle markers, and
 25 sequence columns. The pending-only edit and full Reset restoration behaved
 as described above.
+
+### 2026-07-18 dynamic visible-width VRN-B1 report validation
+
+Target gene:
+`VRN-B1` / `VRN-B1-fullSequence-IJMS2021`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion at report-audit coordinate `13,077`. This marker
+was used only for post-hoc audit and was outside the neutral initial display
+window.
+
+Data source:
+Existing IJMS2021 full-sequence database at
+`D:\Desktop\project1\star_gene_database\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021`,
+with 102 samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`, active score axis `total`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery --database-root D:\Desktop\project1\star_gene_database --results-root D:\Desktop\project1\star_gene_results --manifest D:\Desktop\project1\star_gene_manifest.json
+```
+
+Output directory:
+`D:\Desktop\project1\star_gene_results\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021__robust_discovery\`.
+The analysis exited with status 0.
+
+Scientific result:
+The top total-score haplotype remains `Hap6`, total `1.2016`, n=3. The
+post-hoc literature match remains yes because `Hap6` carries the `Vrn-B1f`
+837 bp insertion at `13,077`. The scientific result did not change. The n=3
+support remains a small-sample reliability limitation. Neither phenotype nor
+the literature marker was used to rank robust discovery, select the display
+range, or determine layout width.
+
+Initial browser layout:
+Current and pending ranges were both `12,379-12,466`; 25 unique sequence
+positions and 25 visible connectors were present. `geneAreaWidth=500`,
+`svgTotalWidth=1170`, and both the GWAS and gene-structure SVG widths were
+1170 px. The main data section had exact `scrollWidth=3052` px, substantially
+different from the old 5390 px layout. Apply was disabled.
+
+Pending and Apply behavior:
+Input events changed only pending to `12,381-12,465`; current remained
+`12,379-12,466`, the visible count remained 25, widths remained 500/1170 px,
+and the GWAS and gene axis domains remained `12,379-12,466`. Apply became
+enabled. The report contained exactly one visible `#rangeApplyBtn`, no
+duplicate ID or hidden clone, with `type="button"`,
+`onclick="commitRangeFilter()"`, and a functional DOM `onclick` property;
+`typeof commitRangeFilter` was `function`. Earlier agent-browser ref/semantic
+click commands returned success without changing state and therefore did not
+hit the precise effective button handler. Calling
+`document.getElementById('rangeApplyBtn').click()` triggered that unique
+button's real click handler normally and raised no error.
+
+After the exact DOM button click, current and pending were both
+`12,381-12,465`; 23 positions and 23 connectors were visible;
+`geneAreaWidth=460`, `svgTotalWidth=1130`, and both GWAS and gene-structure
+SVG widths were 1130 px. Their axis domains were both `12,381-12,465`; the
+sequence-column positions and connector positions matched exactly. The main
+data section changed to exact `scrollWidth=3004` px. Reset restored current
+and pending to `12,379-12,466`, 25 positions/connectors, 500/1170 px widths,
+both SVGs at 1170 px, `scrollWidth=3052` px, and disabled Apply.
+
+Export and browser diagnostics:
+After `prepareReportExportVisuals()`, all 25 visible connector coordinates
+were finite and inside the gene SVG bounds `x=0..1170`, `y=0..200`; connector
+positions exactly matched the 25 visible 20 px sequence headers. The first
+connector was position `12,379`, `(x1,x2,y1,y2)=(450,460,66,200)`, and the
+last was position `12,466`, `(950,940,66,200)`. Connector x2 values tracked
+the sequence-column centers. Browser `console` contained diagnostic log
+entries only, with no console errors, and `errors` returned no page errors.
+The evidence screenshot is outside the repository at
+`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width.png`;
+the named browser sessions were closed.
