@@ -13377,6 +13377,7 @@ function prepareReportExportVisuals() {
         drawHaplotypeScorePlot(haplotypeScoreData);
         drawNetworkPlot();
         applyFilters();
+        updateConnectorLines();
         drawLDTriangle();
     } finally {
         if (sidebar) sidebar.classList.remove('export-measure');

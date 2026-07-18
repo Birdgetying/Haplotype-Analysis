@@ -2837,6 +2837,30 @@ assertEqual(elements['gene-structure-svg'].style.width, '1170px', 'layout adapte
         self.assertIn("totalWidth = Math.max(totalWidth, size.width);", export_block)
         self.assertIn("currentY += size.height + 20;", export_block)
 
+    def test_integrated_report_export_synchronizes_connectors_before_ld(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        prepare_start = integrated_block.index("function prepareReportExportVisuals()")
+        prepare_end = integrated_block.index("function exportSVG", prepare_start)
+        prepare_block = integrated_block[prepare_start:prepare_end]
+        self.assertIn("applyFilters();", prepare_block)
+        self.assertIn("updateConnectorLines();", prepare_block)
+        self.assertIn("drawLDTriangle();", prepare_block)
+        apply_idx = prepare_block.index("applyFilters();")
+        connector_idx = prepare_block.index("updateConnectorLines();")
+        ld_idx = prepare_block.index("drawLDTriangle();")
+        self.assertLess(apply_idx, connector_idx)
+        self.assertLess(connector_idx, ld_idx)
+
+        print_start = integrated_block.index("function prepareReportForPrint()")
+        print_end = integrated_block.index("function restoreReportAfterPrint", print_start)
+        print_block = integrated_block[print_start:print_end]
+        self.assertIn("prepareReportExportVisuals();", print_block)
+
     def test_integrated_report_print_layout_uncrops_scroll_container_and_prints_sidebar_panels(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 
