@@ -116,6 +116,7 @@ def _select_initial_display_range(
     gene_start=None,
     gene_end=None,
     max_variants=25,
+    max_span_bp=2000,
 ):
     """Select a neutral coordinate window around the gene or region midpoint."""
     try:
@@ -140,26 +141,83 @@ def _select_initial_display_range(
         limit = max(1, int(max_variants))
     except (TypeError, ValueError):
         limit = 25
-    if len(positions) <= limit:
-        return None, None
+    try:
+        span_limit = max(1, int(max_span_bp))
+    except (TypeError, ValueError):
+        span_limit = 2000
 
     try:
         anchor = (int(gene_start) + int(gene_end)) / 2.0
     except (TypeError, ValueError):
         anchor = (lower + upper) / 2.0
+
+    candidate = (None, None)
+    if len(positions) > limit:
+        position_counts = Counter(positions)
+        unique_positions = sorted(position_counts)
+        center_index = min(
+            range(len(unique_positions)),
+            key=lambda index: abs(unique_positions[index] - anchor),
+        )
+
+        prefix_counts = [0]
+        for pos in unique_positions:
+            prefix_counts.append(prefix_counts[-1] + position_counts[pos])
+        anchor_occurrence_index = (
+            prefix_counts[center_index] + prefix_counts[center_index + 1] - 1
+        ) / 2.0
+
+        best = None
+        for left_candidate in range(len(unique_positions)):
+            for right_candidate in range(left_candidate, len(unique_positions)):
+                selected_count = (
+                    prefix_counts[right_candidate + 1] - prefix_counts[left_candidate]
+                )
+                if selected_count > limit:
+                    break
+                contains_anchor = left_candidate <= center_index <= right_candidate
+                window_occurrence_center = (
+                    prefix_counts[left_candidate]
+                    + prefix_counts[right_candidate + 1]
+                    - 1
+                ) / 2.0
+                score = (
+                    0 if contains_anchor else 1,
+                    -selected_count,
+                    abs(window_occurrence_center - anchor_occurrence_index),
+                    abs(
+                        (
+                            unique_positions[left_candidate]
+                            + unique_positions[right_candidate]
+                        )
+                        / 2.0
+                        - anchor
+                    ),
+                    left_candidate,
+                )
+                if best is None or score < best[0]:
+                    best = (score, left_candidate, right_candidate)
+
+        if best is not None:
+            _, left, right = best
+            selected_start = unique_positions[left]
+            selected_end = unique_positions[right]
+            candidate = (
+                None if selected_start <= lower else selected_start,
+                None if selected_end >= upper else selected_end,
+            )
+
+    candidate_start = lower if candidate[0] is None else candidate[0]
+    candidate_end = upper if candidate[1] is None else candidate[1]
+    if candidate_end - candidate_start <= span_limit:
+        return candidate
+
     position_counts = Counter(positions)
     unique_positions = sorted(position_counts)
-    center_index = min(
-        range(len(unique_positions)),
-        key=lambda index: abs(unique_positions[index] - anchor),
-    )
 
     prefix_counts = [0]
     for pos in unique_positions:
         prefix_counts.append(prefix_counts[-1] + position_counts[pos])
-    anchor_occurrence_index = (
-        prefix_counts[center_index] + prefix_counts[center_index + 1] - 1
-    ) / 2.0
 
     best = None
     for left_candidate in range(len(unique_positions)):
@@ -169,32 +227,31 @@ def _select_initial_display_range(
             )
             if selected_count > limit:
                 break
-            contains_anchor = left_candidate <= center_index <= right_candidate
-            window_occurrence_center = (
-                prefix_counts[left_candidate]
-                + prefix_counts[right_candidate + 1]
-                - 1
-            ) / 2.0
+            selected_start = unique_positions[left_candidate]
+            selected_end = unique_positions[right_candidate]
+            physical_span = selected_end - selected_start
+            if physical_span > span_limit:
+                break
+            midpoint = (selected_start + selected_end) / 2.0
             score = (
-                0 if contains_anchor else 1,
                 -selected_count,
-                abs(window_occurrence_center - anchor_occurrence_index),
-                abs(
-                    (unique_positions[left_candidate] + unique_positions[right_candidate])
-                    / 2.0
-                    - anchor
-                ),
-                left_candidate,
+                abs(midpoint - anchor),
+                physical_span,
+                selected_start,
             )
             if best is None or score < best[0]:
                 best = (score, left_candidate, right_candidate)
 
-    if best is None:
-        return None, None
-    _, left, right = best
+    if best is not None:
+        _, left, right = best
+        selected_start = unique_positions[left]
+        selected_end = unique_positions[right]
+    else:
+        width = min(span_limit, upper - lower)
+        selected_start = int(round(anchor - width / 2.0))
+        selected_start = min(max(selected_start, lower), upper - width)
+        selected_end = selected_start + width
 
-    selected_start = unique_positions[left]
-    selected_end = unique_positions[right]
     return (
         None if selected_start <= lower else selected_start,
         None if selected_end >= upper else selected_end,

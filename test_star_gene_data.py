@@ -45,6 +45,7 @@ class StarGeneDataTests(unittest.TestCase):
             gene_start=1500,
             gene_end=2500,
             max_variants=25,
+            max_span_bp=5000,
         )
 
         selected = [pos for pos in positions if start <= pos <= end]
@@ -63,9 +64,84 @@ class StarGeneDataTests(unittest.TestCase):
             gene_start=999,
             gene_end=1001,
             max_variants=25,
+            max_span_bp=2000,
         )
 
         self.assertEqual((start, end), (9, 1012))
+
+    def test_initial_display_range_falls_back_to_compact_cluster(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = list(range(100, 4100, 100))
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            5000,
+            gene_start=1500,
+            gene_end=2500,
+            max_variants=25,
+            max_span_bp=2000,
+        )
+
+        selected = [pos for pos in positions if start <= pos <= end]
+        self.assertEqual((start, end), (1000, 3000))
+        self.assertEqual(len(selected), 21)
+        self.assertLessEqual(end - start, 2000)
+
+    def test_initial_display_range_uses_single_sparse_variant_near_gene(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [100, 5000, 9000],
+                1,
+                10000,
+                gene_start=4000,
+                gene_end=6000,
+                max_variants=25,
+                max_span_bp=2000,
+            ),
+            (5000, 5000),
+        )
+
+    def test_initial_display_range_uses_gene_range_without_variants(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [],
+                1,
+                10000,
+                gene_start=4000,
+                gene_end=6000,
+                max_variants=25,
+                max_span_bp=2000,
+            ),
+            (4000, 6000),
+        )
+
+    def test_initial_display_range_keeps_vrn_b1_like_cluster_compact(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        positions = (
+            list(range(5447, 5459))
+            + [7596, 7600, 7603, 7605]
+            + list(range(12379, 12429))
+        )
+        start, end = _select_initial_display_range(
+            positions,
+            1,
+            17867,
+            gene_start=4673,
+            gene_end=17867,
+            max_variants=25,
+            max_span_bp=2000,
+        )
+
+        selected = [pos for pos in positions if start <= pos <= end]
+        self.assertEqual((start, end), (12379, 12403))
+        self.assertEqual(len(selected), 25)
+        self.assertLessEqual(end - start, 2000)
 
     def test_initial_display_range_uses_region_midpoint_without_gene_coordinates(self):
         from haplotype_phenotype_analysis import _select_initial_display_range
