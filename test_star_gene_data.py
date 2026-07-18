@@ -143,6 +143,107 @@ class StarGeneDataTests(unittest.TestCase):
         self.assertEqual(len(selected), 25)
         self.assertLessEqual(end - start, 2000)
 
+    def test_compact_range_prefers_midpoint_nearest_anchor_for_equal_counts(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [10, 60, 90],
+                0,
+                100,
+                gene_start=55,
+                gene_end=55,
+                max_variants=25,
+                max_span_bp=1,
+            ),
+            (60, 60),
+        )
+
+    def test_compact_range_prefers_shorter_span_after_count_and_anchor_tie(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [10, 14, 24, 26],
+                0,
+                40,
+                gene_start=18,
+                gene_end=19,
+                max_variants=25,
+                max_span_bp=4,
+            ),
+            (24, 26),
+        )
+
+    def test_compact_range_prefers_lower_start_after_first_three_score_ties(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [10, 12, 18, 20],
+                0,
+                30,
+                gene_start=15,
+                gene_end=15,
+                max_variants=25,
+                max_span_bp=2,
+            ),
+            (10, 12),
+        )
+
+    def test_compact_range_counts_duplicate_positions_as_rendered_columns(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        self.assertEqual(
+            _select_initial_display_range(
+                [10, 10, 20, 20, 20],
+                0,
+                30,
+                gene_start=15,
+                gene_end=15,
+                max_variants=5,
+                max_span_bp=1,
+            ),
+            (20, 20),
+        )
+
+    def test_compact_range_preserves_none_for_region_boundaries(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        for anchor, expected in ((10, (None, 10)), (100, (100, None))):
+            with self.subTest(anchor=anchor):
+                self.assertEqual(
+                    _select_initial_display_range(
+                        [10, 100],
+                        10,
+                        100,
+                        gene_start=anchor,
+                        gene_end=anchor,
+                        max_variants=25,
+                        max_span_bp=1,
+                    ),
+                    expected,
+                )
+
+    def test_initial_display_range_invalid_span_falls_back_to_2000(self):
+        from haplotype_phenotype_analysis import _select_initial_display_range
+
+        for invalid_span in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(max_span_bp=invalid_span):
+                try:
+                    actual = _select_initial_display_range(
+                        [],
+                        1,
+                        10000,
+                        gene_start=4000,
+                        gene_end=6000,
+                        max_variants=25,
+                        max_span_bp=invalid_span,
+                    )
+                except OverflowError as exc:
+                    self.fail(f"invalid max_span_bp raised OverflowError: {exc}")
+                self.assertEqual(actual, (4000, 6000))
+
     def test_initial_display_range_uses_region_midpoint_without_gene_coordinates(self):
         from haplotype_phenotype_analysis import _select_initial_display_range
 

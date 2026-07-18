@@ -143,7 +143,7 @@ def _select_initial_display_range(
         limit = 25
     try:
         span_limit = max(1, int(max_span_bp))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         span_limit = 2000
 
     try:
