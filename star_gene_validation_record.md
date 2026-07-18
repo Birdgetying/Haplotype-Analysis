@@ -2583,3 +2583,66 @@ change either axis, clicked `Apply Range`, and checked the gene-body,
 promoter-only, and single-position cases. There were no page-level JavaScript
 errors. The currently bundled Firefox executable was unavailable, so no
 current Firefox claim is made for this rerun.
+
+### 2026-07-18 compact initial display range
+
+Target gene:
+`VRN-B1` / `VRN-B1-fullSequence-IJMS2021`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by diagnostic marker
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at `13,077`.
+
+Data source:
+`wheat2024` / `wheat_nature_2024` full-sequence alignment database with 102
+samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery --database-root D:\Desktop\project1\star_gene_database --results-root D:\Desktop\project1\star_gene_results --manifest D:\Desktop\project1\star_gene_manifest.json
+```
+
+Output directory:
+`D:\Desktop\project1\star_gene_results\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021__robust_discovery\`.
+The run exited with status 0, and the HTML was updated at
+`2026-07-18 10:29:07`.
+
+Initial display range:
+`12,379–12,466`. The coordinate difference is 87 bp and the inclusive span is
+88 bp. The window contains 25 visible variants in the dense cluster around
+12.4 kb. The literature diagnostic position `13,077` is outside this window
+and was not used as an anchor. Range selection used only coordinates, the gene
+midpoint, and the variant distribution; it did not use phenotype, literature
+sites, validation markers, or scores.
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`, n=3.
+
+Match to literature functional haplotype:
+Yes. `Hap6` still matches the 837 bp insertion in post-hoc validation. The
+literature marker did not participate in discovery scoring or range selection.
+
+Sample count / reliability:
+`Hap6` has n=3, so the result retains the small-sample reliability limitation.
+
+Blocked reason:
+None for the analysis or browser verification. The optional WatSeq phenotype
+is missing, while the precomputed `GrowthHabitSpringScore` is available.
+
+Report/UI check:
+On load, current, pending, and initial ranges are all `12,379–12,466`, and the
+Apply button is disabled. Both circle markers and sequence columns number 25;
+the gene and GWAS axes are compact. Editing the numeric range to
+`12,381–12,465` changes only the pending state and leaves both axes unchanged.
+Using the real Reset control fully restores the initial state.
+
+Browser verification:
+The generated HTML passed Playwright verification in real Microsoft Edge
+Chromium `150.0.4078.65`, with 0 page errors and 0 console errors. The verified
+state was current = pending = initial, Apply disabled, 25 circle markers, and
+25 sequence columns. The pending-only edit and full Reset restoration behaved
+as described above.
