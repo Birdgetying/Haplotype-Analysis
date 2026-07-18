@@ -11141,6 +11141,9 @@ var geneStart    = {gene_start};
 var geneEnd      = {gene_end};
 var geneModelData = __GENE_MODEL_DATA__;
 var hasPromoter  = {has_promoter_variants_json};
+var sequenceColumnWidth = 20;
+var minimumGeneAreaWidth = 320;
+var legendAreaWidth = 220;
 var svgTotalWidth = {svg_total_width};  // 与基因结构图相同的总宽度
 var geneAreaWidth = {gene_area_width_js};  // 基因区域宽度（与基因结构图完全一致）
 var gwasPlotWidth = {gwas_plot_width};  // GWAS图绘图区域宽度（基因区域+图例）
@@ -11154,6 +11157,49 @@ var initialDisplayRange = {initial_display_range_json};
 var ldR2Matrix = __LD_R2_MATRIX__;
 var allPhenotypeData = {all_pheno_data_for_js};
 var allPhenoNames = {all_pheno_names_json};
+
+function calculateVisibleLayoutDimensions(count) {
+    var numericCount = Number(count);
+    var normalizedCount = Number.isFinite(numericCount)
+        ? Math.max(0, Math.floor(numericCount))
+        : 0;
+    var visibleGeneAreaWidth = Math.max(
+        minimumGeneAreaWidth,
+        normalizedCount * sequenceColumnWidth
+    );
+    return {
+        geneAreaWidth: visibleGeneAreaWidth,
+        svgTotalWidth: gwasLeftMargin + visibleGeneAreaWidth + legendAreaWidth,
+        gwasPlotWidth: visibleGeneAreaWidth + legendAreaWidth
+    };
+}
+
+function applyVisibleLayoutDimensions(count) {
+    var dimensions = calculateVisibleLayoutDimensions(count);
+    geneAreaWidth = dimensions.geneAreaWidth;
+    svgTotalWidth = dimensions.svgTotalWidth;
+    gwasPlotWidth = dimensions.gwasPlotWidth;
+
+    var sharedPanel = document.getElementById('gene-gwas-panel-workbench');
+    if (sharedPanel) {
+        sharedPanel.style.width = svgTotalWidth + 'px';
+        sharedPanel.style.minWidth = svgTotalWidth + 'px';
+    }
+
+    var gwasContainer = document.getElementById('gwas-gene-viz');
+    if (gwasContainer) {
+        gwasContainer.style.width = svgTotalWidth + 'px';
+    }
+
+    var geneStructureSvg = document.getElementById('gene-structure-svg');
+    if (geneStructureSvg) {
+        geneStructureSvg.setAttribute('width', svgTotalWidth);
+        geneStructureSvg.setAttribute('data-gene-width', geneAreaWidth);
+        geneStructureSvg.style.width = svgTotalWidth + 'px';
+    }
+
+    return dimensions;
+}
 
 // ==================== 表型切换功能 ====================
 function switchPhenotype(pheno) {{
@@ -12465,10 +12511,6 @@ function applyFilters() {
         return rangePass && (priorityPass || (mafPass && missPass && annPass && typePass && synPass));
     });
     
-    var coordinateDomain = getAppliedCoordinateDomain();
-    updateGeneStructureDomain();
-    drawGWASPlot(filtered, coordinateDomain);
-    
     // 构建通过过滤的位置集合
     var posSet = {};
     filtered.forEach(function(d){ posSet[d.pos] = true; });
@@ -12506,6 +12548,18 @@ function applyFilters() {
         }} else {{
         }}
     }});
+
+    var visiblePositions = Array.from(new Set(varPositions));
+    var visibleGwasData = filtered.filter(function(d) {
+        return posSet[d.pos] !== undefined;
+    });
+
+    updateTableColumns(varIndices, varPositions);
+    applyVisibleLayoutDimensions(visiblePositions.length);
+
+    var coordinateDomain = getAppliedCoordinateDomain();
+    updateGeneStructureDomain();
+    drawGWASPlot(visibleGwasData, coordinateDomain);
     
     // 更新基因结构图上的变异元素（竖线、圆圈、斜线、向上虚线）
     document.querySelectorAll('.var-line, .var-circle, .var-star, .var-connector, .var-up-line').forEach(function(el) {
@@ -12520,9 +12574,6 @@ function applyFilters() {
     
     console.log('[applyFilters] maf=' + currentFilter.maf + ' miss=' + currentFilter.missingRate + ' range=' + currentFilter.rangeStart + '-' + currentFilter.rangeEnd + ' filtered=' + filtered.length + ' varIndices=' + varIndices.length);
 
-    // 同步更新表格：隐藏被过滤的列，重新排列保留的列
-    updateTableColumns(varIndices, varPositions);
-    
     // 更新连线和LD倒三角
     // 先用RAF更新连线（可读取最新的布局信息）
     // 再用setTimeout绘制LD倒三角，确保浏览器完成table-layout:fixed的列重排
