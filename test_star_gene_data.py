@@ -2379,13 +2379,31 @@ class StarGeneDataTests(unittest.TestCase):
         apply_start = integrated_block.index("function applyFilters()")
         apply_end = integrated_block.index("function updateTableColumns", apply_start)
         apply_block = integrated_block[apply_start:apply_end]
+        manual_blacklist_idx = apply_block.index("manualBlacklist.forEach(function(pos)")
+        manual_delete_idx = apply_block.index("delete posSet[pos];", manual_blacklist_idx)
+        manual_blacklist_end = apply_block.index("});", manual_blacklist_idx) + len("});")
+        var_positions_idx = apply_block.index("var varPositions = []")
+        visible_positions_idx = apply_block.index(
+            "var visiblePositions = Array.from(new Set(varPositions));"
+        )
+        visible_gwas_idx = apply_block.index(
+            "var visibleGwasData = filtered.filter(function(d)"
+        )
+        visible_gwas_end = apply_block.index("});", visible_gwas_idx) + len("});")
+        visible_gwas_block = apply_block[visible_gwas_idx:visible_gwas_end]
         layout_idx = apply_block.index("applyVisibleLayoutDimensions(visiblePositions.length)")
         gene_idx = apply_block.index("updateGeneStructureDomain()")
         gwas_idx = apply_block.index("drawGWASPlot(visibleGwasData, coordinateDomain)")
+        self.assertLess(manual_blacklist_idx, manual_delete_idx)
+        self.assertLess(manual_delete_idx, manual_blacklist_end)
+        self.assertLess(manual_blacklist_end, var_positions_idx)
+        self.assertLess(manual_delete_idx, visible_positions_idx)
+        self.assertLess(var_positions_idx, visible_positions_idx)
+        self.assertLess(visible_positions_idx, visible_gwas_idx)
+        self.assertIn("return posSet[d.pos] !== undefined;", visible_gwas_block)
+        self.assertLess(visible_gwas_idx, layout_idx)
         self.assertLess(layout_idx, gene_idx)
         self.assertLess(layout_idx, gwas_idx)
-        self.assertIn("new Set(varPositions)", apply_block)
-        self.assertIn("manualBlacklist", apply_block)
 
     def test_display_range_slider_executes_overlap_and_timer_logic(self):
         node = shutil.which("node")
@@ -2398,7 +2416,10 @@ class StarGeneDataTests(unittest.TestCase):
         integrated_block = source[integrated_start:integrated_end]
 
         def extract_js_function(name):
-            start = integrated_block.index(f"function {name}(")
+            function_marker = f"function {name}("
+            if function_marker not in integrated_block:
+                self.fail(f"Missing JavaScript function {name}")
+            start = integrated_block.index(function_marker)
             brace = integrated_block.index("{", start)
             depth = 0
             quote = None
@@ -2444,6 +2465,7 @@ class StarGeneDataTests(unittest.TestCase):
             "commitRangeFilter",
             "getAppliedCoordinateDomain",
             "calculateVisibleLayoutDimensions",
+            "applyVisibleLayoutDimensions",
             "getD3CoordinateDomain",
             "formatCoordinateTick",
             "coordinateToGeneX",
@@ -2478,7 +2500,15 @@ var elements = {
     rangeSliderFill: { style: {} },
     rangeSliderLabel: { textContent: '' },
     rangeApplyBtn: { disabled: true },
-    rangePendingStatus: { hidden: true }
+    rangePendingStatus: { hidden: true },
+    'gene-gwas-panel-workbench': { style: {} },
+    'gwas-gene-viz': { style: {} },
+    'gene-structure-svg': {
+        style: {},
+        attributes: {},
+        setAttribute: function(name, value) { this.attributes[name] = String(value); },
+        getAttribute: function(name) { return this.attributes[name]; }
+    }
 };
 var document = {
     getElementById: function(id) { return elements[id] || null; },
@@ -2508,13 +2538,21 @@ assertEqual(
     {geneAreaWidth: 320, svgTotalWidth: 990, gwasPlotWidth: 540},
     'zero sites use readable minimum'
 );
-assertEqual(calculateVisibleLayoutDimensions(1).geneAreaWidth, 320, 'one site uses minimum');
+assertEqual(
+    calculateVisibleLayoutDimensions(1),
+    {geneAreaWidth: 320, svgTotalWidth: 990, gwasPlotWidth: 540},
+    'one site uses readable minimum'
+);
 assertEqual(
     calculateVisibleLayoutDimensions(25),
     {geneAreaWidth: 500, svgTotalWidth: 1170, gwasPlotWidth: 720},
     'twenty-five sites fit the report viewport'
 );
-assertEqual(calculateVisibleLayoutDimensions(100).geneAreaWidth, 2000, 'large sets remain scrollable');
+assertEqual(
+    calculateVisibleLayoutDimensions(100),
+    {geneAreaWidth: 2000, svgTotalWidth: 2670, gwasPlotWidth: 2220},
+    'large sets remain scrollable'
+);
 assertEqual(getAppliedCoordinateDomain(), {start: 10, end: 90}, 'applied coordinate domain');
 assertEqual(getD3CoordinateDomain({start: 50, end: 50}), [49.5, 50.5], 'single-position D3 domain');
 assertEqual(coordinateToGeneX(50, {start: 10, end: 90}), 550, 'coordinate maps into gene plot');
@@ -2599,6 +2637,26 @@ scheduleLDTriangleRedraw();
 scheduleLDTriangleRedraw();
 assertEqual(clearedTimers, [1], 'LD redraw timer is coalesced');
 assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
+var appliedDimensions = applyVisibleLayoutDimensions(25);
+assertEqual(
+    appliedDimensions,
+    {geneAreaWidth: 500, svgTotalWidth: 1170, gwasPlotWidth: 720},
+    'layout adapter returns applied dimensions'
+);
+assertEqual(
+    {geneAreaWidth: geneAreaWidth, svgTotalWidth: svgTotalWidth, gwasPlotWidth: gwasPlotWidth},
+    {geneAreaWidth: 500, svgTotalWidth: 1170, gwasPlotWidth: 720},
+    'layout adapter updates shared dimensions'
+);
+assertEqual(
+    elements['gene-gwas-panel-workbench'].style,
+    {width: '1170px', minWidth: '1170px'},
+    'layout adapter resizes shared panel'
+);
+assertEqual(elements['gwas-gene-viz'].style.width, '1170px', 'layout adapter resizes GWAS container');
+assertEqual(elements['gene-structure-svg'].getAttribute('width'), '1170', 'layout adapter sets gene SVG width');
+assertEqual(elements['gene-structure-svg'].getAttribute('data-gene-width'), '500', 'layout adapter sets gene area metadata');
+assertEqual(elements['gene-structure-svg'].style.width, '1170px', 'layout adapter sets gene SVG CSS width');
 """
         completed = subprocess.run(
             [node, "-e", script],
