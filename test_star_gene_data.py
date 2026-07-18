@@ -2379,62 +2379,87 @@ class StarGeneDataTests(unittest.TestCase):
         apply_start = integrated_block.index("function applyFilters()")
         apply_end = integrated_block.index("function updateTableColumns", apply_start)
         apply_block = integrated_block[apply_start:apply_end]
+
+        def assert_markers_in_order(text, markers):
+            previous_idx = -1
+            previous_marker = None
+            for marker in markers:
+                marker_idx = text.find(marker, previous_idx + 1)
+                self.assertNotEqual(
+                    marker_idx,
+                    -1,
+                    f"Missing ordered marker after {previous_marker!r}: {marker!r}",
+                )
+                self.assertGreater(marker_idx, previous_idx)
+                previous_idx = marker_idx
+                previous_marker = marker
+
         compact_apply_block = "".join(apply_block.split())
         pos_set_marker = "varposSet={};"
         pos_set_fill_marker = "filtered.forEach(function(d){posSet[d.pos]=true;});"
         manual_blacklist_marker = "manualBlacklist.forEach(function(pos)"
         manual_delete_marker = "deleteposSet[pos];"
+        var_indices_marker = "varvarIndices=[];"
         var_positions_marker = "varvarPositions=[];"
+        in_pos_set_marker = "if(inPosSet){{"
+        var_indices_fill_marker = "varIndices.push(idx);"
         var_positions_fill_marker = "varPositions.push(pos);"
         visible_positions_marker = "varvisiblePositions=Array.from(newSet(varPositions));"
         visible_gwas_marker = "varvisibleGwasData=filtered.filter(function(d)"
+        update_table_marker = "updateTableColumns(varIndices,varPositions);"
+        apply_dimensions_marker = "applyVisibleLayoutDimensions(visiblePositions.length);"
+        coordinate_domain_marker = "varcoordinateDomain=getAppliedCoordinateDomain();"
+        update_gene_marker = "updateGeneStructureDomain();"
+        draw_gwas_marker = "drawGWASPlot(visibleGwasData,coordinateDomain);"
+        variant_visibility_marker = "el.style.display=passed?'':'none';"
+        connector_marker = "scheduleConnectorRedraw();"
+        ld_marker = "scheduleLDTriangleRedraw();"
+        manual_visuals_marker = "if(manualFilterMode)updateManualFilterVisuals();"
         self.assertEqual(compact_apply_block.count(pos_set_marker), 1)
         self.assertEqual(compact_apply_block.count(pos_set_fill_marker), 1)
         self.assertEqual(compact_apply_block.count(var_positions_fill_marker), 1)
-        pos_set_idx = compact_apply_block.index(pos_set_marker)
-        pos_set_fill_idx = compact_apply_block.index(pos_set_fill_marker)
-        compact_manual_blacklist_idx = compact_apply_block.index(manual_blacklist_marker)
-        compact_manual_delete_idx = compact_apply_block.index(
-            manual_delete_marker, compact_manual_blacklist_idx
+        assert_markers_in_order(
+            compact_apply_block,
+            [
+                pos_set_marker,
+                pos_set_fill_marker,
+                manual_blacklist_marker,
+                manual_delete_marker,
+                var_indices_marker,
+                var_positions_marker,
+                in_pos_set_marker,
+                var_indices_fill_marker,
+                var_positions_fill_marker,
+                visible_positions_marker,
+                visible_gwas_marker,
+                update_table_marker,
+                apply_dimensions_marker,
+                coordinate_domain_marker,
+                update_gene_marker,
+                draw_gwas_marker,
+                variant_visibility_marker,
+                connector_marker,
+                ld_marker,
+                manual_visuals_marker,
+            ],
         )
-        compact_var_positions_idx = compact_apply_block.index(var_positions_marker)
-        compact_var_positions_fill_idx = compact_apply_block.index(var_positions_fill_marker)
-        compact_visible_positions_idx = compact_apply_block.index(visible_positions_marker)
-        compact_visible_gwas_idx = compact_apply_block.index(visible_gwas_marker)
-        self.assertLess(pos_set_idx, pos_set_fill_idx)
-        self.assertLess(pos_set_fill_idx, compact_manual_blacklist_idx)
-        self.assertLess(compact_manual_blacklist_idx, compact_manual_delete_idx)
-        self.assertLess(compact_manual_delete_idx, compact_var_positions_idx)
-        self.assertLess(compact_var_positions_idx, compact_var_positions_fill_idx)
-        self.assertLess(compact_var_positions_fill_idx, compact_visible_positions_idx)
-        self.assertLess(compact_visible_positions_idx, compact_visible_gwas_idx)
-        manual_blacklist_idx = apply_block.index("manualBlacklist.forEach(function(pos)")
-        manual_delete_idx = apply_block.index("delete posSet[pos];", manual_blacklist_idx)
-        manual_blacklist_end = apply_block.index("});", manual_blacklist_idx) + len("});")
-        var_positions_idx = apply_block.index("var varPositions = []")
-        var_positions_fill_idx = apply_block.index("varPositions.push(pos)", var_positions_idx)
-        visible_positions_idx = apply_block.index(
-            "var visiblePositions = Array.from(new Set(varPositions));"
+
+        in_pos_set_start = apply_block.index("if (inPosSet) {{")
+        in_pos_set_end = apply_block.index("}} else {{", in_pos_set_start)
+        in_pos_set_block = apply_block[in_pos_set_start:in_pos_set_end]
+        self.assertEqual(in_pos_set_block.count("varIndices.push(idx);"), 1)
+        self.assertEqual(in_pos_set_block.count("varPositions.push(pos);"), 1)
+        assert_markers_in_order(
+            "".join(in_pos_set_block.split()),
+            [in_pos_set_marker, var_indices_fill_marker, var_positions_fill_marker],
         )
+
         visible_gwas_idx = apply_block.index(
             "var visibleGwasData = filtered.filter(function(d)"
         )
         visible_gwas_end = apply_block.index("});", visible_gwas_idx) + len("});")
         visible_gwas_block = apply_block[visible_gwas_idx:visible_gwas_end]
-        layout_idx = apply_block.index("applyVisibleLayoutDimensions(visiblePositions.length)")
-        gene_idx = apply_block.index("updateGeneStructureDomain()")
-        gwas_idx = apply_block.index("drawGWASPlot(visibleGwasData, coordinateDomain)")
-        self.assertLess(manual_blacklist_idx, manual_delete_idx)
-        self.assertLess(manual_delete_idx, manual_blacklist_end)
-        self.assertLess(manual_blacklist_end, var_positions_idx)
-        self.assertLess(manual_delete_idx, visible_positions_idx)
-        self.assertLess(var_positions_idx, visible_positions_idx)
-        self.assertLess(var_positions_fill_idx, visible_positions_idx)
-        self.assertLess(visible_positions_idx, visible_gwas_idx)
         self.assertIn("return posSet[d.pos] !== undefined;", visible_gwas_block)
-        self.assertLess(visible_gwas_idx, layout_idx)
-        self.assertLess(layout_idx, gene_idx)
-        self.assertLess(layout_idx, gwas_idx)
 
     def test_display_range_slider_executes_overlap_and_timer_logic(self):
         node = shutil.which("node")
