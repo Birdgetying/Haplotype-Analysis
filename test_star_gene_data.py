@@ -2379,6 +2379,31 @@ class StarGeneDataTests(unittest.TestCase):
         apply_start = integrated_block.index("function applyFilters()")
         apply_end = integrated_block.index("function updateTableColumns", apply_start)
         apply_block = integrated_block[apply_start:apply_end]
+        compact_apply_block = "".join(apply_block.split())
+        pos_set_marker = "varposSet={};"
+        pos_set_fill_marker = "filtered.forEach(function(d){posSet[d.pos]=true;});"
+        manual_blacklist_marker = "manualBlacklist.forEach(function(pos)"
+        manual_delete_marker = "deleteposSet[pos];"
+        var_positions_marker = "varvarPositions=[];"
+        visible_positions_marker = "varvisiblePositions=Array.from(newSet(varPositions));"
+        visible_gwas_marker = "varvisibleGwasData=filtered.filter(function(d)"
+        self.assertEqual(compact_apply_block.count(pos_set_marker), 1)
+        self.assertEqual(compact_apply_block.count(pos_set_fill_marker), 1)
+        pos_set_idx = compact_apply_block.index(pos_set_marker)
+        pos_set_fill_idx = compact_apply_block.index(pos_set_fill_marker)
+        compact_manual_blacklist_idx = compact_apply_block.index(manual_blacklist_marker)
+        compact_manual_delete_idx = compact_apply_block.index(
+            manual_delete_marker, compact_manual_blacklist_idx
+        )
+        compact_var_positions_idx = compact_apply_block.index(var_positions_marker)
+        compact_visible_positions_idx = compact_apply_block.index(visible_positions_marker)
+        compact_visible_gwas_idx = compact_apply_block.index(visible_gwas_marker)
+        self.assertLess(pos_set_idx, pos_set_fill_idx)
+        self.assertLess(pos_set_fill_idx, compact_manual_blacklist_idx)
+        self.assertLess(compact_manual_blacklist_idx, compact_manual_delete_idx)
+        self.assertLess(compact_manual_delete_idx, compact_var_positions_idx)
+        self.assertLess(compact_var_positions_idx, compact_visible_positions_idx)
+        self.assertLess(compact_visible_positions_idx, compact_visible_gwas_idx)
         manual_blacklist_idx = apply_block.index("manualBlacklist.forEach(function(pos)")
         manual_delete_idx = apply_block.index("delete posSet[pos];", manual_blacklist_idx)
         manual_blacklist_end = apply_block.index("});", manual_blacklist_idx) + len("});")
