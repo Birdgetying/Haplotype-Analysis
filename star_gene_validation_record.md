@@ -2699,9 +2699,10 @@ duplicate ID or hidden clone, with `type="button"`,
 `onclick="commitRangeFilter()"`, and a functional DOM `onclick` property;
 `typeof commitRangeFilter` was `function`. Earlier agent-browser ref/semantic
 click commands returned success without changing state and therefore did not
-hit the precise effective button handler. Calling
-`document.getElementById('rangeApplyBtn').click()` triggered that unique
-button's real click handler normally and raised no error.
+actually apply the pending range through the precise button. Calling
+`document.getElementById('rangeApplyBtn').click()` programmatically invoked
+the unique button's registered handler and raised no error; this verifies the
+registered handler behavior, not full pointer hit-testing equivalence.
 
 After the exact DOM button click, current and pending were both
 `12,381-12,465`; 23 positions and 23 connectors were visible;
@@ -2712,6 +2713,9 @@ data section changed to exact `scrollWidth=3004` px. Reset restored current
 and pending to `12,379-12,466`, 25 positions/connectors, 500/1170 px widths,
 both SVGs at 1170 px, `scrollWidth=3052` px, and disabled Apply.
 
+Blocked reason:
+None for analysis and layout verification.
+
 Export and browser diagnostics:
 After `prepareReportExportVisuals()`, all 25 visible connector coordinates
 were finite and inside the gene SVG bounds `x=0..1170`, `y=0..200`; connector
@@ -2720,6 +2724,10 @@ connector was position `12,379`, `(x1,x2,y1,y2)=(450,460,66,200)`, and the
 last was position `12,466`, `(950,940,66,200)`. Connector x2 values tracked
 the sequence-column centers. Browser `console` contained diagnostic log
 entries only, with no console errors, and `errors` returned no page errors.
-The evidence screenshot is outside the repository at
-`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width.png`;
-the named browser sessions were closed.
+Evidence files are outside the repository at
+`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width-analysis.log`,
+`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width-main.png`,
+`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width-controls.png`,
+and the earlier full-page screenshot
+`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width.png`.
+The named browser sessions were closed.
