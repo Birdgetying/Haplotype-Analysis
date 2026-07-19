@@ -2739,6 +2739,9 @@ class StarGeneDataTests(unittest.TestCase):
             "getAppliedCoordinateDomain",
             "calculateVisibleLayoutDimensions",
             "applyVisibleLayoutDimensions",
+            "calculateVisibleTableWidth",
+            "applyVisibleTableWidth",
+            "scrollToAppliedRange",
             "getD3CoordinateDomain",
             "formatCoordinateTick",
             "coordinateToGeneX",
@@ -2761,6 +2764,8 @@ assertEqual(chooseRangeHandle(51, 50, 50, 'start'), 'end', 'overlap drag right')
 assertEqual(chooseRangeHandle(50, 50, 50, 'start'), 'end', 'overlap exact toggles handle');
 assertEqual(resolveDraggedRange('start', 60, 50, 55), {start: 55, end: 55}, 'start cannot cross end');
 assertEqual(resolveDraggedRange('end', 40, 50, 55), {start: 50, end: 50}, 'end cannot cross start');
+var dataTable = { style: {} };
+var mainDataSection = { clientWidth: 1200, scrollWidth: 1200, scrollLeft: 900 };
 var elements = {
     mafSlider: { value: '0.05' },
     missingSlider: { value: '0.2' },
@@ -2774,7 +2779,7 @@ var elements = {
     rangeSliderLabel: { textContent: '' },
     rangeApplyBtn: { disabled: true },
     rangePendingStatus: { hidden: true },
-    'gene-gwas-panel-workbench': { style: {} },
+    'gene-gwas-panel-workbench': { style: {}, offsetLeft: 20 },
     'gwas-gene-viz': { style: {} },
     'gene-structure-svg': {
         style: {},
@@ -2785,6 +2790,12 @@ var elements = {
 };
 var document = {
     getElementById: function(id) { return elements[id] || null; },
+    querySelector: function(selector) {
+        if (selector === '.data-table') return dataTable;
+        if (selector === '.main-data-section') return mainDataSection;
+        if (selector === '#gene-gwas-panel-workbench') return elements['gene-gwas-panel-workbench'];
+        return null;
+    },
     querySelectorAll: function() { return []; }
 };
 var initialDisplayRange = {start: 10, end: 90};
@@ -2806,6 +2817,17 @@ function scheduleAppliedRangeCentering() {}
 var applyCount = 0;
 function applyFilters() { applyCount += 1; }
 
+assertEqual(calculateVisibleTableWidth(0), 510, 'zero sites use fixed table columns');
+assertEqual(calculateVisibleTableWidth(2), 550, 'two sites use exact table width');
+assertEqual(calculateVisibleTableWidth(23), 970, 'twenty-three sites use exact table width');
+assertEqual(calculateVisibleTableWidth(25), 1010, 'twenty-five sites use exact table width');
+assertEqual(calculateVisibleTableWidth(100), 2510, 'large table width remains exact');
+applyVisibleTableWidth(25);
+assertEqual(
+    dataTable.style,
+    {width: '1010px', minWidth: '1010px', maxWidth: '1010px'},
+    'table adapter applies one exact width'
+);
 assertEqual(
     calculateVisibleLayoutDimensions(0),
     {geneAreaWidth: 320, svgTotalWidth: 990, gwasPlotWidth: 540},
@@ -2930,6 +2952,22 @@ assertEqual(elements['gwas-gene-viz'].style.width, '1170px', 'layout adapter res
 assertEqual(elements['gene-structure-svg'].getAttribute('width'), '1170', 'layout adapter sets gene SVG width');
 assertEqual(elements['gene-structure-svg'].getAttribute('data-gene-width'), '500', 'layout adapter sets gene area metadata');
 assertEqual(elements['gene-structure-svg'].style.width, '1170px', 'layout adapter sets gene SVG CSS width');
+mainDataSection.clientWidth = 1200;
+mainDataSection.scrollWidth = 1200;
+mainDataSection.scrollLeft = 900;
+scrollToAppliedRange();
+assertEqual(mainDataSection.scrollLeft, 0, 'narrow content resets stale scrolling');
+mainDataSection.clientWidth = 800;
+mainDataSection.scrollWidth = 2510;
+mainDataSection.scrollLeft = 0;
+geneAreaWidth = 2000;
+svgTotalWidth = 2670;
+scrollToAppliedRange();
+assertEqual(
+    mainDataSection.scrollLeft,
+    Math.min(1710, 20 + 450 + 1000 - 400),
+    'wide content centers the applied gene area in panel coordinates'
+);
 """
         completed = subprocess.run(
             [node, "-e", script],
@@ -2938,6 +2976,20 @@ assertEqual(elements['gene-structure-svg'].style.width, '1170px', 'layout adapte
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        update_table_start = integrated_block.index("function updateTableColumns(")
+        update_table_end = integrated_block.index(
+            "function drawNetworkPlot(", update_table_start
+        )
+        update_table_block = integrated_block[update_table_start:update_table_end]
+        apply_table_width_marker = "applyVisibleTableWidth(keepPositions.length)"
+        force_reflow_marker = "void table.offsetHeight"
+        self.assertIn(apply_table_width_marker, update_table_block)
+        self.assertIn(force_reflow_marker, update_table_block)
+        self.assertLess(
+            update_table_block.index(apply_table_width_marker),
+            update_table_block.index(force_reflow_marker),
+        )
 
     def test_multi_panel_reset_clears_integrated_display_range(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
