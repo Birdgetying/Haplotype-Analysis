@@ -2731,3 +2731,105 @@ Evidence files are outside the repository at
 and the earlier full-page screenshot
 `C:\Users\Administrator\AppData\Local\Temp\VRN-B1-dynamic-visible-width.png`.
 The named browser sessions were closed.
+
+### 2026-07-19 validation-only marker leakage correction and rerun
+
+Target gene:
+`VRN-B1` / `VRN-B1-fullSequence-IJMS2021`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at alignment coordinate
+`13,077`. In `variant_info.csv` this record is explicitly marked
+`validation_marker=True`; the marker is retained for report display and
+post-hoc sequence audit only.
+
+Data source:
+Existing IJMS2021 full-sequence database at
+`D:\Desktop\project1\star_gene_database\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021`,
+with 102 samples, 24 haplotypes, 252 sequence variants, and the local
+`GrowthHabitSpringScore` phenotype.
+
+Score mode:
+`robust_discovery`, active score axis `total`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery --database-root D:\Desktop\project1\star_gene_database --results-root D:\Desktop\project1\star_gene_results --manifest D:\Desktop\project1\star_gene_manifest.json
+```
+
+Output directory:
+`D:\Desktop\project1\star_gene_results\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021__robust_discovery\`.
+The corrected analysis exited with status 0 in 17.14 seconds. The captured log
+is `C:\Users\Administrator\AppData\Local\Temp\VRN-B1-validation-gate-rerun.log`.
+
+Correction to the 2026-07-18 entries:
+The earlier statements that the literature marker did not participate in
+discovery scoring were incorrect. Before the gate fix, position `13,077` had
+`total_site_weight=0.538236`, `function_weight=3.0`, and
+`structural_priority=1.0`, and it appeared in the functional, core, and anchor
+position sets. Therefore the former top result `Hap6`, total `1.2016`, n=3,
+was contaminated by knowledge of the validation marker and must not be used as
+evidence that phenotype-free discovery recovered `Vrn-B1f`.
+
+Corrected top-scored haplotype:
+`Hap11`, total `1.0396`, n=2. Direct full-sequence indexing places the
+literature marker at token index 251; `Hap11` carries `DEL_837`, not the 837 bp
+inserted sequence. `Hap6` carries the full 837 bp insertion but is now rank 15,
+total `0.2425`, n=3.
+
+Match to literature functional haplotype:
+No for the corrected raw top-scored haplotype. The highest robust-discovery
+haplotype does not carry the published `Vrn-B1f` insertion. This target
+therefore does not currently prove that the discovery score recovers the exact
+`Vrn-B1f` functional allele.
+
+Discovery-boundary audit:
+Position `13,077` remains in `site_weights` with
+`excluded_from_discovery=True`,
+`exclusion_reason=post_hoc_validation_only`, and zero values for site,
+annotation, function, external, attention, boundary, MAF-stability, and
+structural contributions. It is absent from functional, core, and anchor
+position sets. A regression test also shows that adding an explicitly marked
+long INDEL validation site leaves every robust total component, total score,
+ambiguity factor, and ranking unchanged.
+
+Sample count / reliability:
+The corrected raw top `Hap11` has only n=2 (`sample_reliability=0.0909`), and
+the exact insertion carrier `Hap6` has n=3 (`sample_reliability=0.1304`). Both
+are small-sample results. The optional WatSeq phenotype table is still absent;
+the analysis uses the complete local 102-sample `GrowthHabitSpringScore`
+column.
+
+Blocked reason:
+No data or execution blocker. Scientific validation is negative for exact
+top-haplotype recovery after removing validation-marker leakage.
+
+Raw, displayed, and anchor rankings:
+The raw `score_axis=total` top is `Hap11` (`1.0396`, n=2), but it is hidden
+from the score plot by the previously requested display policy (`min n=3`,
+maximum 5 haplotypes). The highest point actually shown in the score plot is
+`Hap4` (`1.0287`, n=6). The separate Discovery Candidate List uses the
+phenotype-free anchor ranking and has `Hap5` first (`anchor_score=0.4221`,
+n=6). Direct token checks at index 251 show `Hap11`, `Hap4`, and `Hap5` all
+carry `DEL_837`; only `Hap6` carries the published 837 bp inserted sequence.
+Thus the literature match is negative under all three relevant top views.
+The HTML label now explicitly says `Anchor score` and states that phenotype
+mean, effect, and reliability are audit-only, preventing the anchor list from
+being confused with the raw total-score ranking.
+
+Browser/UI verification:
+The final regenerated HTML opened successfully in a named Chromium session.
+Initial range `12,379-12,466` showed 25 positions/connectors with
+`geneAreaWidth=500`, `svgTotalWidth=1170`, and both GWAS and gene SVG widths
+1170 px. Editing to `12,381-12,465` left the applied display at 25 positions
+and 1170 px until Apply; after Apply it showed 23 positions/connectors with
+`geneAreaWidth=460` and both SVG widths 1130 px. Applying `13,070-13,080`
+showed two positions (`13,076` and `13,077`) at the 320 px minimum gene area
+and 990 px total width. Position `13,077` had one visible sequence header,
+gene-structure circle, GWAS point, and connector, proving that exclusion from
+discovery scoring does not remove it from report display. A fresh browser
+session reported zero page errors and no console error/warning entries. The
+final screenshot is outside the repository at
+`C:\Users\Administrator\AppData\Local\Temp\VRN-B1-validation-gate-final.png`.

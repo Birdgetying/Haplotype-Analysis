@@ -3264,6 +3264,19 @@ def _build_top_haplotype_key_site_rows(
 def _render_discovery_candidate_list(candidate_rows: list) -> str:
     if not candidate_rows:
         return '<div class="evidence-empty">No discovery candidates could be ranked from haplotype scores.</div>'
+    rank_basis = str(candidate_rows[0].get("rank_basis", "total") or "total")
+    if rank_basis == "anchor":
+        score_label = "Anchor score"
+        ranking_note = (
+            "Ranked by phenotype-free anchor-site evidence; phenotype mean, "
+            "effect, and reliability are audit-only."
+        )
+    else:
+        score_label = "Total score"
+        ranking_note = (
+            "Ranked by robust total score; phenotype mean, effect, and "
+            "reliability are audit-only."
+        )
     rows = []
     for row in candidate_rows:
         seq = _html_escape(row.get("sequence", ""))
@@ -3285,9 +3298,9 @@ def _render_discovery_candidate_list(candidate_rows: list) -> str:
     return (
         '<section class="discovery-candidate-section">'
         '<h3>Discovery Candidate List</h3>'
-        '<div class="discovery-note">Ranked only from local haplotype scores, phenotype summaries, and sample reliability.</div>'
+        f'<div class="discovery-note">{ranking_note}</div>'
         '<div class="evidence-table-wrap"><table class="evidence-table candidate-table">'
-        '<thead><tr><th>Rank</th><th>Hap</th><th>Score</th><th>n</th><th>Mean</th><th>Effect</th><th>Flag</th><th>Seq</th></tr></thead>'
+        f'<thead><tr><th>Rank</th><th>Hap</th><th>{score_label}</th><th>n</th><th>Mean</th><th>Effect</th><th>Flag</th><th>Seq</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         '</section>'
     )

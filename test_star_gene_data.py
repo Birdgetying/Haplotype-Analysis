@@ -3359,6 +3359,35 @@ assertEqual(elements['gene-structure-svg'].style.width, '1170px', 'layout adapte
         self.assertIn("Score mode: <strong>Original</strong>", default_panel["meta_html"])
         self.assertIn("Score mode: <strong>Robust discovery</strong>", robust_panel["meta_html"])
 
+    def test_discovery_candidate_list_labels_anchor_ranking_and_audit_only_phenotype(self):
+        from haplotype_phenotype_analysis import _render_discovery_candidate_list
+
+        base_row = {
+            "rank": 1,
+            "haplotype": "HapA",
+            "total": 0.75,
+            "raw_total": 1.25,
+            "sample_count": 6,
+            "phenotype_mean": 8.0,
+            "effect": 2.0,
+            "reliability_flag": "pass",
+            "flag_note": "stable",
+            "sequence": "A|C",
+        }
+        anchor_html = _render_discovery_candidate_list([
+            {**base_row, "rank_basis": "anchor"}
+        ])
+        total_html = _render_discovery_candidate_list([
+            {**base_row, "rank_basis": "total"}
+        ])
+
+        self.assertIn("phenotype-free anchor-site evidence", anchor_html)
+        self.assertIn("phenotype mean, effect, and reliability are audit-only", anchor_html)
+        self.assertIn("<th>Anchor score</th>", anchor_html)
+        self.assertNotIn("phenotype summaries, and sample reliability", anchor_html)
+        self.assertIn("robust total score", total_html)
+        self.assertIn("<th>Total score</th>", total_html)
+
     def test_discovery_candidate_rows_prefer_anchor_candidates_when_available(self):
         from haplotype_phenotype_analysis import _build_discovery_candidate_rows
         import pandas as pd
