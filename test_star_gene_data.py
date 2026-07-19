@@ -2688,17 +2688,12 @@ class StarGeneDataTests(unittest.TestCase):
         integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
         integrated_block = source[integrated_start:integrated_end]
 
-        def extract_js_function(name):
-            function_marker = f"function {name}("
-            if function_marker not in integrated_block:
-                self.fail(f"Missing JavaScript function {name}")
-            start = integrated_block.index(function_marker)
-            brace = integrated_block.index("{", start)
+        def find_js_block_end(text, brace):
             depth = 0
             quote = None
             escaped = False
-            for idx in range(brace, len(integrated_block)):
-                char = integrated_block[idx]
+            for idx in range(brace, len(text)):
+                char = text[idx]
                 if quote:
                     if escaped:
                         escaped = False
@@ -2714,8 +2709,17 @@ class StarGeneDataTests(unittest.TestCase):
                 elif char == "}":
                     depth -= 1
                     if depth == 0:
-                        return integrated_block[start:idx + 1]
-            self.fail(f"Could not extract JavaScript function {name}")
+                        return idx
+            self.fail("Could not find the end of a JavaScript block")
+
+        def extract_js_function(name):
+            function_marker = f"function {name}("
+            if function_marker not in integrated_block:
+                self.fail(f"Missing JavaScript function {name}")
+            start = integrated_block.index(function_marker)
+            brace = integrated_block.index("{", start)
+            end = find_js_block_end(integrated_block, brace)
+            return integrated_block[start:end + 1]
 
         functions = "\n".join(extract_js_function(name) for name in [
             "getRangeBounds",
@@ -2765,7 +2769,7 @@ assertEqual(chooseRangeHandle(50, 50, 50, 'start'), 'end', 'overlap exact toggle
 assertEqual(resolveDraggedRange('start', 60, 50, 55), {start: 55, end: 55}, 'start cannot cross end');
 assertEqual(resolveDraggedRange('end', 40, 50, 55), {start: 50, end: 50}, 'end cannot cross start');
 var dataTable = { style: {} };
-var mainDataSection = { clientWidth: 1200, scrollWidth: 1200, scrollLeft: 900 };
+var mainDataSection = { clientWidth: 1200, scrollLeft: 900 };
 var elements = {
     mafSlider: { value: '0.05' },
     missingSlider: { value: '0.2' },
@@ -2798,6 +2802,15 @@ var document = {
     },
     querySelectorAll: function() { return []; }
 };
+Object.defineProperty(mainDataSection, 'scrollWidth', {
+    get: function() {
+        return Math.max(
+            this.clientWidth,
+            parseFloat(dataTable.style.width) || 0,
+            parseFloat(elements['gene-gwas-panel-workbench'].style.width) || 0
+        );
+    }
+});
 var initialDisplayRange = {start: 10, end: 90};
 var currentFilter = { maf: 0.05, missingRate: 0.2, rangeStart: 10, rangeEnd: 90 };
 var pendingRangeFilter = { start: 10, end: 90 };
@@ -2823,11 +2836,9 @@ assertEqual(calculateVisibleTableWidth(23), 970, 'twenty-three sites use exact t
 assertEqual(calculateVisibleTableWidth(25), 1010, 'twenty-five sites use exact table width');
 assertEqual(calculateVisibleTableWidth(100), 2510, 'large table width remains exact');
 applyVisibleTableWidth(25);
-assertEqual(
-    dataTable.style,
-    {width: '1010px', minWidth: '1010px', maxWidth: '1010px'},
-    'table adapter applies one exact width'
-);
+assertEqual(dataTable.style.width, '1010px', 'table adapter applies exact width');
+assertEqual(dataTable.style.minWidth, '1010px', 'table adapter applies exact minimum width');
+assertEqual(dataTable.style.maxWidth, '1010px', 'table adapter applies exact maximum width');
 assertEqual(
     calculateVisibleLayoutDimensions(0),
     {geneAreaWidth: 320, svgTotalWidth: 990, gwasPlotWidth: 540},
@@ -2932,6 +2943,7 @@ scheduleLDTriangleRedraw();
 scheduleLDTriangleRedraw();
 assertEqual(clearedTimers, [1], 'LD redraw timer is coalesced');
 assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
+applyVisibleTableWidth(25);
 var appliedDimensions = applyVisibleLayoutDimensions(25);
 assertEqual(
     appliedDimensions,
@@ -2952,20 +2964,23 @@ assertEqual(elements['gwas-gene-viz'].style.width, '1170px', 'layout adapter res
 assertEqual(elements['gene-structure-svg'].getAttribute('width'), '1170', 'layout adapter sets gene SVG width');
 assertEqual(elements['gene-structure-svg'].getAttribute('data-gene-width'), '500', 'layout adapter sets gene area metadata');
 assertEqual(elements['gene-structure-svg'].style.width, '1170px', 'layout adapter sets gene SVG CSS width');
-mainDataSection.clientWidth = 1200;
-mainDataSection.scrollWidth = 1200;
+assertEqual(mainDataSection.scrollWidth, 1200, 'narrow layout derives no overflow from table and panel widths');
 mainDataSection.scrollLeft = 900;
 scrollToAppliedRange();
 assertEqual(mainDataSection.scrollLeft, 0, 'narrow content resets stale scrolling');
 mainDataSection.clientWidth = 800;
-mainDataSection.scrollWidth = 2510;
 mainDataSection.scrollLeft = 0;
-geneAreaWidth = 2000;
-svgTotalWidth = 2670;
+applyVisibleTableWidth(100);
+applyVisibleLayoutDimensions(100);
+assertEqual(
+    mainDataSection.scrollWidth,
+    Math.max(2510, 2670),
+    'wide layout derives overflow from the wider panel'
+);
 scrollToAppliedRange();
 assertEqual(
     mainDataSection.scrollLeft,
-    Math.min(1710, 20 + 450 + 1000 - 400),
+    Math.min(2670 - 800, 20 + 450 + 1000 - 400),
     'wide content centers the applied gene area in panel coordinates'
 );
 """
@@ -2984,10 +2999,23 @@ assertEqual(
         update_table_block = integrated_block[update_table_start:update_table_end]
         apply_table_width_marker = "applyVisibleTableWidth(keepPositions.length)"
         force_reflow_marker = "void table.offsetHeight"
+        tbody_rows_marker = "tbodyRows.forEach(function(row)"
         self.assertIn(apply_table_width_marker, update_table_block)
         self.assertIn(force_reflow_marker, update_table_block)
+        self.assertIn(tbody_rows_marker, update_table_block)
+        tbody_rows_start = update_table_block.index(tbody_rows_marker)
+        tbody_callback_brace = update_table_block.index("{", tbody_rows_start)
+        tbody_callback_end = find_js_block_end(
+            update_table_block, tbody_callback_brace
+        )
+        tbody_rows_end = update_table_block.index(");", tbody_callback_end) + 2
+        apply_table_width_idx = update_table_block.index(apply_table_width_marker)
         self.assertLess(
-            update_table_block.index(apply_table_width_marker),
+            tbody_rows_end,
+            apply_table_width_idx,
+        )
+        self.assertLess(
+            apply_table_width_idx,
             update_table_block.index(force_reflow_marker),
         )
 
