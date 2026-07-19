@@ -2305,6 +2305,13 @@ def _variant_info_csv_row_to_record(row) -> dict:
     except (TypeError, ValueError):
         record['missing_rate'] = 0.0
     record['annotation'] = _safe_str(record.get('annotation', ''), 'other')
+    for field in (
+        'validation_marker',
+        'post_hoc_validation',
+        'literature_validation_marker',
+    ):
+        if field in record:
+            record[field] = _coerce_variant_info_bool(record[field], default=False)
     return record
 
 
@@ -5959,6 +5966,12 @@ class HaplotypeScorer:
     ROBUST_AMBIGUITY_COMPONENTS = {
         'site_weighted', 'variant_effect', 'burden', 'eb_effect', 'genetic_distinct'
     }
+    POST_HOC_VALIDATION_FIELDS = (
+        'validation_marker',
+        'post_hoc_validation',
+        'literature_validation_marker',
+    )
+    POST_HOC_VALIDATION_EXCLUSION_REASON = 'post_hoc_validation_only'
 
     def __init__(self, hap_sample_df, variant_positions, variant_info=None,
                  snp_effects=None, gwas_data=None, exons=None, cds=None,
@@ -5998,6 +6011,10 @@ class HaplotypeScorer:
         self.effect_results = effect_results or {}
         self.pve = pve  # Phenotypic Variance Explained (0-1), 用于置信度校准
         self.expected_direction = self._normalize_expected_direction(expected_direction)
+        self.discovery_variant_positions = [
+            pos for pos in self.variant_positions
+            if not self._is_post_hoc_validation_position(pos)
+        ] if self.score_mode == 'robust_discovery' else list(self.variant_positions)
 
         # Pre-compute lookup maps
         self.pos_annotation = self._build_annotation_map()
@@ -6049,6 +6066,26 @@ class HaplotypeScorer:
         self.pos_to_seq_idx = {
             int(pos): i for i, pos in enumerate(self.full_variant_positions)
         }
+
+    @classmethod
+    def _is_post_hoc_validation_record(cls, record):
+        """Recognize only explicit boolean fields that mark validation-only sites."""
+        if not isinstance(record, dict):
+            return False
+        return any(
+            _coerce_variant_info_bool(record.get(field), default=False) is True
+            for field in cls.POST_HOC_VALIDATION_FIELDS
+        )
+
+    def _is_post_hoc_validation_position(self, pos):
+        info = self.variant_info.get(pos, self.variant_info.get(str(pos), {}))
+        return self._is_post_hoc_validation_record(info)
+
+    def _scoring_variant_positions(self):
+        """Positions allowed to participate in the current mode's score."""
+        if self.score_mode == 'robust_discovery':
+            return self.discovery_variant_positions
+        return self.variant_positions
 
     @staticmethod
     def _normalize_expected_direction(direction):
@@ -6346,10 +6383,47 @@ class HaplotypeScorer:
         maf_minor = min(maf, 1.0 - maf)
         func_w = float(self.pos_func_weight.get(pos, 0.1))
         func_component = min(func_w / 2.5, 1.0)
+        info = self.variant_info.get(pos, {}) if self.variant_info else {}
+        annotation = self.pos_annotation.get(pos, 'other')
+        missing = 0.0
+        try:
+            missing = float(info.get('missing_rate', 0.0) or 0.0)
+        except (TypeError, ValueError):
+            missing = 0.0
+        if (
+            self.score_mode == 'robust_discovery'
+            and self._is_post_hoc_validation_record(info)
+        ):
+            return {
+                'position': int(pos),
+                'score': 0.0,
+                'total_site_weight': 0.0,
+                'annotation_weight': 0.0,
+                'quality_weight': 0.0,
+                'function_weight': 0.0,
+                'external_weight': 0.0,
+                'external_evidence': 0.0,
+                'attention_prior_weight': 0.0,
+                'attention_cluster_id': str(
+                    info.get('attention_cluster_id') or
+                    info.get('cluster_id') or
+                    ''
+                ),
+                'attention_source': str(info.get('source') or info.get('attention_source') or ''),
+                'boundary_score': 0.0,
+                'maf_stability': 0.0,
+                'maf': maf,
+                'annotation': annotation,
+                'structural_priority': 0.0,
+                'structural_site': False,
+                'missing_rate': missing,
+                'excluded_from_discovery': True,
+                'exclusion_reason': self.POST_HOC_VALIDATION_EXCLUSION_REASON,
+                'current_phenotype_used': False,
+            }
         external_component = self._external_evidence_component(pos)
         attention_component = self._attention_prior_component(pos)
         boundary_component = 0.0
-        annotation = self.pos_annotation.get(pos, 'other')
         high_impact_annotations = {
             'frameshift', 'stop_gain', 'splice_region',
             'SV', 'INS', 'DEL', 'functional_marker', 'diagnostic_marker',
@@ -6372,12 +6446,6 @@ class HaplotypeScorer:
         maf_stability = maf_minor / 0.05 if maf_minor < 0.05 else 1.0
         maf_stability = max(0.15, min(float(maf_stability), 1.0))
 
-        missing = 0.0
-        if pos in self.variant_info:
-            try:
-                missing = float(self.variant_info[pos].get('missing_rate', 0.0) or 0.0)
-            except (TypeError, ValueError):
-                missing = 0.0
         missing_factor = max(0.2, 1.0 - min(missing, 0.8))
         score = (
             0.45 * func_component +
@@ -6387,7 +6455,6 @@ class HaplotypeScorer:
             0.15 * maf_stability
         ) * missing_factor
         structural_priority = self._site_structural_priority(pos)
-        info = self.variant_info.get(pos, {}) if self.variant_info else {}
         return {
             'position': int(pos),
             'score': float(score),
@@ -6411,6 +6478,8 @@ class HaplotypeScorer:
             'structural_priority': float(structural_priority),
             'structural_site': bool(structural_priority >= 0.6),
             'missing_rate': missing,
+            'excluded_from_discovery': False,
+            'exclusion_reason': '',
             'current_phenotype_used': False,
         }
 
@@ -6434,6 +6503,7 @@ class HaplotypeScorer:
         per_pos_contrib = {
             int(row['position']): float(row['total_site_weight'])
             for row in self._site_weight_records()
+            if not row.get('excluded_from_discovery', False)
         }
         if not per_pos_contrib:
             return {hap: 0.0 for hap in self.unique_haps}
@@ -6514,7 +6584,14 @@ class HaplotypeScorer:
 
     def _ambiguity_factor(self, hap):
         """模糊/杂合状态惩罚因子，1=无惩罚，越低表示越不可信。"""
-        tokens = self._get_hap_seq_tokens().get(hap, [])
+        sequence_tokens = self._get_hap_seq_tokens().get(hap, [])
+        if not sequence_tokens:
+            return 1.0
+        tokens = [
+            self._allele_for_hap_position(hap, pos)
+            for pos in self._scoring_variant_positions()
+        ]
+        tokens = [token for token in tokens if token != '']
         if not tokens:
             return 1.0
         ambiguous = sum(1 for token in tokens if self._is_ambiguous_allele_token(token))
@@ -6550,11 +6627,12 @@ class HaplotypeScorer:
         This is discovery-only: it uses score-derived position evidence, MAF,
         functional annotation, and LD pruning. It does not use literature labels.
         """
-        if not self.variant_positions:
+        scoring_positions = self._scoring_variant_positions()
+        if not scoring_positions:
             return []
 
         position_scores = []
-        for pos in self.variant_positions:
+        for pos in scoring_positions:
             item = self._site_weight_record(int(pos))
             if item is not None:
                 position_scores.append((item['score'], int(pos)))
@@ -6663,7 +6741,7 @@ class HaplotypeScorer:
     def _score_positions_for_grouping(self):
         """Score positions for discovery grouping without literature labels."""
         position_scores = []
-        for pos in self.variant_positions:
+        for pos in self._scoring_variant_positions():
             item = self._site_weight_record(int(pos))
             if item is not None:
                 position_scores.append(item)
@@ -6934,10 +7012,16 @@ class HaplotypeScorer:
         and allele frequency within the analyzed samples, not trait means or
         validation labels.
         """
-        positions = [int(pos) for pos in (positions or self._select_functional_positions())]
+        scoring_positions = set(self._scoring_variant_positions())
+        positions = [
+            int(pos)
+            for pos in (positions or self._select_functional_positions())
+            if int(pos) in scoring_positions
+        ]
         site_records = {
             int(row['position']): row
             for row in self._site_weight_records()
+            if not row.get('excluded_from_discovery', False)
         }
         if not positions:
             return {
@@ -7034,11 +7118,12 @@ class HaplotypeScorer:
         Returns:
             dict: {pos: block_id} 每个位点所属的LD block编号
         """
-        n = len(self.variant_positions)
+        scoring_positions = self._scoring_variant_positions()
+        n = len(scoring_positions)
         if n == 0:
             return {}
         if self.ld_r2_matrix is None:
-            return {pos: i for i, pos in enumerate(self.variant_positions)}  # 无LD矩阵→每位置独立block
+            return {pos: i for i, pos in enumerate(scoring_positions)}  # 无LD矩阵→每位置独立block
 
         parent = list(range(n))
 
@@ -7053,12 +7138,21 @@ class HaplotypeScorer:
             if rx != ry:
                 parent[rx] = ry
 
-        for i in range(n):
-            row = self.ld_r2_matrix[i] if i < len(self.ld_r2_matrix) else None
+        full_pos_idx = {pos: i for i, pos in enumerate(self.variant_positions)}
+        for i, pos_i in enumerate(scoring_positions):
+            full_i = full_pos_idx.get(pos_i)
+            row = (
+                self.ld_r2_matrix[full_i]
+                if full_i is not None and full_i < len(self.ld_r2_matrix)
+                else None
+            )
             if not isinstance(row, list):
                 continue
-            for j in range(i + 1, min(len(row), n)):
-                r2 = row[j]
+            for j in range(i + 1, n):
+                full_j = full_pos_idx.get(scoring_positions[j])
+                if full_j is None or full_j >= len(row):
+                    continue
+                r2 = row[full_j]
                 if isinstance(r2, (int, float)) and r2 >= self.LD_BLOCK_R2:
                     union(i, j)
 
@@ -7066,7 +7160,7 @@ class HaplotypeScorer:
         block_id_map = {}
         block_counter = 0
         root_to_block = {}
-        for i, pos in enumerate(self.variant_positions):
+        for i, pos in enumerate(scoring_positions):
             root = find(i)
             if root not in root_to_block:
                 root_to_block[root] = block_counter
@@ -7358,7 +7452,7 @@ class HaplotypeScorer:
         scores = {}
         for hap in self.unique_haps:
             total = 0.0
-            for pos in self.variant_positions:
+            for pos in self._scoring_variant_positions():
                 if pos not in self.pos_annotation:
                     continue
                 allele = self._allele_for_hap_position(hap, pos)
@@ -7381,7 +7475,7 @@ class HaplotypeScorer:
     def compute_burden_score(self):
         """LD剪枝后的稀有变异负荷得分（功能严重度 × 稀有度）"""
         pos_burden = {}
-        for pos in self.variant_positions:
+        for pos in self._scoring_variant_positions():
             func_w = self.pos_func_weight.get(pos, 0.1)
             maf = self.pos_maf.get(pos, 0.5)
             if maf < self.maf_threshold:
@@ -7733,6 +7827,7 @@ class HaplotypeScorer:
         for pos in pos_weights:
             pos_weights[pos] /= total_w
 
+        scoring_positions = self._scoring_variant_positions()
         distances = {}
         for hap_i in self.unique_haps:
             tokens_i = self._get_hap_seq_tokens().get(hap_i, [])
@@ -7751,12 +7846,12 @@ class HaplotypeScorer:
                     continue
 
                 weighted_ham = 0.0
-                for pos in self.variant_positions:
+                for pos in scoring_positions:
                     idx = self.pos_to_seq_idx.get(int(pos))
                     if idx is None or idx >= len(tokens_i) or idx >= len(tokens_j):
                         continue
                     if tokens_i[idx] != tokens_j[idx]:
-                        w = pos_weights.get(pos, 1.0 / max(len(self.variant_positions), 1))
+                        w = pos_weights.get(pos, 1.0 / max(len(scoring_positions), 1))
                         weighted_ham += w
 
                 weighted_sum += weighted_ham * n_j
@@ -7894,16 +7989,17 @@ class HaplotypeScorer:
         参考方法: Wakefield (2009) ABF; GCTA-COJO 条件分析思想
         """
         seq_map = self._get_hap_seq_map()
-        n_pos = len(self.variant_positions)
+        scoring_positions = self._scoring_variant_positions()
+        n_pos = len(scoring_positions)
         if n_pos == 0:
             return {hap: 0.0 for hap in self.unique_haps}
 
         # 无有效GWAS信号时，所有logBF为-inf，无需计算
-        if not any(v > 0 for v in self.pos_gwas_logp.values()):
+        if not any(self.pos_gwas_logp.get(pos, 0.0) > 0 for pos in scoring_positions):
             return {hap: 0.0 for hap in self.unique_haps}
 
         pos_log_bf = {}
-        for pos in self.variant_positions:
+        for pos in scoring_positions:
             logp = self.pos_gwas_logp.get(pos, 0.0)
             if logp > 0:
                 pval = np.power(10, -logp)
@@ -7933,7 +8029,7 @@ class HaplotypeScorer:
         pos_pip = {pos: bf / total_bf for pos, bf in pos_bf.items()}
 
         # Step 2: LD-pruning (按PIP降序贪心剪枝)
-        sorted_positions = sorted(self.variant_positions,
+        sorted_positions = sorted(scoring_positions,
                                   key=lambda p: pos_pip.get(p, 0), reverse=True)
 
         selected = {}
@@ -7961,7 +8057,7 @@ class HaplotypeScorer:
         scores = {}
         for hap in self.unique_haps:
             total = 0.0
-            for pos in self.variant_positions:
+            for pos in scoring_positions:
                 if pos not in selected:
                     continue
                 allele = self._allele_for_hap_position(hap, pos)

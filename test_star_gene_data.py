@@ -1421,6 +1421,223 @@ class StarGeneDataTests(unittest.TestCase):
                 places=9,
             )
 
+    def test_robust_discovery_excludes_validation_only_indel_from_every_ranking_input(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        rows = []
+        haplotypes = {
+            "Reference": ("G|C", "G|-|C"),
+            "DiscoveryA": ("A|C", "A|-|C"),
+            "DiscoveryB": ("G|T", "G|" + ("A" * 80) + "|T"),
+        }
+        for hap_name, (base_seq, validation_seq) in haplotypes.items():
+            for i in range(8):
+                rows.append({
+                    "SampleID": f"{hap_name}_{i}",
+                    "Hap_Name": hap_name,
+                    "Base_Seq": base_seq,
+                    "Validation_Seq": validation_seq,
+                    "Trait": float(i),
+                })
+        source_df = pd.DataFrame(rows)
+        base_df = source_df.rename(columns={"Base_Seq": "Haplotype_Seq"}).drop(
+            columns=["Validation_Seq"]
+        )
+        with_validation_df = source_df.rename(
+            columns={"Validation_Seq": "Haplotype_Seq"}
+        ).drop(columns=["Base_Seq"])
+
+        base_variant_info = {
+            100: {
+                "ref": "G", "alt": "A", "annotation": "diagnostic_marker",
+                "maf": 1 / 3, "missing_rate": 0.0,
+            },
+            200: {
+                "ref": "C", "alt": "T", "annotation": "promoter_core",
+                "maf": 1 / 3, "missing_rate": 0.0,
+            },
+        }
+        validation_record = {
+            "ref": "-",
+            "alt": "A" * 80,
+            "annotation": "diagnostic_marker",
+            "validation_marker": True,
+            "literature_variant": "Vrn-B1f_837bp_insertion",
+            "maf": 0.001,
+            "missing_rate": 0.0,
+            "is_sv": True,
+            "external": True,
+            "postgwas_score": 1.0,
+            "external_attention_prior": True,
+            "attention_prior_score": 1.0,
+        }
+        # Keep the validation marker in the middle of sequence order. The
+        # discovery view must skip it without shifting position 200's allele.
+        with_validation_info = {
+            100: dict(base_variant_info[100]),
+            13077: validation_record,
+            200: dict(base_variant_info[200]),
+        }
+
+        base_result = HaplotypeScorer(
+            hap_sample_df=base_df,
+            variant_positions=[100, 200],
+            variant_info=base_variant_info,
+            phenotype_col="Trait",
+            gwas_data=[{"pos": 200, "pvalue": 1e-8, "external": True}],
+            ld_r2_matrix=[[1.0, 0.0], [0.0, 1.0]],
+            score_mode="robust_discovery",
+        ).score_all()
+        with_validation_result = HaplotypeScorer(
+            hap_sample_df=with_validation_df,
+            variant_positions=[100, 13077, 200],
+            variant_info=with_validation_info,
+            phenotype_col="Trait",
+            gwas_data=[
+                {"pos": 200, "pvalue": 1e-8, "external": True},
+                {"pos": 13077, "pvalue": 1e-30, "external": True},
+            ],
+            ld_r2_matrix=[
+                [1.0, 0.9, 0.0],
+                [0.9, 1.0, 0.9],
+                [0.0, 0.9, 1.0],
+            ],
+            score_mode="robust_discovery",
+        ).score_all()
+
+        component_names = sorted(base_result["component_weights"])
+        for hap_name in sorted(haplotypes):
+            with self.subTest(haplotype=hap_name):
+                for component_name in component_names:
+                    self.assertEqual(
+                        base_result["per_haplotype"][hap_name][component_name],
+                        with_validation_result["per_haplotype"][hap_name][component_name],
+                    )
+                self.assertEqual(
+                    base_result["per_haplotype"][hap_name]["total"],
+                    with_validation_result["per_haplotype"][hap_name]["total"],
+                )
+                self.assertEqual(
+                    base_result["per_haplotype"][hap_name]["ambiguity_factor"],
+                    with_validation_result["per_haplotype"][hap_name]["ambiguity_factor"],
+                )
+
+        rank = lambda result: sorted(
+            result["per_haplotype"],
+            key=lambda hap: (result["per_haplotype"][hap]["total"], hap),
+            reverse=True,
+        )
+        self.assertEqual(rank(base_result), rank(with_validation_result))
+
+        marker_weight = {
+            row["position"]: row for row in with_validation_result["site_weights"]
+        }[13077]
+        self.assertTrue(marker_weight["excluded_from_discovery"])
+        self.assertEqual("post_hoc_validation_only", marker_weight["exclusion_reason"])
+        self.assertFalse(marker_weight["current_phenotype_used"])
+        for field in (
+            "score", "total_site_weight", "annotation_weight", "quality_weight",
+            "function_weight", "external_weight", "external_evidence",
+            "attention_prior_weight", "boundary_score", "maf_stability",
+            "structural_priority",
+        ):
+            with self.subTest(audit_field=field):
+                self.assertEqual(0.0, marker_weight[field])
+        self.assertFalse(marker_weight["structural_site"])
+
+        self.assertNotIn(
+            13077,
+            with_validation_result["core_haplotype_groups"]["core_positions"],
+        )
+        self.assertNotIn(
+            13077,
+            with_validation_result["functional_haplotype_groups"]["functional_positions"],
+        )
+        self.assertNotIn(
+            13077,
+            with_validation_result["anchor_haplotype_candidates"]["anchor_positions"],
+        )
+
+    def test_csv_boolean_validation_fields_trigger_post_hoc_discovery_gate(self):
+        from haplotype_phenotype_analysis import (
+            HaplotypeScorer,
+            _variant_info_csv_row_to_record,
+        )
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "R1", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 1.0},
+            {"SampleID": "R2", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 2.0},
+            {"SampleID": "A1", "Hap_Name": "MarkerCarrier", "Haplotype_Seq": "A", "Trait": 3.0},
+            {"SampleID": "A2", "Hap_Name": "MarkerCarrier", "Haplotype_Seq": "A", "Trait": 4.0},
+        ])
+        cases = (
+            ("validation_marker", 1),
+            ("post_hoc_validation", "true"),
+            ("literature_validation_marker", "1"),
+        )
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                record = _variant_info_csv_row_to_record(pd.Series({
+                    "position": 100,
+                    "ref": "G",
+                    "alt": "A",
+                    "annotation": "diagnostic_marker",
+                    "maf": 0.5,
+                    "missing_rate": 0.0,
+                    field: value,
+                }))
+                self.assertIs(record[field], True)
+                result = HaplotypeScorer(
+                    hap_sample_df=hap_sample_df,
+                    variant_positions=[100],
+                    variant_info={100: record},
+                    phenotype_col="Trait",
+                    score_mode="robust_discovery",
+                ).score_all()
+                marker_weight = result["site_weights"][0]
+                self.assertTrue(marker_weight["excluded_from_discovery"])
+                self.assertEqual(0.0, marker_weight["total_site_weight"])
+
+    def test_non_validation_diagnostic_marker_keeps_robust_function_weight(self):
+        from haplotype_phenotype_analysis import HaplotypeScorer
+        import pandas as pd
+
+        hap_sample_df = pd.DataFrame([
+            {"SampleID": "R1", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 1.0},
+            {"SampleID": "R2", "Hap_Name": "Reference", "Haplotype_Seq": "G", "Trait": 2.0},
+            {"SampleID": "A1", "Hap_Name": "DiagnosticCarrier", "Haplotype_Seq": "A", "Trait": 3.0},
+            {"SampleID": "A2", "Hap_Name": "DiagnosticCarrier", "Haplotype_Seq": "A", "Trait": 4.0},
+        ])
+        result = HaplotypeScorer(
+            hap_sample_df=hap_sample_df,
+            variant_positions=[100],
+            variant_info={
+                100: {
+                    "ref": "G",
+                    "alt": "A",
+                    "annotation": "diagnostic_marker",
+                    "validation_marker": "false",
+                    "maf": 0.5,
+                    "missing_rate": 0.0,
+                }
+            },
+            phenotype_col="Trait",
+            score_mode="robust_discovery",
+        ).score_all()
+
+        marker_weight = result["site_weights"][0]
+        self.assertFalse(marker_weight["excluded_from_discovery"])
+        self.assertEqual("", marker_weight["exclusion_reason"])
+        self.assertEqual("diagnostic_marker", marker_weight["annotation"])
+        self.assertEqual(3.0, marker_weight["function_weight"])
+        self.assertGreater(marker_weight["total_site_weight"], 0.0)
+        self.assertIn(
+            100,
+            result["functional_haplotype_groups"]["functional_positions"],
+        )
+
     def test_robust_discovery_uses_external_attention_prior_without_phenotype_leakage(self):
         from haplotype_phenotype_analysis import HaplotypeScorer
         import pandas as pd
