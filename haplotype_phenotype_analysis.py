@@ -11870,13 +11870,29 @@ function updateGeneStructureDomain() {
 function scrollToAppliedRange() {
     var section = document.querySelector('.main-data-section');
     if (!section) return;
-    var logicalX = gwasLeftMargin + geneAreaWidth / 2;
-    var contentRatio = logicalX / Math.max(1, svgTotalWidth);
+    if (section.scrollWidth <= section.clientWidth) {
+        section.scrollLeft = 0;
+        return;
+    }
+    var panel = document.querySelector('.gene-gwas-panel');
+    var svg = document.querySelector('#gene-structure-svg');
+    if (!panel || !svg) {
+        section.scrollLeft = 0;
+        return;
+    }
+    var sectionRect = section.getBoundingClientRect();
+    var panelRect = panel.getBoundingClientRect();
+    var svgRect = svg.getBoundingClientRect();
+    var visibleGeneStart = Math.max(panelRect.left, svgRect.left);
+    var visibleGeneEnd = Math.min(panelRect.right, svgRect.right);
+    if (visibleGeneEnd <= visibleGeneStart) {
+        section.scrollLeft = 0;
+        return;
+    }
+    var visibleGeneCenter = (visibleGeneStart + visibleGeneEnd) / 2;
+    var targetScrollLeft = section.scrollLeft + (visibleGeneCenter - sectionRect.left) - section.clientWidth / 2;
     var maxScroll = Math.max(0, section.scrollWidth - section.clientWidth);
-    section.scrollLeft = Math.max(
-        0,
-        Math.min(maxScroll, contentRatio * section.scrollWidth - section.clientWidth / 2)
-    );
+    section.scrollLeft = Math.max(0, Math.min(maxScroll, targetScrollLeft));
 }
 
 function scheduleAppliedRangeCentering() {
@@ -12446,13 +12462,13 @@ function scheduleLDTriangleRedraw() {
 
 
 function applyFilters() {
-    // 获取所有选中的annotation类型
+    // ???????annotation??
     var checkedTypes = [];
     document.querySelectorAll('.ann-cb:checked').forEach(function(cb) {
         checkedTypes.push(cb.value);
     });
     
-    // 过滤数据（基于MAF、Missing Rate和Annotation）
+    // ???????MAF?Missing Rate?Annotation?
     var filtered = gwasData.filter(function(d) {
         var priorityPass = isPriorityValidationSite(d);
         var rangePass = inDisplayRange(d.pos);
@@ -12466,38 +12482,36 @@ function applyFilters() {
     });
     
     var coordinateDomain = getAppliedCoordinateDomain();
-    updateGeneStructureDomain();
-    drawGWASPlot(filtered, coordinateDomain);
     
-    // 构建通过过滤的位置集合
+    // ???????????
     var posSet = {};
     filtered.forEach(function(d){ posSet[d.pos] = true; });
 
-    // 移除手动黑名单中的位点
+    // ???????????
     if (manualBlacklist.size > 0) {
         manualBlacklist.forEach(function(pos) {
             delete posSet[pos];
         });
     }
     
-    // 获取所有变异列的位置（从第4列开始，前3列是Haplotype/Effect/Phenotype）
+    // ?????????????4?????3??Haplotype/Effect/Phenotype?
     var allThs = document.querySelectorAll('.data-table thead th');
     
-    var varIndices = [];  // 记录保留的列索引
-    var varPositions = [];  // 记录保留的位置
+    var varIndices = [];  // ????????
+    var varPositions = [];  // ???????
     var totalThs = allThs.length;
     
     allThs.forEach(function(th, idx) {{
         var thText = th.textContent.trim().substring(0, 30);
-        // 判断是否为序列列（带 seq-col-th class）
+        // ?????????? seq-col-th class?
         var isSeqCol = th.classList.contains('seq-col-th');
-        // 判断是否为固定列（非seq-col-th的列）
+        // ??????????seq-col-th???
         var isFixedCol = !isSeqCol;
         if (!isFixedCol) {{
             var posText = th.getAttribute('data-pos') || th.textContent.trim().replace(/,/g,'');
             var pos = parseInt(posText);
             var inPosSet = posSet[pos] !== undefined;
-            // 检查该位置是否通过过滤
+            // ???????????
             if (inPosSet) {{
                 varIndices.push(idx);
                 varPositions.push(pos);
@@ -12507,30 +12521,71 @@ function applyFilters() {
         }}
     }});
     
-    // 更新基因结构图上的变异元素（竖线、圆圈、斜线、向上虚线）
+    updateVisibleLayoutWidth(varIndices.length);
+    updateGeneStructureDomain();
+    drawGWASPlot(filtered, coordinateDomain);
+
+    // ????????????????????????????
     document.querySelectorAll('.var-line, .var-circle, .var-star, .var-connector, .var-up-line').forEach(function(el) {
         var pos = parseInt(el.getAttribute('data-pos'));
         
-        // 检查是否通过过滤（基于posSet）
+        // ???????????posSet?
         var passed = posSet[pos] !== undefined;
         
-        // 设置显示/隐藏（保留SVG元素原始opacity，如var-up-line的0.5）
+        // ????/?????SVG????opacity??var-up-line?0.5?
         el.style.display = passed ? '' : 'none';
     });
     
     console.log('[applyFilters] maf=' + currentFilter.maf + ' miss=' + currentFilter.missingRate + ' range=' + currentFilter.rangeStart + '-' + currentFilter.rangeEnd + ' filtered=' + filtered.length + ' varIndices=' + varIndices.length);
 
-    // 同步更新表格：隐藏被过滤的列，重新排列保留的列
+    // ???????????????????????
     updateTableColumns(varIndices, varPositions);
     
-    // 更新连线和LD倒三角
-    // 先用RAF更新连线（可读取最新的布局信息）
-    // 再用setTimeout绘制LD倒三角，确保浏览器完成table-layout:fixed的列重排
+    // ?????LD???
+    // ??RAF????????????????
+    // ??setTimeout??LD???????????table-layout:fixed????
     scheduleConnectorRedraw();
     scheduleLDTriangleRedraw();
 
-    // 更新手动过滤视觉状态（仅在手动模式下需要）
+    // ?????????????????????
     if (manualFilterMode) updateManualFilterVisuals();
+}
+
+
+function updateVisibleLayoutWidth(visibleVariantCount) {
+    var visibleCount = Math.max(0, visibleVariantCount || 0);
+    geneAreaWidth = Math.max(320, visibleCount * 20);
+    svgTotalWidth = gwasLeftMargin + geneAreaWidth + 220;
+    gwasPlotWidth = geneAreaWidth + 220;
+
+    var panel = document.querySelector('.gene-gwas-panel');
+    if (panel) {
+        panel.style.width = svgTotalWidth + 'px';
+        panel.style.minWidth = svgTotalWidth + 'px';
+    }
+
+    var svg = document.getElementById('gene-structure-svg');
+    if (svg) {
+        svg.setAttribute('width', svgTotalWidth);
+        svg.setAttribute('data-gene-width', geneAreaWidth);
+    }
+
+    var titleNodes = svg ? svg.querySelectorAll('text') : [];
+    if (titleNodes && titleNodes.length >= 2) {
+        var centerX = gwasLeftMargin + geneAreaWidth / 2;
+        titleNodes[0].setAttribute('x', centerX);
+        titleNodes[1].setAttribute('x', centerX);
+    }
+}
+
+function updateVisibleTableWidth(visibleVariantCount) {
+    var table = document.querySelector('.data-table');
+    if (!table) return;
+    var visibleCount = Math.max(0, visibleVariantCount || 0);
+    var tableWidth = 90 + 180 + 180 + visibleCount * 20 + 60;
+    table.style.width = tableWidth + 'px';
+    table.style.minWidth = tableWidth + 'px';
+    table.style.maxWidth = tableWidth + 'px';
 }
 
 // 同步更新表格列：隐藏被过滤的列，重新排列保留的列
@@ -12609,6 +12664,7 @@ function updateTableColumns(keepIndices, keepPositions) {
         }});
     }});
 
+    updateVisibleTableWidth(keepIndices.length);
     // 强制浏览器重排以读取新的<col>宽度
     void table.offsetHeight;
     console.log('[updateTableColumns] done, visible seq=' + visCnt);

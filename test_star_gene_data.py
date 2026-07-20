@@ -2656,7 +2656,7 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         integrated_block = source[integrated_start:integrated_end]
 
         export_start = integrated_block.index("function collectReportExportSVGElements")
-        export_end = integrated_block.index("// ==================== 页面初始化", export_start)
+        export_end = integrated_block.index("window.addEventListener('beforeprint', prepareReportForPrint);", export_start)
         export_block = integrated_block[export_start:export_end]
 
         self.assertIn("document.querySelector('.report-shell')", export_block)
@@ -2676,7 +2676,7 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
 
         self.assertIn("function getSvgExportSize", integrated_block)
         export_start = integrated_block.index("function getSvgExportSize")
-        export_end = integrated_block.index("// ==================== 页面初始化", export_start)
+        export_end = integrated_block.index("window.addEventListener('beforeprint', prepareReportForPrint);", export_start)
         export_block = integrated_block[export_start:export_end]
 
         self.assertIn("function prepareReportExportVisuals", export_block)
@@ -2686,6 +2686,116 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         self.assertIn("var size = getSvgExportSize(svgElements[i]);", export_block)
         self.assertIn("totalWidth = Math.max(totalWidth, size.width);", export_block)
         self.assertIn("currentY += size.height + 20;", export_block)
+
+    def test_integrated_report_uses_exact_table_width_formula_for_visible_variants(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("function updateVisibleTableWidth(visibleVariantCount)", integrated_block)
+        self.assertIn("var tableWidth = 90 + 180 + 180 + visibleCount * 20 + 60;", integrated_block)
+        self.assertIn("table.style.width = tableWidth + 'px';", integrated_block)
+        self.assertIn("table.style.minWidth = tableWidth + 'px';", integrated_block)
+        self.assertIn("table.style.maxWidth = tableWidth + 'px';", integrated_block)
+        self.assertIn("updateVisibleTableWidth(keepIndices.length);", integrated_block)
+
+    def test_integrated_report_exact_table_width_formula_handles_boundary_counts(self):
+        def calc_width(visible_variant_count):
+            return 90 + 180 + 180 + visible_variant_count * 20 + 60
+
+        self.assertEqual(510, calc_width(0))
+        self.assertEqual(550, calc_width(2))
+        self.assertEqual(970, calc_width(23))
+        self.assertEqual(1010, calc_width(25))
+        self.assertEqual(1710, calc_width(60))
+
+    def test_integrated_report_scroll_to_applied_range_uses_real_pixel_geometry(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+        scroll_start = integrated_block.index("function scrollToAppliedRange()")
+        scroll_end = integrated_block.index("function scheduleAppliedRangeCentering()", scroll_start)
+        scroll_block = integrated_block[scroll_start:scroll_end]
+
+        self.assertIn("getBoundingClientRect()", scroll_block)
+        self.assertIn("section.scrollWidth <= section.clientWidth", scroll_block)
+        self.assertIn("section.scrollLeft = 0;", scroll_block)
+        self.assertIn("maxScroll", scroll_block)
+        self.assertNotIn("contentRatio", scroll_block)
+        self.assertNotIn("logicalX / Math.max(1, svgTotalWidth)", scroll_block)
+        self.assertNotIn("contentRatio * section.scrollWidth", scroll_block)
+
+    def test_integrated_report_updates_gene_and_gwas_width_before_redraw(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        self.assertIn("function updateVisibleLayoutWidth(visibleVariantCount)", integrated_block)
+        self.assertIn("geneAreaWidth = Math.max(320, visibleCount * 20);", integrated_block)
+        self.assertIn("svgTotalWidth = gwasLeftMargin + geneAreaWidth + 220;", integrated_block)
+        self.assertIn("panel.style.width = svgTotalWidth + 'px';", integrated_block)
+        self.assertIn("svg.setAttribute('width', svgTotalWidth);", integrated_block)
+        self.assertIn("svg.setAttribute('data-gene-width', geneAreaWidth);", integrated_block)
+
+        apply_start = integrated_block.index("function applyFilters()")
+        width_start = integrated_block.index("function updateVisibleLayoutWidth(visibleVariantCount)")
+        apply_block = integrated_block[apply_start:width_start]
+
+        self.assertIn("updateVisibleLayoutWidth(varIndices.length);", apply_block)
+        self.assertLess(apply_block.index("updateVisibleLayoutWidth(varIndices.length);"), apply_block.index("updateGeneStructureDomain();"))
+        self.assertLess(apply_block.index("updateVisibleLayoutWidth(varIndices.length);"), apply_block.index("drawGWASPlot(filtered, coordinateDomain);"))
+
+    def test_integrated_report_pending_range_edits_do_not_update_layout_until_apply(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        inputs_start = integrated_block.index("function updateRangeFilterFromInputs(changedHandle)")
+        sliders_start = integrated_block.index("function updateRangeFilterFromSliders(changedHandle)")
+        clear_start = integrated_block.index("function clearRangeFilter()")
+        commit_start = integrated_block.index("function commitRangeFilter()")
+
+        inputs_block = integrated_block[inputs_start:sliders_start]
+        sliders_block = integrated_block[sliders_start:clear_start]
+        clear_block = integrated_block[clear_start:commit_start]
+
+        for block in (inputs_block, sliders_block, clear_block):
+            self.assertNotIn("updateVisibleTableWidth(", block)
+            self.assertNotIn("scrollToAppliedRange(", block)
+            self.assertNotIn("scheduleAppliedRangeCentering(", block)
+            self.assertNotIn("scheduleConnectorRedraw(", block)
+            self.assertNotIn("scheduleLDTriangleRedraw(", block)
+
+    def test_integrated_report_apply_and_reset_refresh_layout_once_per_commit(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        commit_start = integrated_block.index("function commitRangeFilter()")
+        manual_start = integrated_block.index("function toggleManualFilter()")
+        reset_start = integrated_block.index("function resetFilters()")
+        message_start = integrated_block.index("window.addEventListener('message'", reset_start)
+        connectors_start = integrated_block.index("function updateConnectorLines()", message_start)
+
+        commit_block = integrated_block[commit_start:manual_start]
+        reset_block = integrated_block[reset_start:message_start]
+        message_block = integrated_block[message_start:connectors_start]
+
+        self.assertEqual(1, commit_block.count("applyFilters();"))
+        self.assertEqual(1, commit_block.count("scheduleAppliedRangeCentering();"))
+        self.assertEqual(1, reset_block.count("applyFilters();"))
+        self.assertEqual(1, reset_block.count("scheduleAppliedRangeCentering();"))
+        self.assertEqual(1, message_block.count("applyFilters();"))
 
     def test_integrated_report_print_layout_uncrops_scroll_container_and_prints_sidebar_panels(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
@@ -3835,7 +3945,7 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
             html = Path(html_path).read_text(encoding="utf-8")
             self.assertIn("Principal Component Analysis", html)
             self.assertIn("PC2", html)
-            self.assertIn("PCA分析图已保存", stdout.getvalue())
+            self.assertIn("pca_plot.html", stdout.getvalue())
 
     def test_build_database_from_wide_marker_matrix(self):
         from star_gene_data import build_database_from_marker_matrix

@@ -2646,3 +2646,66 @@ Chromium `150.0.4078.65`, with 0 page errors and 0 console errors. The verified
 state was current = pending = initial, Apply disabled, 25 circle markers, and
 25 sequence columns. The pending-only edit and full Reset restoration behaved
 as described above.
+
+### 2026-07-20 precise visible-width and pixel-scroll layout fix
+
+Target gene:
+`VRN-B1` / `VRN-B1-fullSequence-IJMS2021`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by diagnostic marker
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at `13,077`.
+
+Data source:
+`wheat2024` / `wheat_nature_2024` precomputed full-sequence alignment database
+with 102 samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery --database-root D:\Desktop\project1\star_gene_database --results-root D:\Desktop\project1\star_gene_results --manifest D:\Desktop\project1\star_gene_manifest.json
+```
+
+Output directory:
+`D:\Desktop\project1\star_gene_results\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021__robust_discovery\`.
+The rerun exited with status 0 on `2026-07-20`.
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`, n=3.
+
+Match to literature functional haplotype:
+Yes. This rerun only fixes report layout behavior. The biological validation
+conclusion is unchanged: `Hap6` still matches the literature `Vrn-B1f` 837 bp
+insertion in post-hoc validation, and the literature marker was not used as a
+scoring input.
+
+Sample count / reliability:
+`Hap6` remains a small-sample positive control (`n=3`), so the match is useful
+for validation but still carries the same reliability caveat.
+
+Blocked reason:
+None for the VRN-B1 rerun. The project-level `run_rice_test.py` was not used as
+a completion gate in this layout fix pass.
+
+Layout change summary:
+The integrated report now uses exact visible-width layout updates instead of
+only shrinking the table. For each applied visible-variant count, the table
+width is set to `90 + 180 + 180 + visible_variant_count * 20 + 60`, while the
+shared gene/GWAS canvas width is updated together with `geneAreaWidth` and
+`svgTotalWidth`. Pending numeric or slider edits do not redraw layout; only
+`Apply Range`, `Reset`, and committed external filter messages update width,
+connectors, and LD.
+
+Browser verification:
+Real Microsoft Edge Chromium headless checks on the regenerated local HTML
+confirmed `scrollLeft = 0` on first load, no multi-thousand-pixel empty
+horizontal scroll region, and synchronized width changes across the table,
+GWAS panel, gene structure, connectors, and LD canvas. Verified states:
+25 visible variants -> table `1010px`, panel `1170px`;
+23 visible variants -> table `970px`, panel `1130px`;
+2 visible variants -> table `550px`, panel `990px`;
+1 visible variant -> table `530px`, panel `990px`.
+There were 0 page errors and 0 console errors.
