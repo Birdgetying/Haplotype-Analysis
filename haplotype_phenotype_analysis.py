@@ -12079,7 +12079,7 @@ return;
     var visibleThs = allThsList.filter(function(th, idx) {
         // 使用 seq-col-th class 识别序列列（不硬编码 idx，支持协变量列）
         if (!th.classList.contains('seq-col-th')) return false;
-        var isVisible = th.style.display !== 'none';
+        var isVisible = isVisibleSequenceColumn(th);
         return isVisible;
     });
     
@@ -12204,7 +12204,7 @@ function drawLDTriangle() {
     var allThs = Array.from(table.querySelectorAll('thead th'));
     // 用 seq-col-th class 识别序列列
     var visibleVarThs = allThs.filter(function(th, idx) {
-        return th.classList.contains('seq-col-th') && th.style.display !== 'none';
+        return isVisibleSequenceColumn(th);
     });
     
     if (visibleVarThs.length < 2) {
@@ -12246,7 +12246,7 @@ function drawLDTriangle() {
     var runningX = 0;
     for (var ci2 = 0; ci2 < allThs.length; ci2++) {
         var cw2 = colWidths[ci2];
-        if (colIsSeqMap[ci2] && allThs[ci2].style.display !== 'none' && cw2 > 0) {
+        if (colIsSeqMap[ci2] && isVisibleSequenceColumn(allThs[ci2]) && cw2 > 0) {
             var absCenterX = tableLeft2 + (runningX + cw2 / 2) * contentZoomFactor;
             var thEl2 = allThs[ci2];
             var posText2 = thEl2.getAttribute('data-pos') || thEl2.textContent.trim().replace(/,/g, '').replace(/\s/g, '');
@@ -12554,7 +12554,8 @@ function applyFilters() {
 
 function updateVisibleLayoutWidth(visibleVariantCount) {
     var visibleCount = Math.max(0, visibleVariantCount || 0);
-    geneAreaWidth = Math.max(320, visibleCount * 20);
+    var minGeneWidth = visibleCount >= 20 ? 640 : 320;
+    geneAreaWidth = Math.max(minGeneWidth, visibleCount * 20);
     svgTotalWidth = gwasLeftMargin + geneAreaWidth + 220;
     gwasPlotWidth = geneAreaWidth + 220;
 
@@ -12576,6 +12577,33 @@ function updateVisibleLayoutWidth(visibleVariantCount) {
         titleNodes[0].setAttribute('x', centerX);
         titleNodes[1].setAttribute('x', centerX);
     }
+
+    var baseRadius = visibleCount >= 20 ? 4.5 : 3.5;
+    var leadRadius = visibleCount >= 20 ? 6.5 : 5;
+    var baseLineWidth = visibleCount >= 20 ? 1.8 : 1.2;
+    var leadLineWidth = visibleCount >= 20 ? 2.6 : 2;
+    var baseConnectorWidth = visibleCount >= 20 ? 1.2 : 0.8;
+    var leadConnectorWidth = visibleCount >= 20 ? 1.9 : 1.5;
+    var upLineWidth = visibleCount >= 20 ? 1.1 : 0.8;
+
+    document.querySelectorAll('.var-circle').forEach(function(el) {
+        var isLead = !!document.querySelector('.var-star[data-pos="' + el.getAttribute('data-pos') + '"]');
+        el.setAttribute('r', isLead ? leadRadius : baseRadius);
+        el.setAttribute('stroke-width', isLead ? 2.2 : 0.7);
+    });
+    document.querySelectorAll('.var-line').forEach(function(el) {
+        var idx = parseInt(el.getAttribute('data-idx'), 10);
+        var isLead = document.querySelector('.var-star[data-idx="' + idx + '"]') !== null;
+        el.setAttribute('stroke-width', isLead ? leadLineWidth : baseLineWidth);
+    });
+    document.querySelectorAll('.var-up-line').forEach(function(el) {
+        el.setAttribute('stroke-width', upLineWidth);
+    });
+    document.querySelectorAll('.var-connector').forEach(function(el) {
+        var idx = parseInt(el.getAttribute('data-idx'), 10);
+        var isLead = document.querySelector('.var-star[data-idx="' + idx + '"]') !== null;
+        el.setAttribute('stroke-width', isLead ? leadConnectorWidth : baseConnectorWidth);
+    });
 }
 
 function updateVisibleTableWidth(visibleVariantCount) {
@@ -12588,7 +12616,11 @@ function updateVisibleTableWidth(visibleVariantCount) {
     table.style.maxWidth = tableWidth + 'px';
 }
 
-// 同步更新表格列：隐藏被过滤的列，重新排列保留的列
+function isVisibleSequenceColumn(el) {
+    return !!(el && el.classList && el.classList.contains('seq-col-th') && el.getAttribute('data-col-visible') === 'true');
+}
+
+// ????????????????????????
 function updateTableColumns(keepIndices, keepPositions) {
 
     var table = document.querySelector('.data-table');
@@ -12599,37 +12631,61 @@ function updateTableColumns(keepIndices, keepPositions) {
     var theadRow = table.querySelector('thead tr');
     var tbodyRows = table.querySelectorAll('tbody tr');
 
-    // 获取所有th和td
+    // ????th?td
     var allThs = Array.from(theadRow.querySelectorAll('th'));
 
-    // 将keepIndices转换为Set以便快速查找
+    // ?keepIndices???Set??????
     var keepIndicesSet = new Set(keepIndices);
 
-    // 同步更新 <colgroup> 中的 <col> 元素，消除隐藏列产生的20px间隙
+    // ???? <colgroup> ?? <col> ???????????20px??
     var colgroup = table.querySelector('colgroup');
     var allCols = colgroup ? Array.from(colgroup.querySelectorAll('col')) : [];
 
     console.log('[updateTableColumns] keep=' + keepIndices.length + ' ths=' + allThs.length + ' cols=' + allCols.length);
 
-    // 处理表头
+    // ????
     var visCnt = 0;
     allThs.forEach(function(th, idx) {{
-        var text = th.textContent.trim().substring(0, 20);
-        // 判断是否为序列列（带 seq-col-th class）
         var isFixedCol = !th.classList.contains('seq-col-th');
         if (isFixedCol) {{
-            // 固定列始终显示
             th.style.display = '';
         }} else {{
-            // 变异列：根据keepIndicesSet决定是否显示
             var shouldShow = keepIndicesSet.has(idx);
+            th.setAttribute('data-col-visible', shouldShow ? 'true' : 'false');
             if (shouldShow) {{
                 th.style.display = '';
+                th.style.width = '20px';
+                th.style.minWidth = '20px';
+                th.style.maxWidth = '20px';
+                th.style.padding = '0';
+                th.style.overflow = 'hidden';
+                th.style.visibility = 'visible';
+                if (th.firstElementChild) {{
+                    th.firstElementChild.style.display = 'flex';
+                    th.firstElementChild.style.width = '20px';
+                    th.firstElementChild.style.minWidth = '20px';
+                    th.firstElementChild.style.maxWidth = '20px';
+                    th.firstElementChild.style.height = '60px';
+                    th.firstElementChild.style.visibility = 'visible';
+                }}
                 visCnt++;
             }} else {{
-                th.style.display = 'none';
+                th.style.display = '';
+                th.style.width = '0';
+                th.style.minWidth = '0';
+                th.style.maxWidth = '0';
+                th.style.padding = '0';
+                th.style.overflow = 'hidden';
+                th.style.visibility = 'hidden';
+                if (th.firstElementChild) {{
+                    th.firstElementChild.style.display = 'block';
+                    th.firstElementChild.style.width = '0';
+                    th.firstElementChild.style.minWidth = '0';
+                    th.firstElementChild.style.maxWidth = '0';
+                    th.firstElementChild.style.height = '60px';
+                    th.firstElementChild.style.visibility = 'hidden';
+                }}
             }}
-            // 同步更新对应<col>的宽度，消除隐藏列残留的空间
             if (allCols[idx]) {{
                 if (shouldShow) {{
                     allCols[idx].style.width = '20px';
@@ -12644,33 +12700,52 @@ function updateTableColumns(keepIndices, keepPositions) {
         }}
     }});
 
-    // 处理数据行
+    // ??????td ??????????????????????????
     tbodyRows.forEach(function(row) {{
         var tds = Array.from(row.querySelectorAll('td'));
-        tds.forEach(function(td, idx) {{
-            // 判断是否为序列列（带 seq-col-th class）
-            var isFixedCol = !td.classList.contains('seq-col-th');
+        var seqColIdx = -1;
+        tds.forEach(function(td) {{
+            var isSeqCol = td.classList.contains('seq-col-th');
+            var isFixedCol = !isSeqCol;
             if (isFixedCol) {{
-                // 固定列始终显示
                 td.style.display = '';
             }} else {{
-                // 变异列：根据keepIndicesSet决定是否显示
-                if (keepIndicesSet.has(idx)) {{
+                seqColIdx += 1;
+                var shouldShow = keepIndicesSet.has(seqColIdx + 3);
+                td.setAttribute('data-col-visible', shouldShow ? 'true' : 'false');
+                if (shouldShow) {{
                     td.style.display = '';
+                    td.style.width = '20px';
+                    td.style.minWidth = '20px';
+                    td.style.maxWidth = '20px';
+                    td.style.padding = '0';
+                    td.style.overflow = 'hidden';
+                    td.style.visibility = 'visible';
+                    if (td.firstElementChild) {{
+                        td.firstElementChild.style.visibility = 'visible';
+                    }}
                 }} else {{
-                    td.style.display = 'none';
+                    td.style.display = '';
+                    td.style.width = '0';
+                    td.style.minWidth = '0';
+                    td.style.maxWidth = '0';
+                    td.style.padding = '0';
+                    td.style.overflow = 'hidden';
+                    td.style.visibility = 'hidden';
+                    if (td.firstElementChild) {{
+                        td.firstElementChild.style.visibility = 'hidden';
+                    }}
                 }}
             }}
         }});
     }});
 
     updateVisibleTableWidth(keepIndices.length);
-    // 强制浏览器重排以读取新的<col>宽度
     void table.offsetHeight;
     console.log('[updateTableColumns] done, visible seq=' + visCnt);
 }
 
-// ==================== 单倍型网络图（D3 force simulation） ====================
+
 function drawNetworkPlot() {
     var container = document.getElementById('network-viz');
     if (!container || networkNodes.length === 0) return;

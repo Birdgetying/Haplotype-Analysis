@@ -2737,11 +2737,16 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         integrated_block = source[integrated_start:integrated_end]
 
         self.assertIn("function updateVisibleLayoutWidth(visibleVariantCount)", integrated_block)
-        self.assertIn("geneAreaWidth = Math.max(320, visibleCount * 20);", integrated_block)
+        self.assertIn("var minGeneWidth = visibleCount >= 20 ? 640 : 320;", integrated_block)
+        self.assertIn("geneAreaWidth = Math.max(minGeneWidth, visibleCount * 20);", integrated_block)
         self.assertIn("svgTotalWidth = gwasLeftMargin + geneAreaWidth + 220;", integrated_block)
         self.assertIn("panel.style.width = svgTotalWidth + 'px';", integrated_block)
         self.assertIn("svg.setAttribute('width', svgTotalWidth);", integrated_block)
         self.assertIn("svg.setAttribute('data-gene-width', geneAreaWidth);", integrated_block)
+        self.assertIn("var baseRadius = visibleCount >= 20 ? 4.5 : 3.5;", integrated_block)
+        self.assertIn("var leadRadius = visibleCount >= 20 ? 6.5 : 5;", integrated_block)
+        self.assertIn("document.querySelectorAll('.var-circle').forEach(function(el)", integrated_block)
+        self.assertIn("document.querySelectorAll('.var-line').forEach(function(el)", integrated_block)
 
         apply_start = integrated_block.index("function applyFilters()")
         width_start = integrated_block.index("function updateVisibleLayoutWidth(visibleVariantCount)")
@@ -2750,6 +2755,54 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         self.assertIn("updateVisibleLayoutWidth(varIndices.length);", apply_block)
         self.assertLess(apply_block.index("updateVisibleLayoutWidth(varIndices.length);"), apply_block.index("updateGeneStructureDomain();"))
         self.assertLess(apply_block.index("updateVisibleLayoutWidth(varIndices.length);"), apply_block.index("drawGWASPlot(filtered, coordinateDomain);"))
+
+    def test_integrated_report_table_row_sequence_columns_use_local_sequence_index(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        table_start = integrated_block.index("function updateTableColumns(keepIndices, keepPositions) {")
+        table_end = integrated_block.index("function drawNetworkPlot()", table_start)
+        table_block = integrated_block[table_start:table_end]
+
+        self.assertIn("var seqColIdx = -1;", table_block)
+        self.assertIn("var isSeqCol = td.classList.contains('seq-col-th');", table_block)
+        self.assertIn("seqColIdx += 1;", table_block)
+        self.assertIn("keepIndicesSet.has(seqColIdx + 3)", table_block)
+        self.assertIn("td.style.width = '20px';", table_block)
+        self.assertIn("td.style.minWidth = '20px';", table_block)
+        self.assertIn("td.style.maxWidth = '20px';", table_block)
+        self.assertIn("td.style.width = '0';", table_block)
+        row_logic = table_block.split("tbodyRows.forEach(function(row)", 1)[1]
+        self.assertNotIn("keepIndicesSet.has(idx)", row_logic)
+
+
+    def test_integrated_report_sequence_columns_keep_layout_membership_when_hidden(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        table_start = integrated_block.index("function updateTableColumns(keepIndices, keepPositions) {")
+        table_end = integrated_block.index("function drawNetworkPlot()", table_start)
+        table_block = integrated_block[table_start:table_end]
+
+        self.assertIn("function isVisibleSequenceColumn(el) {", integrated_block)
+        self.assertIn("data-col-visible", table_block)
+        self.assertIn("th.style.display = '';", table_block)
+        self.assertIn("th.style.visibility = 'hidden';", table_block)
+        self.assertIn("th.style.width = '0';", table_block)
+        self.assertIn("td.style.display = '';", table_block)
+        self.assertIn("td.style.visibility = 'hidden';", table_block)
+        self.assertNotIn("th.style.display = 'none';", table_block)
+        self.assertNotIn("td.style.display = 'none';", table_block)
+
+        self.assertIn("var isVisible = isVisibleSequenceColumn(th);", integrated_block)
+        self.assertIn("return isVisibleSequenceColumn(th);", integrated_block)
+        self.assertIn("isVisibleSequenceColumn(allThs[ci2])", integrated_block)
 
     def test_integrated_report_pending_range_edits_do_not_update_layout_until_apply(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")

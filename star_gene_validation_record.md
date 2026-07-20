@@ -2709,3 +2709,62 @@ GWAS panel, gene structure, connectors, and LD canvas. Verified states:
 2 visible variants -> table `550px`, panel `990px`;
 1 visible variant -> table `530px`, panel `990px`.
 There were 0 page errors and 0 console errors.
+
+### 2026-07-20 sequence-column zero-width layout fix
+
+Target gene:
+`VRN-B1` / `VRN-B1-fullSequence-IJMS2021`.
+
+Literature functional variant / haplotype:
+`Vrn-B1f` 837 bp insertion, represented by diagnostic marker
+`VRNB1gene_insertion_837_VrnB1f_13077_13913` at `13,077`.
+
+Data source:
+`wheat2024` / `wheat_nature_2024` precomputed full-sequence alignment database
+with 102 samples, 24 haplotypes, and 252 variants.
+
+Score mode:
+`robust_discovery`.
+
+Run command:
+
+```bash
+python run_star_gene_validation.py --run-analysis --paper wheat2024 --target VRN-B1-fullSequence-IJMS2021 --score-mode robust_discovery --database-root D:\Desktop\project1\star_gene_database --results-root D:\Desktop\project1\star_gene_results --manifest D:\Desktop\project1\star_gene_manifest.json
+```
+
+Output directory:
+`D:\Desktop\project1\star_gene_results\wheat_nature_2024\VRN-B1-fullSequence-IJMS2021__robust_discovery\`.
+The rerun exited with status 0 on `2026-07-20`.
+
+Top-scored haplotype:
+`Hap6`, total score `1.2016`, n=3.
+
+Match to literature functional haplotype:
+Yes. This rerun only fixes integrated HTML layout behavior. The biological
+validation conclusion is unchanged: `Hap6` still matches the literature
+`Vrn-B1f` 837 bp insertion in post-hoc validation, and the literature marker
+was not used as a scoring input.
+
+Sample count / reliability:
+`Hap6` remains a small-sample positive control (`n=3`), so the match is useful
+for validation but still carries the same reliability caveat.
+
+Blocked reason:
+None for the VRN-B1 rerun. The missing WatSeq phenotype file remains optional
+because the precomputed `GrowthHabitSpringScore` phenotype is already present.
+
+Layout change summary:
+The integrated report no longer hides filtered sequence columns with
+`display:none`. Hidden sequence columns now stay in the table layout with
+explicit `0px` width plus a `data-col-visible` flag, so the `<colgroup>` to
+header/data-cell mapping remains stable. Connector and LD visibility logic now
+tracks `data-col-visible` instead of relying on `display` state.
+
+Browser verification:
+Real Microsoft Edge Chromium headless checks on the regenerated local HTML
+confirmed that the main sequence block is visible again: 25 visible header
+columns, 25 visible first-row sequence cells, first visible header width `20px`,
+first visible sequence-cell width `20px`, `scrollLeft = 0`, `tableWidth =
+1010px`, and 25 visible gene markers in the integrated panel. The previous
+failure mode was `style.width = 20px` but actual DOM rect width `0px`; that
+regression is no longer present in this rerun.
