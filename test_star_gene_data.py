@@ -2804,6 +2804,37 @@ assertEqual(ldRedrawTimer, 2, 'latest LD redraw timer is retained');
         self.assertIn("return isVisibleSequenceColumn(th);", integrated_block)
         self.assertIn("isVisibleSequenceColumn(allThs[ci2])", integrated_block)
 
+
+    def test_integrated_report_ld_wrapper_is_reshown_after_hidden_state(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        ld_start = integrated_block.index("function drawLDTriangle() {")
+        schedule_start = integrated_block.index("function scheduleConnectorRedraw()", ld_start)
+        ld_block = integrated_block[ld_start:schedule_start]
+
+        self.assertIn("document.getElementById('ld-triangle-wrapper').style.display = 'none';", ld_block)
+        self.assertIn("var wrapper = document.getElementById('ld-triangle-wrapper');", ld_block)
+        self.assertIn("if (wrapper) wrapper.style.display = 'block';", ld_block)
+
+    def test_integrated_report_lead_width_updates_use_data_pos_not_missing_data_idx_on_star(self):
+        source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
+
+        integrated_start = source.index("def generate_integrated_html")
+        integrated_end = source.index("def generate_haplotype_network_html", integrated_start)
+        integrated_block = source[integrated_start:integrated_end]
+
+        width_start = integrated_block.index("function updateVisibleLayoutWidth(visibleVariantCount)")
+        table_start = integrated_block.index("function updateVisibleTableWidth(visibleVariantCount)", width_start)
+        width_block = integrated_block[width_start:table_start]
+
+        self.assertIn("var pos = el.getAttribute('data-pos');", width_block)
+        self.assertIn("document.querySelector('.var-star[data-pos=\"' + pos + '\"]') !== null".replace('\\', ''), width_block)
+        self.assertNotIn("document.querySelector('.var-star[data-idx=\"' + idx + '\"]') !== null".replace('\\', ''), width_block)
+
     def test_integrated_report_pending_range_edits_do_not_update_layout_until_apply(self):
         source = Path("haplotype_phenotype_analysis.py").read_text(encoding="utf-8")
 

@@ -12212,6 +12212,9 @@ function drawLDTriangle() {
         var rp3 = document.querySelector('.ld-right-panel'); if (rp3) rp3.style.minWidth = '';
         return;
     }
+
+    var wrapper = document.getElementById('ld-triangle-wrapper');
+    if (wrapper) wrapper.style.display = 'block';
     
     // Step A: 用<col>宽度精确计算各列绝对屏幕坐标
     // table-layout:fixed下，列位置完全由<col>宽度决定，不依赖getBoundingClientRect时序
@@ -12592,16 +12595,16 @@ function updateVisibleLayoutWidth(visibleVariantCount) {
         el.setAttribute('stroke-width', isLead ? 2.2 : 0.7);
     });
     document.querySelectorAll('.var-line').forEach(function(el) {
-        var idx = parseInt(el.getAttribute('data-idx'), 10);
-        var isLead = document.querySelector('.var-star[data-idx="' + idx + '"]') !== null;
+        var pos = el.getAttribute('data-pos');
+        var isLead = document.querySelector('.var-star[data-pos="' + pos + '"]') !== null;
         el.setAttribute('stroke-width', isLead ? leadLineWidth : baseLineWidth);
     });
     document.querySelectorAll('.var-up-line').forEach(function(el) {
         el.setAttribute('stroke-width', upLineWidth);
     });
     document.querySelectorAll('.var-connector').forEach(function(el) {
-        var idx = parseInt(el.getAttribute('data-idx'), 10);
-        var isLead = document.querySelector('.var-star[data-idx="' + idx + '"]') !== null;
+        var pos = el.getAttribute('data-pos');
+        var isLead = document.querySelector('.var-star[data-pos="' + pos + '"]') !== null;
         el.setAttribute('stroke-width', isLead ? leadConnectorWidth : baseConnectorWidth);
     });
 }
